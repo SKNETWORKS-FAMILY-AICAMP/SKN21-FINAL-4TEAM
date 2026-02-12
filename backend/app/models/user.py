@@ -12,7 +12,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    nickname: Mapped[str] = mapped_column(String(50), nullable=False)
+    nickname: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     email_hash: Mapped[str | None] = mapped_column(String(64))
     password_hash: Mapped[str | None] = mapped_column(String(128))
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="user")

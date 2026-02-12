@@ -1,39 +1,45 @@
-import asyncio
 import uuid
 from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.auth import create_access_token
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
 
-TEST_DATABASE_URL = settings.database_url.replace("/chatbot", "/chatbot_test")
+# rsplit으로 마지막 /chatbot만 교체 (username의 chatbot은 유지)
+_base, _dbname = settings.database_url.rsplit("/", 1)
+TEST_DATABASE_URL = f"{_base}/chatbot_test"
 
-engine_test = create_async_engine(TEST_DATABASE_URL, echo=False)
-async_session_test = async_sessionmaker(engine_test, class_=AsyncSession, expire_on_commit=False)
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+def auth_header(user) -> dict:
+    """테스트용 JWT Authorization 헤더 생성."""
+    token = create_access_token({"sub": str(user.id), "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
 async def db_session():
-    async with engine_test.begin() as conn:
+    # 각 테스트마다 새 엔진 생성 (이벤트 루프 충돌 방지)
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
-    async with async_session_test() as session:
+    async with session_factory() as session:
         yield session
 
-    async with engine_test.begin() as conn:
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture

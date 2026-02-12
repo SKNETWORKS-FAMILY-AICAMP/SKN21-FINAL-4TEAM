@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import chat, personas, lorebook, webtoons, policy, auth, models, usage, health
 from app.api.admin import users as admin_users
@@ -27,6 +28,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+@app.exception_handler(NotImplementedError)
+async def not_implemented_handler(request: Request, exc: NotImplementedError):
+    return JSONResponse(status_code=501, content={"detail": "Not implemented"})
+
 
 app.add_middleware(
     CORSMiddleware,
