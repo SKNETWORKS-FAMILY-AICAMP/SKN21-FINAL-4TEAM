@@ -1,7 +1,45 @@
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import auth_header
+
+EMBEDDING_DIM = 1024
+
+
+class _FakeEmbeddingService:
+    """ML 모델 없이 영벡터를 반환하는 스텁."""
+
+    def embed(self, text: str) -> list[float]:
+        return [0.0] * EMBEDDING_DIM
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * EMBEDDING_DIM for _ in texts]
+
+
+class _FakePIIDetector:
+    """마스킹 없이 원문을 그대로 반환하는 스텁."""
+
+    def mask(self, text: str) -> str:
+        return text
+
+    def detect(self, text: str) -> list:
+        return []
+
+    def has_pii(self, text: str) -> bool:
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _mock_pipeline_services():
+    """로어북 테스트에서 ML 모델 로딩을 회피하기 위해 임베딩/PII 서비스를 스텁으로 교체."""
+    with (
+        patch("app.services.lorebook_service.get_embedding_service", return_value=_FakeEmbeddingService()),
+        patch("app.services.lorebook_service.get_pii_detector", return_value=_FakePIIDetector()),
+    ):
+        yield
+
 
 PERSONA_DATA = {
     "persona_key": "lore-persona",
@@ -15,7 +53,7 @@ PERSONA_DATA = {
 
 async def _create_persona(client: AsyncClient, headers: dict) -> str:
     """테스트용 페르소나 생성 후 ID 반환."""
-    resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     return resp.json()["id"]
 
 
@@ -27,7 +65,7 @@ async def test_create_lorebook_entry(client: AsyncClient, test_user):
     headers = auth_header(test_user)
     persona_id = await _create_persona(client, headers)
 
-    response = await client.post("/api/lorebook/", json={
+    response = await client.post("/api/lorebook", json={
         "persona_id": persona_id,
         "title": "Character Background",
         "content": "Born in Seoul, loves webtoons.",
@@ -45,7 +83,7 @@ async def test_create_lorebook_entry(client: AsyncClient, test_user):
 async def test_create_lorebook_no_target(client: AsyncClient, test_user):
     """persona_id와 webtoon_id 모두 없으면 → 422."""
     headers = auth_header(test_user)
-    response = await client.post("/api/lorebook/", json={
+    response = await client.post("/api/lorebook", json={
         "title": "Orphan entry",
         "content": "No parent",
     }, headers=headers)
@@ -62,7 +100,7 @@ async def test_list_persona_lorebook(client: AsyncClient, test_user):
 
     # 2개 항목 생성
     for i in range(2):
-        await client.post("/api/lorebook/", json={
+        await client.post("/api/lorebook", json={
             "persona_id": persona_id,
             "title": f"Entry {i}",
             "content": f"Content {i}",
@@ -83,7 +121,7 @@ async def test_update_lorebook_entry(client: AsyncClient, test_user):
     headers = auth_header(test_user)
     persona_id = await _create_persona(client, headers)
 
-    create_resp = await client.post("/api/lorebook/", json={
+    create_resp = await client.post("/api/lorebook", json={
         "persona_id": persona_id,
         "title": "Original",
         "content": "Original content",
@@ -104,7 +142,7 @@ async def test_update_lorebook_not_owner(client: AsyncClient, test_user, test_ad
     headers_owner = auth_header(test_user)
     persona_id = await _create_persona(client, headers_owner)
 
-    create_resp = await client.post("/api/lorebook/", json={
+    create_resp = await client.post("/api/lorebook", json={
         "persona_id": persona_id,
         "title": "Owner Only",
         "content": "Private",
@@ -126,7 +164,7 @@ async def test_delete_lorebook_entry(client: AsyncClient, test_user):
     headers = auth_header(test_user)
     persona_id = await _create_persona(client, headers)
 
-    create_resp = await client.post("/api/lorebook/", json={
+    create_resp = await client.post("/api/lorebook", json={
         "persona_id": persona_id,
         "title": "To Delete",
         "content": "Gone soon",
@@ -143,7 +181,7 @@ async def test_delete_lorebook_not_owner(client: AsyncClient, test_user, test_ad
     headers_owner = auth_header(test_user)
     persona_id = await _create_persona(client, headers_owner)
 
-    create_resp = await client.post("/api/lorebook/", json={
+    create_resp = await client.post("/api/lorebook", json={
         "persona_id": persona_id,
         "title": "Protected",
         "content": "Do not delete",

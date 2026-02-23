@@ -12,7 +12,9 @@ class EpisodeEmotion(Base):
     __tablename__ = "episode_emotions"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    episode_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    episode_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False
+    )
     emotion_label: Mapped[str] = mapped_column(String(30), nullable=False)
     intensity: Mapped[float] = mapped_column(Float, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)

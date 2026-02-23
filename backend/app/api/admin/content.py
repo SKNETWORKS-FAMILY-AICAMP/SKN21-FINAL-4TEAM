@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -97,9 +97,7 @@ async def list_webtoons(
 ):
     """웹툰 목록."""
     total = (await db.execute(select(func.count()).select_from(Webtoon))).scalar()
-    result = await db.execute(
-        select(Webtoon).order_by(Webtoon.created_at.desc()).offset(skip).limit(limit)
-    )
+    result = await db.execute(select(Webtoon).order_by(Webtoon.created_at.desc()).offset(skip).limit(limit))
     items = result.scalars().all()
     return {"items": list(items), "total": total}
 
@@ -156,15 +154,13 @@ async def create_episode(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Episode number already exists for this webtoon",
-        )
+        ) from None
 
     # total_episodes 갱신
     webtoon.total_episodes = (
-        await db.execute(
-            select(func.count()).select_from(Episode).where(Episode.webtoon_id == webtoon_id)
-        )
+        await db.execute(select(func.count()).select_from(Episode).where(Episode.webtoon_id == webtoon_id))
     ).scalar()
-    webtoon.updated_at = datetime.now(timezone.utc)
+    webtoon.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(episode)
     return episode

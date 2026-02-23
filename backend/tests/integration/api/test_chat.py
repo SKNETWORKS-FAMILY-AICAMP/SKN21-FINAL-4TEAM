@@ -27,7 +27,7 @@ MOCK_LLM_RESPONSE = {
 async def _setup_persona_and_model(client, headers, db_session):
     """테스트용 페르소나 + LLM 모델 생성."""
     # 페르소나 생성
-    resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     persona_id = resp.json()["id"]
 
     # LLM 모델 직접 DB 삽입
@@ -82,7 +82,7 @@ async def test_create_session_18_requires_adult(client: AsyncClient, test_user, 
     # 성인인증 사용자가 18+ 페르소나 생성
     adult_headers = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "adult-chat", "age_rating": "18+"}
-    resp = await client.post("/api/personas/", json=data, headers=adult_headers)
+    resp = await client.post("/api/personas", json=data, headers=adult_headers)
     persona_id = resp.json()["id"]
 
     # 미인증 사용자가 세션 생성 시도
@@ -274,7 +274,7 @@ async def test_send_message_no_model(client: AsyncClient, test_user, db_session)
     headers = auth_header(test_user)
 
     # 페르소나만 생성 (LLM 모델 없음)
-    resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     persona_id = resp.json()["id"]
 
     sess_resp = await client.post("/api/chat/sessions", json={

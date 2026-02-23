@@ -1,0 +1,172 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useDebateAgentStore } from './debateAgentStore';
+
+vi.mock('@/lib/api', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+  },
+}));
+
+import { api } from '@/lib/api';
+
+describe('debateAgentStore', () => {
+  beforeEach(() => {
+    useDebateAgentStore.setState({ agents: [], loading: false });
+    vi.clearAllMocks();
+  });
+
+  it('fetchMyAgents should update agents state', async () => {
+    const mockAgents = [
+      {
+        id: 'a1',
+        owner_id: 'u1',
+        name: 'Agent 1',
+        description: null,
+        provider: 'openai',
+        model_id: 'gpt-4o',
+        elo_rating: 1500,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        is_active: true,
+        created_at: '2026-01-01',
+        updated_at: '2026-01-01',
+      },
+    ];
+
+    vi.mocked(api.get).mockResolvedValueOnce(mockAgents);
+
+    await useDebateAgentStore.getState().fetchMyAgents();
+
+    const state = useDebateAgentStore.getState();
+    expect(state.agents).toHaveLength(1);
+    expect(state.agents[0].name).toBe('Agent 1');
+    expect(state.loading).toBe(false);
+  });
+
+  it('createAgent should add agent to state', async () => {
+    const newAgent = {
+      id: 'a2',
+      owner_id: 'u1',
+      name: 'New Agent',
+      description: null,
+      provider: 'anthropic',
+      model_id: 'claude-sonnet-4-5-20250929',
+      elo_rating: 1500,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      is_active: true,
+      created_at: '2026-01-01',
+      updated_at: '2026-01-01',
+    };
+
+    vi.mocked(api.post).mockResolvedValueOnce(newAgent);
+
+    const result = await useDebateAgentStore.getState().createAgent({
+      name: 'New Agent',
+      provider: 'anthropic',
+      model_id: 'claude-sonnet-4-5-20250929',
+      api_key: 'sk-test',
+      system_prompt: 'Test prompt',
+    });
+
+    expect(result.name).toBe('New Agent');
+    expect(useDebateAgentStore.getState().agents).toHaveLength(1);
+  });
+
+  it('updateAgent should update agent in state', async () => {
+    // 초기 상태 설정
+    useDebateAgentStore.setState({
+      agents: [
+        {
+          id: 'a1',
+          owner_id: 'u1',
+          name: 'Old Name',
+          description: null,
+          provider: 'openai',
+          model_id: 'gpt-4o',
+          elo_rating: 1500,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          is_active: true,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+        },
+      ],
+    });
+
+    const updated = {
+      ...useDebateAgentStore.getState().agents[0],
+      name: 'Updated Name',
+    };
+
+    vi.mocked(api.put).mockResolvedValueOnce(updated);
+
+    await useDebateAgentStore.getState().updateAgent('a1', { name: 'Updated Name' });
+
+    expect(useDebateAgentStore.getState().agents[0].name).toBe('Updated Name');
+  });
+
+  it('createAgent should work for local provider without api_key', async () => {
+    const localAgent = {
+      id: 'a3',
+      owner_id: 'u1',
+      name: 'Local Agent',
+      description: null,
+      provider: 'local',
+      model_id: 'custom',
+      elo_rating: 1500,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      is_active: true,
+      is_connected: false,
+      created_at: '2026-01-01',
+      updated_at: '2026-01-01',
+    };
+
+    vi.mocked(api.post).mockResolvedValueOnce(localAgent);
+
+    const result = await useDebateAgentStore.getState().createAgent({
+      name: 'Local Agent',
+      provider: 'local',
+      system_prompt: 'Local test prompt',
+    });
+
+    expect(result.provider).toBe('local');
+    expect(result.is_connected).toBe(false);
+    expect(useDebateAgentStore.getState().agents).toHaveLength(1);
+    expect(api.post).toHaveBeenCalledWith('/agents', {
+      name: 'Local Agent',
+      provider: 'local',
+      system_prompt: 'Local test prompt',
+    });
+  });
+
+  it('fetchVersions should return versions array', async () => {
+    const mockVersions = [
+      {
+        id: 'v1',
+        version_number: 1,
+        version_tag: 'v1',
+        system_prompt: 'Test',
+        parameters: null,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        created_at: '2026-01-01',
+      },
+    ];
+
+    vi.mocked(api.get).mockResolvedValueOnce(mockVersions);
+
+    const versions = await useDebateAgentStore.getState().fetchVersions('a1');
+
+    expect(versions).toHaveLength(1);
+    expect(api.get).toHaveBeenCalledWith('/agents/a1/versions');
+  });
+});

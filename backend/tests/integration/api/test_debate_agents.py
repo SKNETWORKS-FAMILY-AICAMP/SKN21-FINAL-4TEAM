@@ -1,0 +1,161 @@
+"""에이전트 API 통합 테스트."""
+
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from tests.conftest import auth_header
+
+
+@pytest.mark.asyncio
+async def test_create_agent_returns_201(client: AsyncClient, test_developer, db_session):
+    """developer 역할 사용자가 에이전트를 생성하면 201을 반환한다."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "My Agent",
+            "description": "A test agent",
+            "provider": "openai",
+            "model_id": "gpt-4o",
+            "api_key": "sk-test-key-123",
+            "system_prompt": "You are a skilled debater.",
+        },
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "My Agent"
+    assert data["provider"] == "openai"
+    assert data["elo_rating"] == 1500
+    assert "encrypted_api_key" not in data  # API 키는 응답에 포함하지 않음
+
+
+@pytest.mark.asyncio
+async def test_create_agent_forbidden_for_normal_user(client: AsyncClient, test_user):
+    """일반 사용자는 에이전트를 생성할 수 없다 (403)."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "Agent",
+            "provider": "openai",
+            "model_id": "gpt-4o",
+            "api_key": "key",
+            "system_prompt": "prompt",
+        },
+        headers=auth_header(test_user),
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_my_agents(client: AsyncClient, test_developer, test_debate_agent):
+    """내 에이전트 목록을 조회할 수 있다."""
+    response = await client.get("/api/agents/me", headers=auth_header(test_developer))
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert any(a["name"] == "Test Agent" for a in data)
+
+
+@pytest.mark.asyncio
+async def test_get_agent_versions(client: AsyncClient, test_developer, test_debate_agent):
+    """에이전트 버전 이력을 조회할 수 있다."""
+    response = await client.get(
+        f"/api/agents/{test_debate_agent.id}/versions",
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert data[0]["version_number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_agent_creates_new_version(
+    client: AsyncClient, test_developer, test_debate_agent
+):
+    """프롬프트 변경 시 새 버전이 자동 생성된다."""
+    response = await client.put(
+        f"/api/agents/{test_debate_agent.id}",
+        json={
+            "system_prompt": "Updated prompt for v2.",
+            "version_tag": "v2",
+        },
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 200
+
+    versions_resp = await client.get(
+        f"/api/agents/{test_debate_agent.id}/versions",
+        headers=auth_header(test_developer),
+    )
+    versions = versions_resp.json()
+    assert len(versions) == 2
+    assert versions[0]["version_number"] == 2
+
+
+@pytest.mark.asyncio
+async def test_create_local_agent_no_api_key(client: AsyncClient, test_developer):
+    """local 에이전트는 API 키 없이 생성할 수 있다."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "My Local Agent",
+            "description": "A local agent",
+            "provider": "local",
+            "model_id": "custom",
+            "system_prompt": "You are a local debater.",
+        },
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["provider"] == "local"
+    assert data["model_id"] == "custom"
+    assert data["is_connected"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_local_agent_with_api_key_ignored(client: AsyncClient, test_developer):
+    """local 에이전트에 api_key를 넣어도 정상 생성된다 (무시)."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "Local With Key",
+            "provider": "local",
+            "model_id": "custom",
+            "api_key": "sk-not-needed",
+            "system_prompt": "Test prompt.",
+        },
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 201
+    assert response.json()["provider"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_create_non_local_agent_requires_api_key(client: AsyncClient, test_developer):
+    """non-local 에이전트는 API 키 없이 생성하면 422를 반환한다."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "No Key Agent",
+            "provider": "openai",
+            "model_id": "gpt-4o",
+            "system_prompt": "Test prompt.",
+        },
+        headers=auth_header(test_developer),
+    )
+    # api_key가 None이면 provider != local이라 서비스에서 ValueError → 422
+    assert response.status_code == 422
+    assert "API key is required" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_ranking(client: AsyncClient, test_developer, test_debate_agent):
+    """ELO 랭킹을 조회할 수 있다."""
+    response = await client.get("/api/agents/ranking", headers=auth_header(test_developer))
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)

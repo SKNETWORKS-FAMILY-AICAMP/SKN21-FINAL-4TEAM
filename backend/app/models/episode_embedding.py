@@ -13,7 +13,9 @@ class EpisodeEmbedding(Base):
     __tablename__ = "episode_embeddings"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    episode_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    episode_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False
+    )
     chunk_type: Mapped[str] = mapped_column(String(20), nullable=False)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding = mapped_column(Vector(1024), nullable=False)

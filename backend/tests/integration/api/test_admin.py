@@ -40,7 +40,7 @@ WEBTOON_DATA = {
 @pytest.mark.asyncio
 async def test_admin_list_users(client: AsyncClient, test_admin, test_user):
     headers = auth_header(test_admin)
-    response = await client.get("/api/admin/users/", headers=headers)
+    response = await client.get("/api/admin/users", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 2  # test_admin + test_user
@@ -52,13 +52,14 @@ async def test_admin_list_users(client: AsyncClient, test_admin, test_user):
 @pytest.mark.asyncio
 async def test_admin_list_users_forbidden_for_user(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    response = await client.get("/api/admin/users/", headers=headers)
+    response = await client.get("/api/admin/users", headers=headers)
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_admin_update_user_role(client: AsyncClient, test_admin, test_user):
-    headers = auth_header(test_admin)
+async def test_superadmin_update_user_role(client: AsyncClient, test_superadmin, test_user):
+    """superadmin이 역할 변경 가능."""
+    headers = auth_header(test_superadmin)
     response = await client.put(
         f"/api/admin/users/{test_user.id}/role",
         json={"role": "admin"},
@@ -69,25 +70,158 @@ async def test_admin_update_user_role(client: AsyncClient, test_admin, test_user
 
 
 @pytest.mark.asyncio
-async def test_admin_update_user_role_invalid(client: AsyncClient, test_admin, test_user):
-    headers = auth_header(test_admin)
+async def test_superadmin_update_user_role_invalid(client: AsyncClient, test_superadmin, test_user):
+    headers = auth_header(test_superadmin)
     response = await client.put(
         f"/api/admin/users/{test_user.id}/role",
-        json={"role": "superadmin"},
+        json={"role": "godmode"},
         headers=headers,
     )
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_admin_update_user_role_not_found(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
+async def test_superadmin_update_user_role_not_found(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
     response = await client.put(
         f"/api/admin/users/{uuid.uuid4()}/role",
         json={"role": "admin"},
         headers=headers,
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_role_forbidden(client: AsyncClient, test_admin, test_user):
+    """일반 admin은 역할 변경 불가 (superadmin 전용)."""
+    headers = auth_header(test_admin)
+    response = await client.put(
+        f"/api/admin/users/{test_user.id}/role",
+        json={"role": "admin"},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+# ── Admin Users: Detail ──
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_detail(client: AsyncClient, test_admin, test_user):
+    """사용자 상세 조회 (관계 카운트 포함)."""
+    headers = auth_header(test_admin)
+    response = await client.get(f"/api/admin/users/{test_user.id}", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["nickname"] == "testuser"
+    assert "credit_balance" in data
+    assert data["persona_count"] >= 0
+    assert data["session_count"] >= 0
+    assert data["message_count"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_detail_not_found(client: AsyncClient, test_admin):
+    headers = auth_header(test_admin)
+    response = await client.get(f"/api/admin/users/{uuid.uuid4()}", headers=headers)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_detail_forbidden_for_user(client: AsyncClient, test_user):
+    headers = auth_header(test_user)
+    response = await client.get(f"/api/admin/users/{test_user.id}", headers=headers)
+    assert response.status_code == 403
+
+
+# ── Admin Users: Search & Stats ──
+
+
+@pytest.mark.asyncio
+async def test_admin_list_users_search(client: AsyncClient, test_admin, test_user):
+    """닉네임 검색 필터링."""
+    headers = auth_header(test_admin)
+    response = await client.get("/api/admin/users?search=testuser", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 1
+    assert all("testuser" in u["nickname"] for u in data["items"])
+
+
+@pytest.mark.asyncio
+async def test_admin_list_users_has_stats(client: AsyncClient, test_admin, test_user):
+    """응답에 stats 필드 포함."""
+    headers = auth_header(test_admin)
+    response = await client.get("/api/admin/users", headers=headers)
+    data = response.json()
+    assert "stats" in data
+    assert data["stats"]["total_users"] >= 2
+
+
+# ── Admin Users: Bulk Delete ──
+
+
+@pytest.mark.asyncio
+async def test_superadmin_bulk_delete_users(client: AsyncClient, test_superadmin, db_session):
+    """superadmin이 일반 사용자 일괄 삭제."""
+    from app.core.auth import get_password_hash
+    from app.models.user import User as UserModel
+
+    temp_user = UserModel(
+        id=uuid.uuid4(),
+        nickname="temp_delete_user",
+        password_hash=get_password_hash("testpass"),
+        role="user",
+        age_group="unverified",
+    )
+    db_session.add(temp_user)
+    await db_session.commit()
+
+    headers = auth_header(test_superadmin)
+    response = await client.post(
+        "/api/admin/users/bulk-delete",
+        json={"user_ids": [str(temp_user.id)]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_superadmin_bulk_delete_skips_admins(client: AsyncClient, test_superadmin, test_admin):
+    """admin/superadmin 계정은 삭제되지 않고 skipped_admin_ids에 반환."""
+    headers = auth_header(test_superadmin)
+    response = await client.post(
+        "/api/admin/users/bulk-delete",
+        json={"user_ids": [str(test_admin.id)]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 0
+    assert str(test_admin.id) in response.json()["skipped_admin_ids"]
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_delete_forbidden(client: AsyncClient, test_admin, test_user):
+    """일반 admin은 삭제 불가 (superadmin 전용)."""
+    headers = auth_header(test_admin)
+    response = await client.post(
+        "/api/admin/users/bulk-delete",
+        json={"user_ids": [str(test_user.id)]},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_forbidden_for_user(client: AsyncClient, test_user):
+    headers = auth_header(test_user)
+    response = await client.post(
+        "/api/admin/users/bulk-delete",
+        json={"user_ids": [str(test_user.id)]},
+        headers=headers,
+    )
+    assert response.status_code == 403
 
 
 # ══════════════════════════════════
@@ -100,10 +234,10 @@ async def test_admin_moderation_queue(client: AsyncClient, test_admin, test_user
     """pending 페르소나가 모더레이션 대기열에 표시."""
     # test_user가 공개 페르소나 생성 → pending 상태
     user_headers = auth_header(test_user)
-    await client.post("/api/personas/", json=PERSONA_DATA, headers=user_headers)
+    await client.post("/api/personas", json=PERSONA_DATA, headers=user_headers)
 
     admin_headers = auth_header(test_admin)
-    response = await client.get("/api/admin/personas/", headers=admin_headers)
+    response = await client.get("/api/admin/personas", headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 1
@@ -114,7 +248,7 @@ async def test_admin_moderation_queue(client: AsyncClient, test_admin, test_user
 async def test_admin_approve_persona(client: AsyncClient, test_admin, test_user):
     user_headers = auth_header(test_user)
     data = {**PERSONA_DATA, "persona_key": "approve-test"}
-    create_resp = await client.post("/api/personas/", json=data, headers=user_headers)
+    create_resp = await client.post("/api/personas", json=data, headers=user_headers)
     persona_id = create_resp.json()["id"]
 
     admin_headers = auth_header(test_admin)
@@ -132,7 +266,7 @@ async def test_admin_approve_persona(client: AsyncClient, test_admin, test_user)
 async def test_admin_block_persona(client: AsyncClient, test_admin, test_user):
     user_headers = auth_header(test_user)
     data = {**PERSONA_DATA, "persona_key": "block-test"}
-    create_resp = await client.post("/api/personas/", json=data, headers=user_headers)
+    create_resp = await client.post("/api/personas", json=data, headers=user_headers)
     persona_id = create_resp.json()["id"]
 
     admin_headers = auth_header(test_admin)
@@ -150,7 +284,7 @@ async def test_admin_block_persona(client: AsyncClient, test_admin, test_user):
 async def test_admin_moderation_invalid_action(client: AsyncClient, test_admin, test_user):
     user_headers = auth_header(test_user)
     data = {**PERSONA_DATA, "persona_key": "invalid-action"}
-    create_resp = await client.post("/api/personas/", json=data, headers=user_headers)
+    create_resp = await client.post("/api/personas", json=data, headers=user_headers)
     persona_id = create_resp.json()["id"]
 
     admin_headers = auth_header(test_admin)
@@ -165,7 +299,7 @@ async def test_admin_moderation_invalid_action(client: AsyncClient, test_admin, 
 @pytest.mark.asyncio
 async def test_admin_moderation_forbidden_for_user(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    response = await client.get("/api/admin/personas/", headers=headers)
+    response = await client.get("/api/admin/personas", headers=headers)
     assert response.status_code == 403
 
 
@@ -175,9 +309,9 @@ async def test_admin_moderation_forbidden_for_user(client: AsyncClient, test_use
 
 
 @pytest.mark.asyncio
-async def test_admin_register_llm_model(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
-    response = await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
+async def test_superadmin_register_llm_model(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
+    response = await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
     assert response.status_code == 201
     data = response.json()
     assert data["provider"] == "openai"
@@ -186,27 +320,29 @@ async def test_admin_register_llm_model(client: AsyncClient, test_admin):
 
 
 @pytest.mark.asyncio
-async def test_admin_register_llm_model_duplicate(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
-    await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
-    response = await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
+async def test_superadmin_register_llm_model_duplicate(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
+    await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
+    response = await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
     assert response.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_admin_list_llm_models(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
-    await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
+async def test_admin_list_llm_models(client: AsyncClient, test_admin, test_superadmin):
+    """admin도 목록 조회 가능."""
+    sa_headers = auth_header(test_superadmin)
+    await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=sa_headers)
 
-    response = await client.get("/api/admin/models/", headers=headers)
+    headers = auth_header(test_admin)
+    response = await client.get("/api/admin/models", headers=headers)
     assert response.status_code == 200
     assert response.json()["total"] >= 1
 
 
 @pytest.mark.asyncio
-async def test_admin_update_llm_model(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
-    create_resp = await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
+async def test_superadmin_update_llm_model(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
+    create_resp = await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
     model_id = create_resp.json()["id"]
 
     response = await client.put(
@@ -220,26 +356,32 @@ async def test_admin_update_llm_model(client: AsyncClient, test_admin):
 
 
 @pytest.mark.asyncio
-async def test_admin_toggle_llm_model(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
-    create_resp = await client.post("/api/admin/models/", json=LLM_MODEL_DATA, headers=headers)
+async def test_superadmin_toggle_llm_model(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
+    create_resp = await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
     model_id = create_resp.json()["id"]
     assert create_resp.json()["is_active"] is True
 
-    # 비활성화
     response = await client.put(f"/api/admin/models/{model_id}/toggle", headers=headers)
     assert response.status_code == 200
     assert response.json()["is_active"] is False
 
-    # 다시 활성화
     response = await client.put(f"/api/admin/models/{model_id}/toggle", headers=headers)
     assert response.json()["is_active"] is True
 
 
 @pytest.mark.asyncio
-async def test_admin_llm_models_forbidden_for_user(client: AsyncClient, test_user):
+async def test_admin_register_llm_model_forbidden(client: AsyncClient, test_admin):
+    """일반 admin은 모델 등록 불가 (superadmin 전용)."""
+    headers = auth_header(test_admin)
+    response = await client.post("/api/admin/models", json=LLM_MODEL_DATA, headers=headers)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_llm_models_forbidden_for_user(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    response = await client.get("/api/admin/models/", headers=headers)
+    response = await client.get("/api/admin/models", headers=headers)
     assert response.status_code == 403
 
 

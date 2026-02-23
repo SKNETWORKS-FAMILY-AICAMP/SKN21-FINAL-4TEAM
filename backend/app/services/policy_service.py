@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -77,7 +77,7 @@ class PolicyService:
         else:
             setting.mode = mode
             setting.max_episode = max_episode
-            setting.updated_at = datetime.now(timezone.utc)
+            setting.updated_at = datetime.now(UTC)
 
         await self.db.commit()
         await self.db.refresh(setting)
@@ -110,7 +110,7 @@ class PolicyService:
             "user_id": str(user.id),
             "age_group": user.age_group,
             "adult_verified": user.adult_verified_at is not None,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         if webtoon_id:

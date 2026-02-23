@@ -25,7 +25,7 @@ async def list_persona_lorebook(
     return await service.list_by_persona(persona_id, skip=skip, limit=limit)
 
 
-@router.post("/", response_model=LorebookResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LorebookResponse, status_code=status.HTTP_201_CREATED)
 async def create_lorebook_entry(
     data: LorebookCreate,
     user: User = Depends(get_current_user),

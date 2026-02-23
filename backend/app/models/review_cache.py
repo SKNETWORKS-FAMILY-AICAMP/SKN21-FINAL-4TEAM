@@ -12,7 +12,9 @@ class ReviewCache(Base):
     __tablename__ = "review_cache"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    episode_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    episode_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False
+    )
     persona_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("personas.id"), nullable=False)
     spoiler_mode: Mapped[str] = mapped_column(String(20), nullable=False)
     review_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -22,6 +24,4 @@ class ReviewCache(Base):
     episode = relationship("Episode")
     persona = relationship("Persona")
 
-    __table_args__ = (
-        UniqueConstraint("episode_id", "persona_id", "spoiler_mode", name="uq_review_cache"),
-    )
+    __table_args__ = (UniqueConstraint("episode_id", "persona_id", "spoiler_mode", name="uq_review_cache"),)

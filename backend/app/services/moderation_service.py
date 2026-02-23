@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -12,15 +12,9 @@ class ModerationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_moderation_queue(
-        self, moderation_status: str = "pending", skip: int = 0, limit: int = 20
-    ) -> dict:
+    async def get_moderation_queue(self, moderation_status: str = "pending", skip: int = 0, limit: int = 20) -> dict:
         """모더레이션 대기열 조회."""
-        count_query = (
-            select(func.count())
-            .select_from(Persona)
-            .where(Persona.moderation_status == moderation_status)
-        )
+        count_query = select(func.count()).select_from(Persona).where(Persona.moderation_status == moderation_status)
         total = (await self.db.execute(count_query)).scalar()
 
         query = (
@@ -52,7 +46,7 @@ class ModerationService:
             persona.is_active = True
         elif action == "blocked":
             persona.is_active = False
-        persona.updated_at = datetime.now(timezone.utc)
+        persona.updated_at = datetime.now(UTC)
 
         await self.db.commit()
         await self.db.refresh(persona)

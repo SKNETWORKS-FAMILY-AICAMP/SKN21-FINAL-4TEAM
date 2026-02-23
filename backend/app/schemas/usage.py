@@ -4,6 +4,27 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class ModelUsage(BaseModel):
+    model_name: str
+    provider: str
+    tier: str = "economy"
+    credit_per_1k_tokens: int = 1
+    input_cost_per_1m: float
+    output_cost_per_1m: float
+    input_tokens: int
+    output_tokens: int
+    cost: float
+    request_count: int
+    daily_input_tokens: int = 0
+    daily_output_tokens: int = 0
+    daily_cost: float = 0.0
+    daily_request_count: int = 0
+    monthly_input_tokens: int = 0
+    monthly_output_tokens: int = 0
+    monthly_cost: float = 0.0
+    monthly_request_count: int = 0
+
+
 class UsageSummary(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
@@ -14,6 +35,7 @@ class UsageSummary(BaseModel):
     monthly_input_tokens: int
     monthly_output_tokens: int
     monthly_cost: float
+    by_model: list[ModelUsage] = []
 
 
 class UsageHistoryItem(BaseModel):
@@ -21,7 +43,19 @@ class UsageHistoryItem(BaseModel):
     input_tokens: int
     output_tokens: int
     cost: float
-    model_name: str | None = None
+
+
+class ModelDailyUsage(BaseModel):
+    date: str
+    model_name: str
+    input_tokens: int
+    output_tokens: int
+    cost: float
+
+
+class UsageHistoryResponse(BaseModel):
+    daily: list[UsageHistoryItem]
+    by_model_daily: list[ModelDailyUsage]
 
 
 class TokenUsageLogResponse(BaseModel):

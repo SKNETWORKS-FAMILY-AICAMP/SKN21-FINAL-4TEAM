@@ -23,7 +23,7 @@ PERSONA_DATA = {
 @pytest.mark.asyncio
 async def test_create_persona_success(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    response = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    response = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     assert response.status_code == 201
     data = response.json()
     assert data["persona_key"] == "test-char"
@@ -37,7 +37,7 @@ async def test_create_persona_18_requires_adult(client: AsyncClient, test_user):
     """미인증 사용자가 18+ 페르소나 생성 시도 → 403."""
     headers = auth_header(test_user)
     data = {**PERSONA_DATA, "persona_key": "adult-char", "age_rating": "18+"}
-    response = await client.post("/api/personas/", json=data, headers=headers)
+    response = await client.post("/api/personas", json=data, headers=headers)
     assert response.status_code == 403
     assert "Adult verification" in response.json()["detail"]
 
@@ -47,7 +47,7 @@ async def test_create_persona_18_adult_verified(client: AsyncClient, test_adult_
     """성인인증 사용자는 18+ 페르소나 생성 가능."""
     headers = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "adult-char-ok", "age_rating": "18+"}
-    response = await client.post("/api/personas/", json=data, headers=headers)
+    response = await client.post("/api/personas", json=data, headers=headers)
     assert response.status_code == 201
     assert response.json()["age_rating"] == "18+"
 
@@ -56,8 +56,8 @@ async def test_create_persona_18_adult_verified(client: AsyncClient, test_adult_
 async def test_create_persona_duplicate_key_version(client: AsyncClient, test_user):
     """같은 persona_key + version 중복 → 409."""
     headers = auth_header(test_user)
-    await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
-    response = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
+    response = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     assert response.status_code == 409
 
 
@@ -68,8 +68,8 @@ async def test_create_persona_duplicate_key_version(client: AsyncClient, test_us
 async def test_list_personas_own(client: AsyncClient, test_user):
     """자신이 만든 비공개 페르소나가 목록에 포함."""
     headers = auth_header(test_user)
-    await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
-    response = await client.get("/api/personas/", headers=headers)
+    await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
+    response = await client.get("/api/personas", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 1
@@ -82,11 +82,11 @@ async def test_list_personas_excludes_other_private(client: AsyncClient, test_us
     # test_adult_user가 비공개 페르소나 생성
     headers_adult = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "other-private", "visibility": "private"}
-    await client.post("/api/personas/", json=data, headers=headers_adult)
+    await client.post("/api/personas", json=data, headers=headers_adult)
 
     # test_user 목록에서 안 보여야 함
     headers_user = auth_header(test_user)
-    response = await client.get("/api/personas/", headers=headers_user)
+    response = await client.get("/api/personas", headers=headers_user)
     items = response.json()["items"]
     assert not any(p["persona_key"] == "other-private" for p in items)
 
@@ -97,7 +97,7 @@ async def test_list_personas_excludes_other_private(client: AsyncClient, test_us
 @pytest.mark.asyncio
 async def test_get_own_persona(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    create_resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    create_resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     persona_id = create_resp.json()["id"]
 
     response = await client.get(f"/api/personas/{persona_id}", headers=headers)
@@ -110,7 +110,7 @@ async def test_get_other_private_persona_404(client: AsyncClient, test_user, tes
     """다른 사용자의 비공개 페르소나 조회 → 404."""
     headers_adult = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "hidden-char"}
-    create_resp = await client.post("/api/personas/", json=data, headers=headers_adult)
+    create_resp = await client.post("/api/personas", json=data, headers=headers_adult)
     persona_id = create_resp.json()["id"]
 
     headers_user = auth_header(test_user)
@@ -124,7 +124,7 @@ async def test_get_18_persona_requires_adult(client: AsyncClient, test_user, tes
     # 성인인증 사용자가 18+ 공개 페르소나 생성
     headers_adult = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "adult-view", "age_rating": "18+", "visibility": "public"}
-    create_resp = await client.post("/api/personas/", json=data, headers=headers_adult)
+    create_resp = await client.post("/api/personas", json=data, headers=headers_adult)
     persona_id = create_resp.json()["id"]
 
     # 모더레이션 승인 (직접 DB 업데이트)
@@ -146,7 +146,7 @@ async def test_get_18_persona_requires_adult(client: AsyncClient, test_user, tes
 @pytest.mark.asyncio
 async def test_update_persona_owner(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    create_resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    create_resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     persona_id = create_resp.json()["id"]
 
     response = await client.put(
@@ -163,7 +163,7 @@ async def test_update_persona_not_owner(client: AsyncClient, test_user, test_adu
     """소유자가 아닌 사용자가 수정 시도 → 403."""
     headers_adult = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "not-mine"}
-    create_resp = await client.post("/api/personas/", json=data, headers=headers_adult)
+    create_resp = await client.post("/api/personas", json=data, headers=headers_adult)
     persona_id = create_resp.json()["id"]
 
     headers_user = auth_header(test_user)
@@ -181,7 +181,7 @@ async def test_update_persona_not_owner(client: AsyncClient, test_user, test_adu
 @pytest.mark.asyncio
 async def test_delete_persona_owner(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    create_resp = await client.post("/api/personas/", json=PERSONA_DATA, headers=headers)
+    create_resp = await client.post("/api/personas", json=PERSONA_DATA, headers=headers)
     persona_id = create_resp.json()["id"]
 
     response = await client.delete(f"/api/personas/{persona_id}", headers=headers)
@@ -197,7 +197,7 @@ async def test_delete_persona_not_owner(client: AsyncClient, test_user, test_adu
     """소유자가 아닌 사용자가 삭제 시도 → 403."""
     headers_adult = auth_header(test_adult_user)
     data = {**PERSONA_DATA, "persona_key": "del-test"}
-    create_resp = await client.post("/api/personas/", json=data, headers=headers_adult)
+    create_resp = await client.post("/api/personas", json=data, headers=headers_adult)
     persona_id = create_resp.json()["id"]
 
     headers_user = auth_header(test_user)

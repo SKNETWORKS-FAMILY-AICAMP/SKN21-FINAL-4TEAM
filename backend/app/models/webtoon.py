@@ -11,7 +11,9 @@ from app.core.database import Base
 class Webtoon(Base):
     __tablename__ = "webtoons"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     platform: Mapped[str | None] = mapped_column(String(30))
     genre: Mapped[list[str] | None] = mapped_column(ARRAY(String(50)))
@@ -24,6 +26,4 @@ class Webtoon(Base):
 
     episodes = relationship("Episode", back_populates="webtoon", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        CheckConstraint("age_rating IN ('all', '12+', '15+', '18+')", name="ck_webtoons_age_rating"),
-    )
+    __table_args__ = (CheckConstraint("age_rating IN ('all', '12+', '15+', '18+')", name="ck_webtoons_age_rating"),)

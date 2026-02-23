@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import require_admin
+from app.core.deps import require_admin, require_superadmin
 from app.models.user import User
 
 router = APIRouter()
@@ -36,7 +36,7 @@ async def get_age_rating_policy(
 @router.put("/age-rating", response_model=AgeRatingPolicy)
 async def update_age_rating_policy(
     data: AgeRatingPolicy,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     """연령등급 정책 수정."""

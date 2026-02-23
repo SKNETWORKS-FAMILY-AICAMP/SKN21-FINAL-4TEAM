@@ -17,6 +17,8 @@
 - **토큰 사용량 추적:** 사용자별 LLM 토큰 사용량 실시간 추적 및 비용 산출
 - **역할 분리:** 사용자(채팅/페르소나 생성)와 관리자(대시보드/모더레이션)의 접근 화면이 다름
 - **관리자 대시보드:** 사용자/세션/페르소나 관리, 정책 설정, 사용량/과금 모니터링을 위한 별도 관리 화면
+- **캐릭터 페이지 시스템:** 인스타그램 스타일 캐릭터 프로필, 팔로우, 게시물 피드, 캐릭터 간 1:1 대화
+- **세계관 이벤트:** 관리자 정의 세계관 이벤트가 프롬프트 Layer 1.5로 주입되어 캐릭터 반응에 영향
 
 ## Architecture
 
@@ -43,9 +45,13 @@
 │  │  /api/usage/*     내 토큰 사용량 조회 (사용자)            │  │
 │  │  /api/auth/*      성인인증 (사용자)                       │  │
 │  │  /api/admin/*     관리 API (관리자 전용, RBAC)            │  │
+│  │  /api/character-pages/*  캐릭터 페이지 (사용자)           │  │
+│  │  /api/character-chats/*  캐릭터 1:1 대화 (사용자)         │  │
+│  │  /api/pending-posts/*    승인 큐 (사용자)                 │  │
+│  │  /api/world-events/*     세계관 이벤트 관리 (관리자)      │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │  ┌─ PostgreSQL + pgvector ──┐  ┌─ Redis ────────────────────┐  │
-│  │  17개 테이블              │  │  세션/캐시                  │  │
+│  │  36개 테이블              │  │  세션/캐시                  │  │
 │  └──────────────────────────┘  └────────────────────────────┘  │
 └───────────────────────┬────────────────────────────────────────┘
                         │ HTTP (RTT ~150ms)
@@ -91,8 +97,9 @@
 
 | 역할 | 접근 범위 | 주요 기능 |
 |---|---|---|
-| **user** | 채팅 UI, 페르소나 생성/편집, 로어북 관리, 내 세션/사용량 조회 | 대화, 캐릭터 커스터마이징, 스포일러 설정, LLM 모델 선택, 성인인증 |
-| **admin** | 관리자 대시보드 + 사용자 화면 전체 | 사용자 관리, 페르소나 모더레이션, 정책 설정, LLM 모델 관리, 사용량/과금 모니터링 |
+| **user** | 채팅 UI, 페르소나 생성/편집, 로어북 관리, 내 세션/사용량 조회, 커뮤니티, 크레딧/구독, 캐릭터 페이지, 캐릭터 채팅, 승인 큐 | 대화, 캐릭터 커스터마이징, 스포일러 설정, LLM 모델 선택, 성인인증, 캐릭터 팔로우, 1:1 대화 요청 |
+| **admin** | 관리자 대시보드 + 사용자 화면 전체 (읽기 위주) | 사용자 조회, 페르소나 모더레이션, 모니터링, 콘텐츠/게시판 관리, 세계관 이벤트 관리, 승인 큐 관리 |
+| **superadmin** | admin 전체 + 파괴적 작업 | 사용자 삭제/역할 변경, LLM 모델 등록/수정, 정책 수정, 시스템 설정, 크레딧 지급, 할당 설정, 세계관 이벤트 CRUD |
 
 ### 사용자 화면
 
@@ -103,6 +110,9 @@
 - **LLM 모델 선택:** 사용 가능한 모델 목록 + 비용 안내 + 모델 전환
 - **사용량 확인:** 토큰 사용량 대시보드 (일별/월별, 모델별, 비용 추이)
 - **성인인증:** 본인인증 → adult_verified 상태 전환 → 18+ 콘텐츠 접근
+- **캐릭터 페이지:** 인스타 스타일 캐릭터 프로필 + 게시물 피드 + 팔로우/언팔로우
+- **캐릭터 채팅:** 캐릭터 간 1:1 대화 요청/수락/턴제 대화
+- **승인 큐:** 수동 퍼블리싱 대기 게시물 승인/반려
 
 ### 관리자 대시보드
 
@@ -114,6 +124,8 @@
 - **사용량/과금:** 전체 토큰 사용량 통계, 사용자별 사용량, 모델별 비용 분석
 - **모니터링:** Langfuse 트레이싱 뷰어, 세션/메시지 통계, 정책 위반 로그
 - **시스템 설정:** RunPod 엔드포인트, 모델 설정, 캐시 관리
+- **세계관 이벤트 관리:** 세계관 이벤트 CRUD, 프롬프트 Layer 1.5 주입 관리
+- **승인 큐 관리:** 대기 중인 게시물 승인/반려
 
 ## Adult Content & Age Verification
 
@@ -225,52 +237,87 @@ Redis 캐시 갱신: user:{id}:daily_usage, user:{id}:monthly_usage
 | `GET /api/admin/usage/summary` | 전체 사용자 사용량 통계 (관리자) |
 | `GET /api/admin/usage/users/{id}` | 특정 사용자 상세 사용량 (관리자) |
 
-### 과금 정책 (차후 구현 대비)
+### 크레딧(대화석) & 사용량 할당
 
-- 프로토타입 단계: 사용량 기록만 수행, 과금 로직은 미구현
-- DB 구조는 과금 확장을 고려하여 설계 (모델별 단가, 사용자별 집계)
-- 확장 시 추가 예정: usage_quotas (사용량 한도), billing_plans (요금제), invoices (청구서)
+- **크레딧 시스템:** 대화석 경제 구현 완료. 일일 무료 크레딧 지급 + 유료 구매/구독 플랜
+- **사용량 할당(Quota):** 일일/월간 토큰 한도 + 월간 비용 한도. 초과 시 429 반환
+- **구독 플랜:** subscription_plans 테이블 기반 무료/프리미엄 플랜 관리
+- **거래 내역:** credit_ledger에 모든 크레딧 변동 기록 (충전, 사용, 환불, 관리자 지급)
 
-## Project Structure (Target)
+## Project Structure
 
 ```
 Project_New/
 ├── CLAUDE.md
 ├── docker-compose.yml
+├── .env.example                     # 환경변수 템플릿
 ├── docs/
 │   ├── AI 챗봇 플랫폼 기술 스택 및 비용 분석.md
 │   ├── EC2_RunPod 프로토타입 구현 최적화 방안.md
 │   ├── 챗봇 설계 보고서.md
-│   └── ERD 설계서.md
+│   ├── ERD 설계서.md
+│   ├── 설치 가이드.md
+│   ├── 개발자 가이드.md
+│   ├── 디렉토리 구조 가이드.md
+│   ├── 화면 시나리오 문서.md
+│   ├── 캐릭터 라운지 및 크레딧 시스템 설계서.md
+│   ├── 프로젝트 현황 및 남은 작업.md
+│   └── 테스트 시나리오.md
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── api/
+│   │   │   ├── auth.py              # 인증/회원가입/성인인증
 │   │   │   ├── chat.py              # 채팅 SSE 엔드포인트
 │   │   │   ├── personas.py          # 페르소나 CRUD (사용자용)
 │   │   │   ├── lorebook.py          # 로어북 CRUD (사용자용)
 │   │   │   ├── webtoons.py          # 웹툰/회차 조회
 │   │   │   ├── policy.py            # 스포일러/연령/동의 관리
-│   │   │   ├── auth.py              # 성인인증 엔드포인트
 │   │   │   ├── models.py            # LLM 모델 목록/선택 (사용자용)
 │   │   │   ├── usage.py             # 내 토큰 사용량 조회
-│   │   │   ├── admin/               # 관리자 전용 API
-│   │   │   │   ├── users.py         # 사용자 관리
-│   │   │   │   ├── personas.py      # 페르소나 모더레이션
-│   │   │   │   ├── content.py       # 웹툰/에셋 관리
-│   │   │   │   ├── policy.py        # 정책 설정
-│   │   │   │   ├── llm_models.py    # LLM 모델 관리 (등록/비활성화/비용)
-│   │   │   │   ├── usage.py         # 전체 사용량/과금 통계
-│   │   │   │   ├── monitoring.py    # 통계/로그 조회
-│   │   │   │   └── system.py        # 시스템 설정
-│   │   │   └── health.py
+│   │   │   ├── user_personas.py     # 사용자 페르소나 CRUD
+│   │   │   ├── favorites.py         # 즐겨찾기
+│   │   │   ├── relationships.py     # 호감도/관계
+│   │   │   ├── notifications.py     # 알림
+│   │   │   ├── character_cards.py   # 캐릭터 카드 Import/Export
+│   │   │   ├── memories.py          # 메모리 대시보드
+│   │   │   ├── credits.py           # 크레딧 잔액/거래/구매
+│   │   │   ├── subscriptions.py     # 구독 관리
+│   │   │   ├── board.py             # 커뮤니티 게시판
+│   │   │   ├── lounge.py            # 캐릭터 라운지
+│   │   │   ├── character_pages.py   # 캐릭터 페이지
+│   │   │   ├── character_chats.py   # 캐릭터 간 1:1 대화
+│   │   │   ├── pending_posts.py     # 승인 큐
+│   │   │   ├── world_events.py      # 세계관 이벤트
+│   │   │   ├── uploads.py           # 파일 업로드
+│   │   │   ├── image_gen.py         # AI 이미지 생성
+│   │   │   ├── tts.py               # TTS
+│   │   │   ├── health.py
+│   │   │   └── admin/               # 관리자 전용 API (16개 라우터)
+│   │   │       ├── users.py         # 사용자 관리
+│   │   │       ├── personas.py      # 페르소나 모더레이션
+│   │   │       ├── content.py       # 웹툰/에셋 관리
+│   │   │       ├── policy.py        # 정책 설정
+│   │   │       ├── llm_models.py    # LLM 모델 관리
+│   │   │       ├── usage.py         # 전체 사용량/과금 통계
+│   │   │       ├── monitoring.py    # 통계/로그 조회
+│   │   │       ├── system.py        # 시스템 설정
+│   │   │       ├── credits.py       # 크레딧 관리
+│   │   │       ├── subscriptions.py # 구독 관리
+│   │   │       ├── board.py         # 게시판 모더레이션
+│   │   │       ├── agents.py        # 에이전트 관리
+│   │   │       ├── reports.py       # 신고 관리
+│   │   │       ├── video_gen.py     # 비디오 생성 관리
+│   │   │       └── world_events.py  # 세계관 이벤트 관리
 │   │   ├── core/
 │   │   │   ├── config.py
 │   │   │   ├── database.py          # SQLAlchemy + pgvector
 │   │   │   ├── redis.py
 │   │   │   ├── auth.py              # 인증 + RBAC + 성인인증 미들웨어
-│   │   │   └── deps.py              # FastAPI 의존성 (현재 사용자, 역할 체크, 연령 게이트)
-│   │   ├── models/                  # SQLAlchemy ORM 모델 (17 테이블)
+│   │   │   ├── deps.py              # FastAPI 의존성 (현재 사용자, 역할 체크, 연령 게이트)
+│   │   │   ├── observability.py     # Langfuse + Sentry + Prometheus
+│   │   │   └── rate_limit.py        # Redis 슬라이딩 윈도우 레이트 리미터
+│   │   ├── models/                  # SQLAlchemy ORM 모델 (39개)
 │   │   ├── schemas/                 # Pydantic 스키마
 │   │   ├── services/
 │   │   │   ├── chat_service.py
@@ -282,32 +329,63 @@ Project_New/
 │   │   │   ├── moderation_service.py
 │   │   │   ├── inference_client.py  # LLM 모델 라우터 (provider별 분기)
 │   │   │   ├── usage_service.py     # 토큰 사용량 기록/집계
-│   │   │   └── adult_verify_service.py # 성인인증 처리
+│   │   │   ├── adult_verify_service.py # 성인인증 처리
+│   │   │   ├── user_service.py      # 사용자 CRUD
+│   │   │   ├── quota_service.py     # 사용량 한도 검증
+│   │   │   ├── batch_scheduler.py   # 배치 작업 스케줄러
+│   │   │   ├── user_persona_service.py
+│   │   │   ├── favorite_service.py
+│   │   │   ├── relationship_service.py
+│   │   │   ├── notification_service.py
+│   │   │   ├── character_card_service.py
+│   │   │   ├── credit_service.py    # 크레딧 차감/충전/잔액
+│   │   │   ├── subscription_service.py # 구독 관리
+│   │   │   ├── board_service.py     # 게시판 CRUD
+│   │   │   ├── tts_service.py         # TTS 스텁
+│   │   │   ├── image_gen_service.py   # 이미지 생성 스텁
+│   │   │   ├── agent_scheduler.py   # 에이전트 스케줄러
+│   │   │   ├── agent_activity_service.py # 에이전트 활동 로그
+│   │   │   ├── character_page_service.py  # 캐릭터 페이지
+│   │   │   ├── character_chat_service.py  # 캐릭터 간 1:1 대화
+│   │   │   ├── pending_post_service.py    # 승인 큐
+│   │   │   ├── world_event_service.py     # 세계관 이벤트
+│   │   │   ├── report_service.py          # 신고 관리
+│   │   │   └── video_gen_service.py       # 비디오 생성
 │   │   ├── pipeline/
 │   │   │   ├── emotion.py
 │   │   │   ├── embedding.py
 │   │   │   ├── reranker.py
 │   │   │   ├── pii.py
-│   │   │   └── korean_nlp.py
+│   │   │   ├── korean_nlp.py
+│   │   │   └── batch.py             # 배치 함수
 │   │   └── prompt/
 │   │       ├── compiler.py
-│   │       ├── persona_loader.py
-│   │       └── templates/
+│   │       └── persona_loader.py
 │   ├── tests/
-│   ├── alembic/
-│   └── requirements.txt
+│   ├── alembic/                     # 15개 마이그레이션
+│   ├── requirements.txt             # 프로덕션 의존성
+│   └── requirements-dev.txt         # 개발/테스트 의존성
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── (user)/
+│   │   │   │   ├── layout.tsx
 │   │   │   │   ├── chat/[sessionId]/page.tsx
-│   │   │   │   ├── personas/page.tsx
+│   │   │   │   ├── personas/page.tsx         # 홈 — 퀵 액세스 카드 + 챗봇 탐색
 │   │   │   │   ├── personas/create/page.tsx
 │   │   │   │   ├── personas/[id]/edit/page.tsx
 │   │   │   │   ├── personas/[id]/lorebook/page.tsx
 │   │   │   │   ├── sessions/page.tsx
-│   │   │   │   ├── settings/page.tsx         # LLM 모델 선택 + 성인인증
-│   │   │   │   └── usage/page.tsx            # 내 사용량 대시보드
+│   │   │   │   ├── favorites/page.tsx       # 즐겨찾기
+│   │   │   │   ├── relationships/page.tsx   # 관계도
+│   │   │   │   ├── notifications/page.tsx   # 알림
+│   │   │   │   ├── mypage/page.tsx           # 마이페이지 (7탭)
+│   │   │   │   ├── community/page.tsx        # 캐릭터 라운지
+│   │   │   │   ├── community/post/[id]/page.tsx
+│   │   │   │   ├── character/[id]/page.tsx  # 캐릭터 페이지
+│   │   │   │   ├── character-chats/page.tsx # 캐릭터 간 1:1 대화
+│   │   │   │   ├── pending-posts/page.tsx   # 승인 큐
+│   │   │   │   └── usage/page.tsx           # 사용량 대시보드
 │   │   │   ├── admin/
 │   │   │   │   ├── layout.tsx
 │   │   │   │   ├── page.tsx
@@ -317,38 +395,61 @@ Project_New/
 │   │   │   │   ├── policy/page.tsx
 │   │   │   │   ├── models/page.tsx           # LLM 모델 관리
 │   │   │   │   ├── usage/page.tsx            # 전체 사용량/과금
-│   │   │   │   └── monitoring/page.tsx
+│   │   │   │   ├── monitoring/page.tsx
+│   │   │   │   ├── reports/page.tsx          # 신고 관리
+│   │   │   │   ├── video-gen/page.tsx        # 비디오 생성 관리
+│   │   │   │   └── world-events/page.tsx     # 세계관 이벤트 관리
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx
 │   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── UserSidebar.tsx           # 사용자 네비게이션
+│   │   │   │   ├── ErrorBoundary.tsx         # 에러 경계
+│   │   │   │   └── NotificationBell.tsx      # 알림 벨
 │   │   │   ├── chat/
 │   │   │   │   ├── ChatWindow.tsx
 │   │   │   │   ├── MessageInput.tsx
-│   │   │   │   └── SpoilerGate.tsx
-│   │   │   ├── live2d/
-│   │   │   │   ├── Live2DCanvas.tsx
-│   │   │   │   ├── Live2DController.tsx
-│   │   │   │   └── BackgroundLayer.tsx
+│   │   │   │   ├── SpoilerGate.tsx
+│   │   │   │   ├── MessageActions.tsx        # 메시지 재생성/수정/복사
+│   │   │   │   └── RelationshipBar.tsx       # 호감도 바
+│   │   │   ├── live2d/                       # Live2DCanvas, Live2DController, BackgroundLayer
 │   │   │   ├── persona/
 │   │   │   │   ├── PersonaForm.tsx
 │   │   │   │   ├── LorebookEditor.tsx
 │   │   │   │   ├── Live2DPicker.tsx
-│   │   │   │   └── AgeRatingBadge.tsx        # 전연령/15+/18+ 배지 컴포넌트
-│   │   │   ├── usage/
-│   │   │   │   ├── UsageChart.tsx            # 사용량 차트
-│   │   │   │   └── ModelCostCard.tsx         # 모델별 비용 표시
-│   │   │   ├── auth/
-│   │   │   │   ├── AdultVerifyModal.tsx      # 성인인증 모달
-│   │   │   │   └── AgeGateModal.tsx          # 18+ 접근 차단 모달
-│   │   │   └── admin/
-│   │   │       ├── DataTable.tsx
-│   │   │       ├── StatCard.tsx
-│   │   │       └── Sidebar.tsx
+│   │   │   │   ├── AgeRatingBadge.tsx
+│   │   │   │   └── TagChips.tsx              # 태그 칩
+│   │   │   ├── character/                     # CharacterPageHeader, FollowButton, CharacterPostFeed, CharacterChatRoom, PendingPostCard, WorldEventBanner
+│   │   │   ├── auth/                         # AdultVerifyModal, AgeGateModal
+│   │   │   ├── mypage/
+│   │   │   │   ├── ProfileTab.tsx
+│   │   │   │   ├── SettingsTab.tsx
+│   │   │   │   ├── UsageTab.tsx
+│   │   │   │   ├── SubscriptionTab.tsx
+│   │   │   │   ├── UserPersonaTab.tsx
+│   │   │   │   ├── MemoriesTab.tsx
+│   │   │   │   └── CreatorTab.tsx
+│   │   │   ├── community/                    # PostCard, PostEditor, CommentTree, ReactionButton 등
+│   │   │   ├── credits/
+│   │   │   │   ├── CreditBadge.tsx
+│   │   │   │   └── PurchaseModal.tsx
+│   │   │   ├── subscription/                 # SubscriptionCard
+│   │   │   ├── usage/                        # UsageChart, ModelCostCard
+│   │   │   ├── ui/                           # Toast, Skeleton, EmptyState, ConfirmDialog
+│   │   │   └── admin/                        # Sidebar, DataTable, StatCard, UserDetailDrawer
 │   │   ├── stores/
 │   │   │   ├── chatStore.ts
 │   │   │   ├── personaStore.ts
 │   │   │   ├── live2dStore.ts
-│   │   │   └── userStore.ts              # 사용자 상태 (인증, 모델 선택, 사용량)
+│   │   │   ├── userStore.ts              # 사용자 상태 (인증, 모델 선택, 사용량)
+│   │   │   ├── toastStore.ts             # 토스트 알림
+│   │   │   ├── communityStore.ts         # 커뮤니티 데이터
+│   │   │   ├── creditStore.ts            # 크레딧 잔액
+│   │   │   ├── notificationStore.ts      # 알림 상태
+│   │   │   ├── characterPageStore.ts     # 캐릭터 페이지 상태
+│   │   │   ├── characterChatStore.ts     # 캐릭터 간 대화 상태
+│   │   │   ├── pendingPostStore.ts       # 승인 큐 상태
+│   │   │   └── worldEventStore.ts        # 세계관 이벤트 상태
 │   │   └── lib/
 │   │       ├── api.ts
 │   │       ├── sse.ts
@@ -373,11 +474,13 @@ Project_New/
 
 - **엔진:** PostgreSQL 16 + pgvector
 - **호스팅:** EC2 내부 Docker 컨테이너 (RDS 사용하지 않음)
-- **테이블:** 17개 (ERD 설계서 참조)
-  - 정책/사용자: users, consent_logs, spoiler_settings
-  - 근거 데이터: webtoons, episodes, episode_emotions, episode_embeddings, comment_stats, lorebook_entries, review_cache
-  - 대화/생성: personas, live2d_models, chat_sessions, chat_messages, user_memories
-  - LLM/과금: llm_models, token_usage_logs
+- **테이블:** 36개 (ERD 설계서 참조)
+  - 정책/사용자 (8): users, consent_logs, spoiler_settings, user_personas, notifications, persona_favorites, persona_relationships, usage_quotas
+  - 근거 데이터 (7): webtoons, episodes, episode_emotions, episode_embeddings, comment_stats, lorebook_entries, review_cache
+  - 대화/생성 (5): personas, live2d_models, chat_sessions, chat_messages, user_memories
+  - LLM/과금 (3): llm_models, token_usage_logs, credit_ledger
+  - 크레딧/구독 (4): subscription_plans, user_subscriptions, credit_costs, credit_ledger
+  - 커뮤니티/에이전트 (11): boards, board_posts, board_comments, board_reactions, persona_lounge_configs, agent_activity_logs, pending_posts, character_chat_sessions, character_chat_messages, world_events
 - **ORM:** SQLAlchemy 2.0 (async)
 - **마이그레이션:** Alembic
 - **벡터 인덱스:** HNSW (vector_cosine_ops), BGE-M3 1024차원
@@ -386,12 +489,40 @@ Project_New/
 ### 핵심 변경점 (이전 버전 대비)
 
 - `users` — `role` 추가, `adult_verified_at` 추가, `preferred_llm_model_id` 추가
-- `personas` — `created_by`, `type`, `visibility`, `moderation_status`, `age_rating`, `live2d_model_id`, `background_image_url` 추가
+- `personas` — `created_by`, `type`, `visibility`, `moderation_status`, `age_rating`, `live2d_model_id`, `background_image_url`, `category` 추가
 - `lorebook_entries` — `persona_id`, `created_by` 추가. webtoon_id NULLABLE로 변경
 - `live2d_models` — 신규. Live2D 모델 에셋 + 감정→모션 매핑
 - `llm_models` — 신규. LLM 모델 메타데이터 + 비용 단가
 - `token_usage_logs` — 신규. 요청별 토큰 사용량 + 비용 기록
 - `chat_sessions` — `llm_model_id` 추가 (세션에서 사용 중인 모델)
+- `users` — `password_hash`, `credit_balance`, `last_credit_grant_at`, `preferred_themes` 추가. role CHECK에 'superadmin' 추가
+- `personas` — `description`, `greeting_message`, `scenario`, `example_dialogues`, `tags`, `chat_count`, `like_count` 추가
+- `chat_sessions` — `title`, `is_pinned`, `user_persona_id` (FK → user_personas) 추가
+- `chat_messages` — `parent_id` (self FK, 분기용), `is_active`, `is_edited`, `edited_at` 추가
+- `user_personas` — 신규. 사용자 페르소나 (대화에서 사용자의 캐릭터)
+- `persona_favorites` — 신규. 페르소나 즐겨찾기
+- `persona_relationships` — 신규. 호감도/관계 단계 (stranger→soulmate)
+- `notifications` — 신규. 사용자 알림
+- `usage_quotas` — 신규. 사용자별 일/월 토큰 및 비용 한도
+- `subscription_plans` — 신규. 구독 플랜 (무료/프리미엄)
+- `user_subscriptions` — 신규. 사용자 구독 상태
+- `credit_ledger` — 신규. 크레딧 거래 내역
+- `credit_costs` — 신규. 모델/액션별 크레딧 비용 매핑
+- `boards` — 신규. 커뮤니티 게시판
+- `board_posts` — 신규. 게시글 (사용자/AI 작성)
+- `board_comments` — 신규. 댓글 (대댓글 지원)
+- `board_reactions` — 신규. 이모지 리액션
+- `persona_lounge_configs` — 신규. 라운지 페르소나 활동 설정
+- `agent_activity_logs` — 신규. AI 에이전트 활동 로그
+- `pending_posts` — 신규. AI 생성 게시물 수동 퍼블리싱 승인 큐
+- `character_chat_sessions` — 신규. 캐릭터 간 1:1 대화 세션 (요청/수락/턴제)
+- `character_chat_messages` — 신규. 캐릭터 간 대화 메시지
+- `world_events` — 신규. 관리자 정의 세계관 이벤트 (프롬프트 Layer 1.5)
+- `personas` — `follower_count`, `is_character_page_enabled` 추가 (캐릭터 페이지)
+- `persona_lounge_configs` — `auto_publish` 추가 (승인 큐 연동)
+- `board_posts` — `publish_status` 추가 (pending/published/rejected)
+- `notifications` — type CHECK에 `character_chat`, `world_event`, `follow` 추가
+- `credit_costs` — action에 `character_chat`, `character_page_post` 추가
 
 ## Coding Conventions
 
@@ -404,7 +535,7 @@ Project_New/
 - 포매터: ruff (format + lint)
 - 네이밍: snake_case (변수/함수), PascalCase (클래스)
 - import 순서: stdlib → third-party → local
-- RBAC: 관리자 API는 반드시 `Depends(require_admin)` 의존성 적용
+- RBAC: 관리자 API는 `Depends(require_admin)` 또는 `Depends(require_superadmin)` 의존성 적용. 파괴적 작업은 superadmin 필수
 - 연령 게이트: 18+ 콘텐츠 접근 API는 `Depends(require_adult_verified)` 적용
 
 ### TypeScript (Frontend)
@@ -717,12 +848,16 @@ cd frontend && npx vitest run # 컴포넌트 테스트
 
 ### 프롬프트 레이어 순서
 
-1. 불변 정책 (스포일러/연령/PII/저작권 안전) — 시스템 강제, 사용자 수정 불가
-2. 사용자 정의 페르소나 (캐릭터 성격/말투/시스템 프롬프트)
-3. 정책 상태 (스포 범위, 연령 상태)
-4. 사용자 정의 로어북 (페르소나별 + 웹툰별 세계관 설정)
-5. 세션 요약 + 최근 대화
-6. 근거 번들 (검색 결과 + 감정 신호)
+1. 불변 정책 (스포일러/연령/PII/저작권 안전) — 시스템 강제
+1.5. 세계관 이벤트 — [World Event] 블록 (관리자 정의, global/board/persona 타입)
+2. 사용자 정의 페르소나 (캐릭터 성격/말투/시스템 프롬프트 + scenario)
+2.3. 관계 상태 — [Relationship] 블록 (호감도/단계)
+2.5. 사용자 페르소나 — [User Character] 블록
+2.7. 예시 대화 — example_dialogues few-shot
+3. 사용자 정의 로어북 (페르소나별 + 웹툰별 세계관 설정)
+3.5. 사용자 기억 — [User Memories] 블록
+4. 세션 요약 + 최근 대화 (is_active=True 필터)
+5. 근거 번들 (검색 결과 + 감정 신호)
 
 ## Live2D Integration
 
@@ -772,6 +907,7 @@ cd frontend && npx vitest run # 컴포넌트 테스트
 | 배경 이미지 | 채팅 화면 배경 | personas.background_image_url |
 | 연령등급 | 'all' \| '15+' \| '18+' | personas.age_rating |
 | 공개 범위 | private / public / unlisted | personas.visibility |
+| 카테고리 | 8개 카테고리 중 선택 (선택사항) | personas.category |
 | 로어북 | 세계관/캐릭터 설정 항목들 | lorebook_entries |
 
 ### 페르소나 타입 & 연령등급
@@ -781,6 +917,7 @@ cd frontend && npx vitest run # 컴포넌트 테스트
 - **연령등급 'all':** 모든 사용자 사용 가능
 - **연령등급 '15+':** minor_safe 또는 adult_verified 사용 가능
 - **연령등급 '18+':** adult_verified만 생성/사용 가능
+- **카테고리:** romance, action, fantasy, daily, horror, comedy, drama, scifi — 회원가입 시 preferred_themes와 연결
 
 ## RunPod Integration
 
@@ -807,7 +944,15 @@ cd frontend && npx vitest run # 컴포넌트 테스트
 
 ## Reference Documents
 
-- `docs/AI 챗봇 플랫폼 기술 스택 및 비용 분석.md` — 대규모 플랫폼 기술/비용 전략
-- `docs/EC2_RunPod 프로토타입 구현 최적화 방안.md` — 소규모 하이브리드 아키텍처 상세
+- `docs/아키텍처 문서.md` — 시스템 아키텍처, 데이터 흐름, 보안, DB, 배포 구조 + 하이브리드 아키텍처 설계 근거
 - `docs/챗봇 설계 보고서.md` — 챗봇 상세 설계 (정책, 감정 파이프라인, 보안, 페르소나)
-- `docs/ERD 설계서.md` — 17개 테이블 DDL 및 설계 근거
+- `docs/ERD 설계서.md` — 36개 테이블 DDL 및 설계 근거
+- `docs/성능 최적화 전략.md` — 백엔드/프론트엔드/인프라 성능 최적화 전략 종합
+- `docs/설치 가이드.md` — 설치 및 실행 가이드 + 프로젝트 디렉토리 구조
+- `docs/개발자 가이드.md` — 개발 환경/패턴/레시피
+- `docs/테스트 시나리오.md` — 화면별 172개 테스트 시나리오
+- `docs/화면별 시나리오.md` — 29개 라우트별 API 매핑
+- `docs/캐릭터 라운지 및 크레딧 시스템 설계서.md` — 라운지/크레딧/구독 설계
+- `docs/프로젝트 현황 및 남은 작업.md` — 현재 진행 상태
+- `docs/한국어 RP 로컬 모델 비교 분석.md` — LLM 모델 선택/비교
+- `docs/RunPod Serverless LTX-Video-2 세팅 가이드.md` — 비디오 생성 모델 셋업

@@ -1,13 +1,12 @@
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import cast, func, select, Date
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm_model import LLMModel
 from app.models.token_usage_log import TokenUsageLog
-from app.models.user import User
 
 
 class UsageService:
@@ -48,8 +47,8 @@ class UsageService:
         return log
 
     async def get_user_summary(self, user_id: uuid.UUID) -> dict:
-        """사용자 사용량 요약 (일/월/총계)."""
-        now = datetime.now(timezone.utc)
+        """사용자 사용량 요약 (일/월/총계 + 모델별 분류)."""
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -62,13 +61,96 @@ class UsageService:
         # 총계
         total = (await self.db.execute(base)).one()
         # 오늘
-        daily = (await self.db.execute(
-            base.where(TokenUsageLog.created_at >= today_start)
-        )).one()
+        daily = (await self.db.execute(base.where(TokenUsageLog.created_at >= today_start))).one()
         # 이번 달
-        monthly = (await self.db.execute(
-            base.where(TokenUsageLog.created_at >= month_start)
-        )).one()
+        monthly = (await self.db.execute(base.where(TokenUsageLog.created_at >= month_start))).one()
+
+        # 모델별 사용량 — 전체/오늘/이번달 각각 조회
+        # 전체 기간
+        model_total_query = (
+            select(
+                LLMModel.id.label("model_id"),
+                LLMModel.display_name,
+                LLMModel.provider,
+                LLMModel.tier,
+                LLMModel.credit_per_1k_tokens,
+                LLMModel.input_cost_per_1m,
+                LLMModel.output_cost_per_1m,
+                func.sum(TokenUsageLog.input_tokens).label("input_tokens"),
+                func.sum(TokenUsageLog.output_tokens).label("output_tokens"),
+                func.sum(TokenUsageLog.cost).label("cost"),
+                func.count().label("request_count"),
+            )
+            .join(LLMModel, TokenUsageLog.llm_model_id == LLMModel.id)
+            .where(TokenUsageLog.user_id == user_id)
+            .group_by(
+                LLMModel.id,
+                LLMModel.display_name,
+                LLMModel.provider,
+                LLMModel.tier,
+                LLMModel.credit_per_1k_tokens,
+                LLMModel.input_cost_per_1m,
+                LLMModel.output_cost_per_1m,
+            )
+            .order_by(func.sum(TokenUsageLog.cost).desc())
+        )
+        model_total_rows = (await self.db.execute(model_total_query)).all()
+
+        # 오늘
+        model_daily_agg = (
+            select(
+                TokenUsageLog.llm_model_id.label("model_id"),
+                func.coalesce(func.sum(TokenUsageLog.input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(TokenUsageLog.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(TokenUsageLog.cost), 0).label("cost"),
+                func.count().label("request_count"),
+            )
+            .where(TokenUsageLog.user_id == user_id, TokenUsageLog.created_at >= today_start)
+            .group_by(TokenUsageLog.llm_model_id)
+        )
+        daily_map = {str(r.model_id): r for r in (await self.db.execute(model_daily_agg)).all()}
+
+        # 이번 달
+        model_monthly_agg = (
+            select(
+                TokenUsageLog.llm_model_id.label("model_id"),
+                func.coalesce(func.sum(TokenUsageLog.input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(TokenUsageLog.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(TokenUsageLog.cost), 0).label("cost"),
+                func.count().label("request_count"),
+            )
+            .where(TokenUsageLog.user_id == user_id, TokenUsageLog.created_at >= month_start)
+            .group_by(TokenUsageLog.llm_model_id)
+        )
+        monthly_map = {str(r.model_id): r for r in (await self.db.execute(model_monthly_agg)).all()}
+
+        by_model = []
+        for row in model_total_rows:
+            mid = str(row.model_id)
+            d = daily_map.get(mid)
+            m = monthly_map.get(mid)
+            by_model.append(
+                {
+                    "model_name": row.display_name,
+                    "provider": row.provider,
+                    "tier": row.tier,
+                    "credit_per_1k_tokens": int(row.credit_per_1k_tokens),
+                    "input_cost_per_1m": float(row.input_cost_per_1m),
+                    "output_cost_per_1m": float(row.output_cost_per_1m),
+                    "input_tokens": int(row.input_tokens),
+                    "output_tokens": int(row.output_tokens),
+                    "cost": float(row.cost),
+                    "request_count": int(row.request_count),
+                    "daily_input_tokens": int(d.input_tokens) if d else 0,
+                    "daily_output_tokens": int(d.output_tokens) if d else 0,
+                    "daily_cost": float(d.cost) if d else 0.0,
+                    "daily_request_count": int(d.request_count) if d else 0,
+                    "monthly_input_tokens": int(m.input_tokens) if m else 0,
+                    "monthly_output_tokens": int(m.output_tokens) if m else 0,
+                    "monthly_cost": float(m.cost) if m else 0.0,
+                    "monthly_request_count": int(m.request_count) if m else 0,
+                }
+            )
 
         return {
             "total_input_tokens": int(total.input_tokens),
@@ -80,13 +162,15 @@ class UsageService:
             "monthly_input_tokens": int(monthly.input_tokens),
             "monthly_output_tokens": int(monthly.output_tokens),
             "monthly_cost": float(monthly.cost),
+            "by_model": by_model,
         }
 
-    async def get_user_history(self, user_id: uuid.UUID, days: int = 30) -> list[dict]:
-        """일별 사용량 히스토리."""
-        since = datetime.now(timezone.utc) - timedelta(days=days)
+    async def get_user_history(self, user_id: uuid.UUID, days: int = 30) -> dict:
+        """일별 사용량 히스토리 + 모델별 일별 분류."""
+        since = datetime.now(UTC) - timedelta(days=days)
 
-        query = (
+        # 일별 합산
+        daily_query = (
             select(
                 cast(TokenUsageLog.created_at, Date).label("date"),
                 func.sum(TokenUsageLog.input_tokens).label("input_tokens"),
@@ -100,22 +184,54 @@ class UsageService:
             .group_by(cast(TokenUsageLog.created_at, Date))
             .order_by(cast(TokenUsageLog.created_at, Date).asc())
         )
-        result = await self.db.execute(query)
-        rows = result.all()
+        daily_result = await self.db.execute(daily_query)
+        daily_rows = daily_result.all()
 
-        return [
-            {
-                "date": str(row.date),
-                "input_tokens": int(row.input_tokens),
-                "output_tokens": int(row.output_tokens),
-                "cost": float(row.cost),
-            }
-            for row in rows
-        ]
+        # 모델별 일별 분류
+        model_daily_query = (
+            select(
+                cast(TokenUsageLog.created_at, Date).label("date"),
+                LLMModel.display_name.label("model_name"),
+                func.sum(TokenUsageLog.input_tokens).label("input_tokens"),
+                func.sum(TokenUsageLog.output_tokens).label("output_tokens"),
+                func.sum(TokenUsageLog.cost).label("cost"),
+            )
+            .join(LLMModel, TokenUsageLog.llm_model_id == LLMModel.id)
+            .where(
+                TokenUsageLog.user_id == user_id,
+                TokenUsageLog.created_at >= since,
+            )
+            .group_by(cast(TokenUsageLog.created_at, Date), LLMModel.display_name)
+            .order_by(cast(TokenUsageLog.created_at, Date).asc())
+        )
+        model_daily_result = await self.db.execute(model_daily_query)
+        model_daily_rows = model_daily_result.all()
+
+        return {
+            "daily": [
+                {
+                    "date": str(row.date),
+                    "input_tokens": int(row.input_tokens),
+                    "output_tokens": int(row.output_tokens),
+                    "cost": float(row.cost),
+                }
+                for row in daily_rows
+            ],
+            "by_model_daily": [
+                {
+                    "date": str(row.date),
+                    "model_name": row.model_name,
+                    "input_tokens": int(row.input_tokens),
+                    "output_tokens": int(row.output_tokens),
+                    "cost": float(row.cost),
+                }
+                for row in model_daily_rows
+            ],
+        }
 
     async def get_admin_summary(self) -> dict:
         """전체 사용량 통계 (관리자용)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -129,13 +245,9 @@ class UsageService:
         # 총계
         total = (await self.db.execute(base)).one()
         # 오늘
-        daily = (await self.db.execute(
-            base.where(TokenUsageLog.created_at >= today_start)
-        )).one()
+        daily = (await self.db.execute(base.where(TokenUsageLog.created_at >= today_start))).one()
         # 이번 달
-        monthly = (await self.db.execute(
-            base.where(TokenUsageLog.created_at >= month_start)
-        )).one()
+        monthly = (await self.db.execute(base.where(TokenUsageLog.created_at >= month_start))).one()
 
         # 모델별 사용량
         model_query = (

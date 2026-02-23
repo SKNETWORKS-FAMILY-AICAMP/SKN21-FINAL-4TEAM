@@ -155,8 +155,8 @@ async def test_admin_get_age_rating_policy(client: AsyncClient, test_admin):
 
 
 @pytest.mark.asyncio
-async def test_admin_update_age_rating_policy(client: AsyncClient, test_admin):
-    headers = auth_header(test_admin)
+async def test_admin_update_age_rating_policy(client: AsyncClient, test_superadmin):
+    headers = auth_header(test_superadmin)
     response = await client.put("/api/admin/policy/age-rating", json={
         "ratings": ["all", "15+", "18+"],
         "default": "all",

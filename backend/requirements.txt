@@ -16,16 +16,24 @@ redis[hiredis]==5.2.1
 # HTTP Client
 httpx==0.28.1
 
+# Utilities
+python-dateutil==2.9.0.post0
+python-multipart==0.0.22
+
+# Encryption
+cryptography>=44.0.0
+
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt<5.0.0
 
 # NLP Pipeline
 kiwipiepy==0.20.3
 presidio-analyzer==2.2.357
 presidio-anonymizer==2.2.357
 
-# ML (local dev)
+# ML (CPU/GPU — 로컬 개발 시 CUDA 버전에 맞게 torch 재설치 필요)
 torch>=2.7.0
 transformers>=4.48.0
 
@@ -33,10 +41,4 @@ transformers>=4.48.0
 langfuse==2.58.0
 sentry-sdk[fastapi]==2.19.2
 prometheus-fastapi-instrumentator==7.0.2
-
-# Dev/Test
-pytest==8.3.4
-pytest-asyncio==0.25.0
-pytest-cov==6.0.0
-httpx==0.28.1
-ruff==0.8.6
+prometheus-client>=0.21.0

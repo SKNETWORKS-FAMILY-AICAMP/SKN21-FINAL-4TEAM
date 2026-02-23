@@ -1,12 +1,15 @@
+/** 연령등급 배지 (전체/15+/18+). locked=true 시 잠금 아이콘 표시. */
+import { memo } from 'react';
+
 type Props = {
   rating: 'all' | '15+' | '18+';
   locked?: boolean;
 };
 
-const BADGE_STYLES: Record<string, { color: string; bg: string }> = {
-  all: { color: '#166534', bg: '#dcfce7' },
-  '15+': { color: '#854d0e', bg: '#fef9c3' },
-  '18+': { color: '#991b1b', bg: '#fee2e2' },
+const BADGE_CLASSES: Record<string, string> = {
+  all: 'text-green-400 bg-green-900/30',
+  '15+': 'text-yellow-400 bg-yellow-900/30',
+  '18+': 'text-red-400 bg-red-900/30',
 };
 
 const LABELS: Record<string, string> = {
@@ -15,21 +18,12 @@ const LABELS: Record<string, string> = {
   '18+': '18+',
 };
 
-export function AgeRatingBadge({ rating, locked = false }: Props) {
-  const style = BADGE_STYLES[rating];
+export const AgeRatingBadge = memo(function AgeRatingBadge({ rating, locked = false }: Props) {
   return (
     <span
-      style={{
-        color: style.color,
-        backgroundColor: style.bg,
-        padding: '2px 8px',
-        borderRadius: '4px',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        opacity: locked ? 0.5 : 1,
-      }}
+      className={`${BADGE_CLASSES[rating]} px-2 py-0.5 rounded text-xs font-bold ${locked ? 'opacity-50' : 'opacity-100'}`}
     >
       [{LABELS[rating]}] {locked && '🔒'}
     </span>
   );
-}
+});

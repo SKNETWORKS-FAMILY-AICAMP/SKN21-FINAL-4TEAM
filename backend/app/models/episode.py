@@ -11,8 +11,12 @@ from app.core.database import Base
 class Episode(Base):
     __tablename__ = "episodes"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    webtoon_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("webtoons.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    webtoon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("webtoons.id", ondelete="CASCADE"), nullable=False
+    )
     episode_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str | None] = mapped_column(String(300))
     summary: Mapped[str | None] = mapped_column(Text)
@@ -25,6 +29,4 @@ class Episode(Base):
     embeddings = relationship("EpisodeEmbedding", back_populates="episode", cascade="all, delete-orphan")
     comment_stats = relationship("CommentStat", back_populates="episode", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint("webtoon_id", "episode_number", name="uq_episode_webtoon_number"),
-    )
+    __table_args__ = (UniqueConstraint("webtoon_id", "episode_number", name="uq_episode_webtoon_number"),)

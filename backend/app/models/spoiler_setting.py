@@ -12,7 +12,9 @@ class SpoilerSetting(Base):
     __tablename__ = "spoiler_settings"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     webtoon_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("webtoons.id"), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     max_episode: Mapped[int | None] = mapped_column(Integer)

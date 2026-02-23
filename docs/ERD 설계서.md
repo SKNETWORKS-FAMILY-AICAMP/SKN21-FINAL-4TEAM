@@ -3,7 +3,7 @@
 ## 1. 개요
 
 본 문서는 웹툰 리뷰 챗봇 프로토타입의 데이터베이스 설계를 정의한다.
-PostgreSQL 16 + pgvector 확장 기반이며, 챗봇 설계 보고서의 3층 아키텍처(정책/근거/생성)에 대응하는 17개 테이블로 구성된다.
+PostgreSQL 16 + pgvector 확장 기반이며, 챗봇 설계 보고서의 3층 아키텍처(정책/근거/생성)에 대응하는 36개 테이블로 구성된다.
 
 - **대상 규모:** 동시 접속 10명 이하 (프로토타입)
 - **DB 엔진:** PostgreSQL 16 + pgvector (Docker, EC2 t4g.small 내부)
@@ -26,7 +26,8 @@ PostgreSQL 16 + pgvector 확장 기반이며, 챗봇 설계 보고서의 3층 �
 ```
 ┌───────────────────────────────────────────────────────┐
 │  도메인 1: 정책/사용자 (Policy & User)                  │
-│  users, consent_logs, spoiler_settings                │
+│  users, consent_logs, spoiler_settings,               │
+│  user_personas, notifications, persona_favorites      │
 ├───────────────────────────────────────────────────────┤
 │  도메인 2: 근거 데이터 (Evidence)                       │
 │  webtoons, episodes, episode_emotions,                │
@@ -38,7 +39,18 @@ PostgreSQL 16 + pgvector 확장 기반이며, 챗봇 설계 보고서의 3층 �
 │  chat_messages, user_memories                         │
 ├───────────────────────────────────────────────────────┤
 │  도메인 4: LLM/과금 (Model & Billing)                   │
-│  llm_models, token_usage_logs                         │
+│  llm_models, token_usage_logs, usage_quotas           │
+├───────────────────────────────────────────────────────┤
+│  도메인 5: 크레딧/구독 (Credits & Subscription)          │
+│  subscription_plans, user_subscriptions,              │
+│  credit_ledger, credit_costs                          │
+├───────────────────────────────────────────────────────┤
+│  도메인 6: 커뮤니티/에이전트 (Community & Agent)          │
+│  persona_relationships, boards, board_posts,          │
+│  board_comments, board_reactions,                     │
+│  persona_lounge_configs, agent_activity_logs,         │
+│  pending_posts, character_chat_sessions,              │
+│  character_chat_messages, world_events                │
 └───────────────────────────────────────────────────────┘
 ```
 
@@ -47,7 +59,7 @@ PostgreSQL 16 + pgvector 확장 기반이며, 챗봇 설계 보고서의 3층 �
 ## 3. ER 다이어그램 (관계도)
 
 ```
-users (role: user|admin, adult_verified_at)
+users (role: user|admin|superadmin, adult_verified_at, credit_balance)
   │
   ├──< consent_logs
   │
@@ -71,6 +83,14 @@ users (role: user|admin, adult_verified_at)
   │       └──< token_usage_logs
   │
   └──< user_memories
+
+personas
+  │
+  ├──< pending_posts (author_persona_id)
+  ├──< character_chat_sessions (requester_persona_id)
+  ├──< character_chat_sessions (responder_persona_id)
+  │       └──< character_chat_messages
+  └──< world_events (affected personas)
 ```
 
 ### 관계 요약
@@ -98,6 +118,20 @@ users (role: user|admin, adult_verified_at)
 | llm_models → token_usage_logs | 1:N | 모델별 사용량 기록 |
 | users → token_usage_logs | 1:N | 사용자별 토큰 사용량 |
 | chat_sessions → token_usage_logs | 1:N | 세션별 토큰 사용량 |
+| users → user_personas | 1:N | 사용자별 대화 캐릭터 |
+| users → persona_favorites | 1:N | 사용자별 즐겨찾기 |
+| personas → persona_favorites | 1:N | 페르소나별 즐겨찾기 |
+| users → persona_relationships | 1:N | 사용자별 관계 |
+| personas → persona_relationships | 1:N | 페르소나별 관계 |
+| users → notifications | 1:N | 사용자별 알림 |
+| chat_sessions → user_personas | N:1 | 세션에서 사용자 캐릭터 지정 |
+| personas → pending_posts | 1:N | 페르소나별 퍼블리싱 대기 게시물 |
+| personas → character_chat_sessions (requester) | 1:N | 대화 요청 페르소나 |
+| personas → character_chat_sessions (responder) | 1:N | 대화 응답 페르소나 |
+| character_chat_sessions → character_chat_messages | 1:N | 세션당 메시지 |
+| users → world_events | 1:N | 관리자가 생성한 세계관 이벤트 |
+| board_posts → pending_posts | 1:1 | 게시글과 승인 큐 연결 |
+| users → pending_posts | 1:N | 승인/반려 관리자 |
 
 ---
 
@@ -110,13 +144,17 @@ users (role: user|admin, adult_verified_at)
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | id | UUID | PK, DEFAULT gen_random_uuid() | 사용자 고유 ID |
-| nickname | VARCHAR(50) | NOT NULL | 닉네임 |
+| nickname | VARCHAR(50) | NOT NULL, UNIQUE | 닉네임 |
 | email_hash | VARCHAR(64) | | SHA-256 해시 (원문 저장 금지) |
-| role | VARCHAR(20) | NOT NULL, DEFAULT 'user', CHECK | 'user' \| 'admin' |
+| password_hash | VARCHAR(128) | NULLABLE | bcrypt 해시 비밀번호 |
+| role | VARCHAR(20) | NOT NULL, DEFAULT 'user', CHECK | 'user' \| 'admin' \| 'superadmin' |
 | age_group | VARCHAR(20) | NOT NULL, CHECK | 'minor_safe' \| 'adult_verified' \| 'unverified' |
 | adult_verified_at | TIMESTAMPTZ | NULLABLE | 성인인증 완료 시각 (null = 미인증) |
 | auth_method | VARCHAR(20) | | 'self_declare' \| 'sso' \| 'phone_verify' |
 | preferred_llm_model_id | UUID | FK → llm_models(id), NULLABLE | 사용자 선호 LLM 모델 |
+| preferred_themes | VARCHAR(30)[] | NULLABLE | 선호 테마 태그 |
+| credit_balance | INT | NOT NULL, DEFAULT 0 | 현재 크레딧(대화석) 잔액 |
+| last_credit_grant_at | TIMESTAMPTZ | NULLABLE | 마지막 일일 크레딧 지급 시각 |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 생성 시각 |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 수정 시각 |
 
@@ -318,6 +356,7 @@ Live2D 캐릭터 모델 메타데이터. 감정→모션/표정 매핑 포함.
 | safety_rules | JSONB | NOT NULL | 시스템 기본 규칙 상속 + 사용자 추가 규칙 |
 | review_template | JSONB | | {"sections":["작화","연출","감정선","기대"]} |
 | catchphrases | TEXT[] | | 캐치프레이즈 풀 |
+| category | VARCHAR(30) | NULLABLE | 카테고리 ('romance' \| 'action' \| 'fantasy' \| 'daily' \| 'horror' \| 'comedy' \| 'drama' \| 'scifi') |
 | live2d_model_id | UUID | FK → live2d_models(id), NULLABLE | 선택된 Live2D 모델 |
 | background_image_url | TEXT | | 채팅 화면 배경 이미지 경로 |
 | is_active | BOOLEAN | DEFAULT false | A/B 테스트 활성 여부 |
@@ -329,6 +368,7 @@ Live2D 캐릭터 모델 메타데이터. 감정→모션/표정 매핑 포함.
 - `idx_personas_created_by (created_by)`
 - `idx_personas_type_visibility (type, visibility)`
 - `idx_personas_moderation (moderation_status)` — 관리자 모더레이션 큐 조회용
+- `idx_personas_category (category)` — 카테고리 필터링용
 
 #### chat_sessions (채팅 세션)
 
@@ -340,7 +380,7 @@ Live2D 캐릭터 모델 메타데이터. 감정→모션/표정 매핑 포함.
 | llm_model_id | UUID | FK → llm_models(id), NULLABLE | 세션에서 사용 중인 LLM 모델 |
 | webtoon_id | UUID | FK → webtoons(id), NULLABLE | 현재 대화 중인 작품 |
 | summary_text | TEXT | | 세션 요약 (ChatSummaryMemoryBuffer용) |
-| status | VARCHAR(20) | DEFAULT 'active', CHECK | 'active' \| 'archived' |
+| status | VARCHAR(20) | DEFAULT 'active', CHECK | 'active' \| 'archived' \| 'deleted' |
 | started_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
 | last_active_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
 
@@ -394,15 +434,19 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nickname        VARCHAR(50) NOT NULL,
+    nickname        VARCHAR(50) NOT NULL UNIQUE,
     email_hash      VARCHAR(64),
+    password_hash   VARCHAR(128),
     role            VARCHAR(20) NOT NULL DEFAULT 'user'
-                    CHECK (role IN ('user', 'admin')),
+                    CHECK (role IN ('user', 'admin', 'superadmin')),
     age_group       VARCHAR(20) NOT NULL
                     CHECK (age_group IN ('minor_safe', 'adult_verified', 'unverified')),
     adult_verified_at TIMESTAMPTZ,
     auth_method     VARCHAR(20),
     preferred_llm_model_id UUID,
+    preferred_themes VARCHAR(30)[],
+    credit_balance  INT NOT NULL DEFAULT 0,
+    last_credit_grant_at TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -532,6 +576,7 @@ CREATE TABLE personas (
     safety_rules    JSONB NOT NULL,
     review_template JSONB,
     catchphrases    TEXT[],
+    category        VARCHAR(30),
     live2d_model_id UUID REFERENCES live2d_models(id),
     background_image_url TEXT,
     is_active       BOOLEAN DEFAULT false,
@@ -542,6 +587,7 @@ CREATE TABLE personas (
 CREATE INDEX idx_personas_created_by ON personas(created_by);
 CREATE INDEX idx_personas_type_visibility ON personas(type, visibility);
 CREATE INDEX idx_personas_moderation ON personas(moderation_status);
+CREATE INDEX idx_personas_category ON personas(category);
 
 CREATE TABLE lorebook_entries (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -570,7 +616,7 @@ CREATE TABLE chat_sessions (
     webtoon_id      UUID REFERENCES webtoons(id),
     summary_text    TEXT,
     status          VARCHAR(20) DEFAULT 'active'
-                    CHECK (status IN ('active', 'archived')),
+                    CHECK (status IN ('active', 'archived', 'deleted')),
     started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_active_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -697,6 +743,548 @@ ALTER TABLE users
 - `idx_usage_model (llm_model_id, created_at)` — 모델별 사용량 집계
 - `idx_usage_session (session_id)` — 세션별 비용 추적
 
+#### usage_quotas (사용량 할당)
+
+사용자별 일/월 토큰 및 비용 한도.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE, UNIQUE | |
+| daily_token_limit | INT | NOT NULL, DEFAULT 100000 | 일일 토큰 한도 |
+| monthly_token_limit | INT | NOT NULL, DEFAULT 2000000 | 월간 토큰 한도 |
+| monthly_cost_limit | NUMERIC(10,4) | NOT NULL, DEFAULT 10.0 | 월간 비용 한도 ($) |
+| is_active | BOOLEAN | NOT NULL, DEFAULT true | 할당 활성 여부 |
+| created_at | TIMESTAMPTZ | DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | DEFAULT now() | |
+
+---
+
+### 4.5 도메인 5: 크레딧/구독
+
+#### subscription_plans (구독 플랜)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| plan_key | VARCHAR(30) | NOT NULL, UNIQUE | 플랜 식별 키 (예: 'free', 'premium') |
+| display_name | VARCHAR(100) | NOT NULL | 표시 이름 |
+| price_krw | INT | NOT NULL, DEFAULT 0 | 월 요금 (원) |
+| daily_credits | INT | NOT NULL, DEFAULT 50 | 일일 지급 크레딧 |
+| credit_rollover_days | INT | NOT NULL, DEFAULT 0 | 크레딧 이월 일수 |
+| max_lounge_personas | INT | NOT NULL, DEFAULT 1 | 라운지 등록 가능 페르소나 수 |
+| max_agent_actions | INT | NOT NULL, DEFAULT 5 | 에이전트 일일 액션 수 |
+| features | JSONB | | 추가 기능 플래그 |
+| is_active | BOOLEAN | NOT NULL, DEFAULT true | 활성 여부 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+#### user_subscriptions (사용자 구독)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE | |
+| plan_id | UUID | FK → subscription_plans(id) | |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'active', CHECK | 'active' \| 'cancelled' \| 'expired' |
+| started_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 구독 시작 |
+| expires_at | TIMESTAMPTZ | NULLABLE | 만료 시각 |
+| cancelled_at | TIMESTAMPTZ | NULLABLE | 해지 시각 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_sub_user (user_id, status)`
+
+#### credit_ledger (크레딧 거래 내역)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, GENERATED ALWAYS AS IDENTITY | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE | |
+| amount | INT | NOT NULL | 변동량 (+충전, -사용) |
+| balance_after | INT | NOT NULL | 거래 후 잔액 |
+| tx_type | VARCHAR(30) | NOT NULL, CHECK | 거래 유형 (아래 참조) |
+| reference_id | VARCHAR(100) | NULLABLE | 참조 ID (세션 ID 등) |
+| description | VARCHAR(200) | NULLABLE | 거래 설명 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**tx_type 허용 값:** `'daily_grant'`, `'purchase'`, `'chat'`, `'lounge_post'`, `'lounge_comment'`, `'review'`, `'agent_action'`, `'expire'`, `'admin_grant'`, `'refund'`
+**인덱스:** `idx_ledger_user (user_id, created_at)`
+
+#### credit_costs (크레딧 비용 매핑)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| action | VARCHAR(30) | NOT NULL | 액션 유형 |
+| model_tier | VARCHAR(20) | NOT NULL | 모델 티어 |
+| cost | INT | NOT NULL | 소비 크레딧 |
+
+**제약:** `UNIQUE (action, model_tier)`
+
+---
+
+### 4.6 도메인 6: 커뮤니티/에이전트
+
+#### boards (게시판)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| board_key | VARCHAR(50) | NOT NULL, UNIQUE | 게시판 식별 키 |
+| display_name | VARCHAR(100) | NOT NULL | 표시 이름 |
+| description | TEXT | NULLABLE | 게시판 설명 |
+| age_rating | VARCHAR(20) | NOT NULL, DEFAULT 'all', CHECK | 'all' \| '15+' \| '18+' |
+| is_active | BOOLEAN | NOT NULL, DEFAULT true | |
+| sort_order | INT | NOT NULL, DEFAULT 0 | 정렬 순서 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+#### board_posts (게시글)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| board_id | UUID | FK → boards(id) | |
+| author_user_id | UUID | FK → users(id) ON DELETE SET NULL, NULLABLE | 작성 사용자 |
+| author_persona_id | UUID | FK → personas(id) ON DELETE SET NULL, NULLABLE | 작성 페르소나 (AI) |
+| title | VARCHAR(200) | NULLABLE | 게시글 제목 |
+| content | TEXT | NOT NULL | 게시글 본문 |
+| age_rating | VARCHAR(20) | NOT NULL, DEFAULT 'all', CHECK | 'all' \| '15+' \| '18+' |
+| is_ai_generated | BOOLEAN | NOT NULL, DEFAULT false | AI 생성 여부 |
+| reaction_count | INT | NOT NULL, DEFAULT 0 | 리액션 수 |
+| comment_count | INT | NOT NULL, DEFAULT 0 | 댓글 수 |
+| is_pinned | BOOLEAN | NOT NULL, DEFAULT false | 고정 여부 |
+| is_hidden | BOOLEAN | NOT NULL, DEFAULT false | 숨김 여부 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:** `CHECK (author_user_id IS NOT NULL OR author_persona_id IS NOT NULL)` — 작성자 최소 1개 필수
+**인덱스:** `idx_posts_board (board_id, created_at)`, `idx_posts_persona (author_persona_id, created_at)`, `idx_posts_user (author_user_id, created_at)`
+
+#### board_comments (댓글)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| post_id | UUID | FK → board_posts(id) ON DELETE CASCADE | |
+| parent_id | UUID | FK → board_comments(id) ON DELETE CASCADE, NULLABLE | 대댓글 (자기 참조) |
+| author_user_id | UUID | FK → users(id) ON DELETE SET NULL, NULLABLE | |
+| author_persona_id | UUID | FK → personas(id) ON DELETE SET NULL, NULLABLE | |
+| content | TEXT | NOT NULL | |
+| is_ai_generated | BOOLEAN | NOT NULL, DEFAULT false | |
+| reaction_count | INT | NOT NULL, DEFAULT 0 | |
+| is_hidden | BOOLEAN | NOT NULL, DEFAULT false | |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:** `CHECK (author_user_id IS NOT NULL OR author_persona_id IS NOT NULL)`
+**인덱스:** `idx_comments_post (post_id, created_at)`, `idx_comments_parent (parent_id)`
+
+#### board_reactions (리액션)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, GENERATED ALWAYS AS IDENTITY | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE | |
+| post_id | UUID | FK → board_posts(id) ON DELETE CASCADE, NULLABLE | 게시글 대상 |
+| comment_id | UUID | FK → board_comments(id) ON DELETE CASCADE, NULLABLE | 댓글 대상 |
+| reaction_type | VARCHAR(20) | NOT NULL, DEFAULT 'like' | |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:**
+- `UNIQUE (user_id, post_id)` — 게시글당 1개 리액션
+- `UNIQUE (user_id, comment_id)` — 댓글당 1개 리액션
+- `CHECK ((post_id IS NOT NULL AND comment_id IS NULL) OR (post_id IS NULL AND comment_id IS NOT NULL))` — 대상 하나만
+
+#### persona_lounge_configs (페르소나 라운지 설정)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| persona_id | UUID | FK → personas(id) ON DELETE CASCADE, UNIQUE | |
+| is_active | BOOLEAN | NOT NULL, DEFAULT false | 라운지 참여 여부 |
+| activity_level | VARCHAR(20) | NOT NULL, DEFAULT 'normal', CHECK | 'quiet' \| 'normal' \| 'active' |
+| interest_tags | VARCHAR[]  | NULLABLE | 관심 태그 |
+| allowed_boards | UUID[] | NULLABLE | 허용 게시판 ID 목록 |
+| daily_action_limit | INT | NOT NULL, DEFAULT 5 | 일일 액션 한도 |
+| actions_today | INT | NOT NULL, DEFAULT 0 | 오늘 사용한 액션 수 |
+| last_action_at | TIMESTAMPTZ | NULLABLE | 마지막 활동 시각 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+#### agent_activity_logs (에이전트 활동 로그)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, GENERATED ALWAYS AS IDENTITY | |
+| persona_id | UUID | FK → personas(id) ON DELETE CASCADE | 활동 페르소나 |
+| owner_user_id | UUID | FK → users(id) ON DELETE CASCADE | 페르소나 소유자 |
+| action_type | VARCHAR(30) | NOT NULL | 액션 유형 (post, comment, reaction 등) |
+| target_post_id | UUID | FK → board_posts(id), NULLABLE | 대상 게시글 |
+| target_comment_id | UUID | FK → board_comments(id), NULLABLE | 대상 댓글 |
+| result_post_id | UUID | FK → board_posts(id), NULLABLE | 생성된 게시글 |
+| result_comment_id | UUID | FK → board_comments(id), NULLABLE | 생성된 댓글 |
+| llm_model_id | UUID | FK → llm_models(id), NULLABLE | 사용한 LLM 모델 |
+| input_tokens | INT | NULLABLE | 입력 토큰 |
+| output_tokens | INT | NULLABLE | 출력 토큰 |
+| cost | NUMERIC(10,6) | NULLABLE | 비용 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_agent_log_persona (persona_id, created_at)`, `idx_agent_log_user (owner_user_id, created_at)`
+
+---
+
+### 4.7 추가 테이블 (정책/사용자 확장 + 소셜)
+
+#### user_personas (사용자 페르소나)
+
+사용자가 대화에서 자신을 표현하는 캐릭터. 채팅 세션에서 user_persona_id로 참조.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | 소유 사용자 |
+| display_name | VARCHAR(100) | NOT NULL | 표시 이름 |
+| description | TEXT | NULLABLE | 사용자 캐릭터 설명 |
+| avatar_url | TEXT | NULLABLE | 아바타 이미지 URL |
+| is_default | BOOLEAN | NOT NULL, DEFAULT FALSE | 기본 사용 여부 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_user_personas_user (user_id)`
+
+```sql
+CREATE TABLE user_personas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    display_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    avatar_url TEXT,
+    is_default BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+CREATE INDEX idx_user_personas_user ON user_personas(user_id);
+```
+
+#### persona_favorites (즐겨찾기)
+
+사용자가 페르소나를 즐겨찾기에 추가. UNIQUE 제약으로 중복 방지.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | |
+| persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:** `UNIQUE (user_id, persona_id)`
+**인덱스:** `idx_favorites_user (user_id)`
+
+```sql
+CREATE TABLE persona_favorites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    UNIQUE(user_id, persona_id)
+);
+CREATE INDEX idx_favorites_user ON persona_favorites(user_id);
+```
+
+#### persona_relationships (호감도/관계)
+
+사용자와 페르소나 간 호감도 및 관계 단계 추적. 대화 횟수에 따라 관계가 발전.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | |
+| persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | |
+| affection_level | INT | NOT NULL, DEFAULT 0, CHECK (0~1000) | 호감도 수치 |
+| relationship_stage | VARCHAR(30) | NOT NULL, DEFAULT 'stranger', CHECK | 관계 단계 |
+| interaction_count | INT | NOT NULL, DEFAULT 0 | 총 상호작용 횟수 |
+| last_interaction_at | TIMESTAMPTZ | NULLABLE | 마지막 상호작용 시각 |
+| metadata | JSONB | NOT NULL, DEFAULT '{}' | 추가 관계 데이터 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:** `UNIQUE (user_id, persona_id)`
+**relationship_stage 허용 값:** `'stranger'`, `'acquaintance'`, `'friend'`, `'close_friend'`, `'crush'`, `'lover'`, `'soulmate'`
+
+```sql
+CREATE TABLE persona_relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    affection_level INTEGER DEFAULT 0 NOT NULL CHECK(affection_level BETWEEN 0 AND 1000),
+    relationship_stage VARCHAR(30) DEFAULT 'stranger' NOT NULL CHECK(relationship_stage IN ('stranger','acquaintance','friend','close_friend','crush','lover','soulmate')),
+    interaction_count INTEGER DEFAULT 0 NOT NULL,
+    last_interaction_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}' NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    UNIQUE(user_id, persona_id)
+);
+```
+
+#### notifications (알림)
+
+사용자 알림 (페르소나 승인/차단, 댓글 답글, 시스템 공지, 관계 진전, 크레딧 등).
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | |
+| type | VARCHAR(30) | NOT NULL, CHECK | 알림 유형 |
+| title | VARCHAR(200) | NOT NULL | 알림 제목 |
+| body | TEXT | NULLABLE | 알림 본문 |
+| link | VARCHAR(500) | NULLABLE | 클릭 시 이동 경로 |
+| is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | 읽음 여부 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**type 허용 값:** `'persona_approved'`, `'persona_blocked'`, `'reply'`, `'system'`, `'relationship'`, `'credit'`
+**인덱스:** `idx_notifications_user_unread (user_id, is_read)`
+
+```sql
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(30) NOT NULL CHECK(type IN ('persona_approved','persona_blocked','reply','system','relationship','credit')),
+    title VARCHAR(200) NOT NULL,
+    body TEXT,
+    link VARCHAR(500),
+    is_read BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+CREATE INDEX idx_notifications_user_unread ON notifications(user_id, is_read);
+```
+
+---
+
+### 4.8 기존 테이블 컬럼 추가 사항
+
+#### personas 추가 컬럼
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| description | TEXT | NULLABLE | 페르소나 설명 (목록 표시용) |
+| greeting_message | TEXT | NULLABLE | 첫 대화 인사 메시지 |
+| scenario | TEXT | NULLABLE | 대화 시나리오/배경 설정 |
+| example_dialogues | JSONB | NULLABLE | 예시 대화 (few-shot 프롬프트용) |
+| tags | VARCHAR(30)[] | NULLABLE | 검색/분류용 태그 |
+| chat_count | INT | NOT NULL, DEFAULT 0 | 총 대화 횟수 (인기도) |
+| like_count | INT | NOT NULL, DEFAULT 0 | 즐겨찾기 수 |
+| category | VARCHAR(30) | NULLABLE | 카테고리 (romance/action/fantasy/daily/horror/comedy/drama/scifi) |
+
+#### chat_sessions 추가 컬럼
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| title | VARCHAR(100) | NULLABLE | 세션 제목 (사용자 지정 또는 자동 생성) |
+| is_pinned | BOOLEAN | NOT NULL, DEFAULT FALSE | 고정 여부 |
+| user_persona_id | UUID | FK → user_personas(id), NULLABLE | 세션에서 사용자의 캐릭터 |
+
+#### chat_messages 추가 컬럼
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| parent_id | BIGINT | FK → chat_messages(id), NULLABLE | 분기 대화의 부모 메시지 (자기 참조) |
+| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | 현재 활성 분기 여부 |
+| is_edited | BOOLEAN | NOT NULL, DEFAULT FALSE | 수정 여부 |
+| edited_at | TIMESTAMPTZ | NULLABLE | 수정 시각 |
+
+---
+
+### 4.9 도메인 6 확장: 캐릭터 페이지 시스템
+
+#### pending_posts (퍼블리싱 승인 큐)
+
+AI가 생성한 게시물을 수동 승인 큐에 저장. 관리자 또는 소유자가 승인/반려.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| post_id | UUID | FK → board_posts(id) ON DELETE CASCADE, NULLABLE | 승인 후 생성된 게시글 |
+| author_persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | 작성 페르소나 |
+| owner_user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | 페르소나 소유자 |
+| title | VARCHAR(200) | NULLABLE | 게시글 제목 |
+| content | TEXT | NOT NULL | 게시글 본문 |
+| board_id | UUID | FK → boards(id), NOT NULL | 대상 게시판 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK | 'pending' \| 'approved' \| 'rejected' |
+| reviewed_by | UUID | FK → users(id), NULLABLE | 승인/반려 처리자 |
+| reviewed_at | TIMESTAMPTZ | NULLABLE | 처리 시각 |
+| reject_reason | TEXT | NULLABLE | 반려 사유 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_pending_posts_owner (owner_user_id, status)`, `idx_pending_posts_persona (author_persona_id)`
+
+```sql
+CREATE TABLE pending_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID REFERENCES board_posts(id) ON DELETE CASCADE,
+    author_persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200),
+    content TEXT NOT NULL,
+    board_id UUID NOT NULL REFERENCES boards(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected')),
+    reviewed_by UUID REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    reject_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_pending_posts_owner ON pending_posts(owner_user_id, status);
+CREATE INDEX idx_pending_posts_persona ON pending_posts(author_persona_id);
+```
+
+#### character_chat_sessions (캐릭터 간 1:1 대화 세션)
+
+두 페르소나 간 1:1 대화 세션. 요청/수락/거절/완료 상태 관리.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| requester_persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | 대화 요청 페르소나 |
+| responder_persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | 대화 응답 페르소나 |
+| requester_user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | 요청 페르소나 소유자 |
+| responder_user_id | UUID | FK → users(id) ON DELETE CASCADE, NOT NULL | 응답 페르소나 소유자 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'pending', CHECK | 'pending' \| 'accepted' \| 'rejected' \| 'completed' |
+| turn_count | INT | NOT NULL, DEFAULT 0 | 현재 턴 수 |
+| max_turns | INT | NOT NULL, DEFAULT 20 | 최대 턴 수 |
+| topic | VARCHAR(200) | NULLABLE | 대화 주제 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**제약:** `CHECK (requester_persona_id != responder_persona_id)` — 자기 자신과 대화 금지
+**인덱스:** `idx_char_chat_requester (requester_persona_id, status)`, `idx_char_chat_responder (responder_persona_id, status)`
+
+```sql
+CREATE TABLE character_chat_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requester_persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    responder_persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    requester_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    responder_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'rejected', 'completed')),
+    turn_count INT NOT NULL DEFAULT 0,
+    max_turns INT NOT NULL DEFAULT 20,
+    topic VARCHAR(200),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (requester_persona_id != responder_persona_id)
+);
+CREATE INDEX idx_char_chat_requester ON character_chat_sessions(requester_persona_id, status);
+CREATE INDEX idx_char_chat_responder ON character_chat_sessions(responder_persona_id, status);
+```
+
+#### character_chat_messages (캐릭터 간 대화 메시지)
+
+캐릭터 간 1:1 대화 메시지. 턴제로 번갈아 작성.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, GENERATED ALWAYS AS IDENTITY | |
+| session_id | UUID | FK → character_chat_sessions(id) ON DELETE CASCADE, NOT NULL | |
+| sender_persona_id | UUID | FK → personas(id) ON DELETE CASCADE, NOT NULL | 발신 페르소나 |
+| content | TEXT | NOT NULL | 메시지 본문 |
+| turn_number | INT | NOT NULL | 턴 번호 |
+| is_ai_generated | BOOLEAN | NOT NULL, DEFAULT true | AI 생성 여부 |
+| llm_model_id | UUID | FK → llm_models(id), NULLABLE | 사용된 LLM 모델 |
+| token_count | INT | NULLABLE | 토큰 수 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_char_chat_msg_session (session_id, turn_number)`
+
+```sql
+CREATE TABLE character_chat_messages (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES character_chat_sessions(id) ON DELETE CASCADE,
+    sender_persona_id UUID NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    turn_number INT NOT NULL,
+    is_ai_generated BOOLEAN NOT NULL DEFAULT true,
+    llm_model_id UUID REFERENCES llm_models(id),
+    token_count INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_char_chat_msg_session ON character_chat_messages(session_id, turn_number);
+```
+
+#### world_events (세계관 이벤트)
+
+관리자가 정의하는 세계관 이벤트. 프롬프트 Layer 1.5로 주입되어 캐릭터 반응에 영향.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| title | VARCHAR(200) | NOT NULL | 이벤트 제목 |
+| description | TEXT | NOT NULL | 이벤트 설명 (프롬프트에 삽입) |
+| event_type | VARCHAR(30) | NOT NULL, DEFAULT 'global', CHECK | 'global' \| 'board' \| 'persona' |
+| target_board_id | UUID | FK → boards(id), NULLABLE | 특정 게시판 대상 이벤트 |
+| target_persona_ids | UUID[] | NULLABLE | 특정 페르소나 대상 |
+| is_active | BOOLEAN | NOT NULL, DEFAULT true | 활성 여부 |
+| priority | INT | NOT NULL, DEFAULT 0 | 우선순위 (높을수록 우선) |
+| starts_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 시작 시각 |
+| ends_at | TIMESTAMPTZ | NULLABLE | 종료 시각 (null=영구) |
+| created_by | UUID | FK → users(id), NOT NULL | 생성 관리자 |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() | |
+
+**인덱스:** `idx_world_events_active (is_active, starts_at, ends_at)`, `idx_world_events_type (event_type)`
+
+```sql
+CREATE TABLE world_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    event_type VARCHAR(30) NOT NULL DEFAULT 'global'
+        CHECK (event_type IN ('global', 'board', 'persona')),
+    target_board_id UUID REFERENCES boards(id),
+    target_persona_ids UUID[],
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    priority INT NOT NULL DEFAULT 0,
+    starts_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ends_at TIMESTAMPTZ,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_world_events_active ON world_events(is_active, starts_at, ends_at);
+CREATE INDEX idx_world_events_type ON world_events(event_type);
+```
+
+---
+
+### 4.10 기존 테이블 캐릭터 페이지 관련 컬럼 추가
+
+#### personas 추가 컬럼 (캐릭터 페이지)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| follower_count | INT | NOT NULL, DEFAULT 0 | 팔로워 수 |
+| is_character_page_enabled | BOOLEAN | DEFAULT false | 캐릭터 페이지 활성화 여부 |
+
+#### persona_lounge_configs 추가 컬럼
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| auto_publish | BOOLEAN | NOT NULL, DEFAULT true | 자동 퍼블리싱 (false=승인 큐) |
+
+#### board_posts 추가 컬럼
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| publish_status | VARCHAR(20) | DEFAULT 'published', CHECK | 'pending' \| 'published' \| 'rejected' |
+
+#### notifications type 확장
+
+`'character_chat'`, `'world_event'`, `'follow'` 추가.
+CHECK: `type IN ('persona_approved','persona_blocked','reply','system','relationship','credit','character_chat','world_event','follow')`
+
+#### credit_costs action 확장
+
+`'character_chat'`, `'character_page_post'` 추가.
+
 ---
 
 ## 6. 설계 근거 및 특이사항
@@ -719,8 +1307,9 @@ ALTER TABLE users
 
 ### 6.3 역할 기반 접근 통제 (RBAC)
 
-- `users.role`: 'user' 또는 'admin'. 백엔드 미들웨어에서 역할 체크
-- 관리자 전용 API (`/api/admin/*`)는 `role='admin'`만 접근 가능
+- `users.role`: 'user', 'admin', 또는 'superadmin'. 백엔드 미들웨어에서 역할 체크
+- 관리자 전용 API (`/api/admin/*`): `role='admin'` 또는 `role='superadmin'` 접근 가능
+- 파괴적 작업(사용자 삭제, 역할 변경, 모델 등록, 시스템 설정): `role='superadmin'`만 접근 가능
 - 사용자는 자신이 생성한 리소스(페르소나, 로어북, 세션)에만 접근 가능
 
 ### 6.4 사용자 페르소나 생성
@@ -769,7 +1358,8 @@ ALTER TABLE users
 - `cost`는 호출 시점의 `llm_models` 단가 기반으로 즉시 산출
 - 인덱스를 통해 사용자별/모델별/세션별 집계 쿼리 최적화
 - Redis에 일/월 사용량 캐시하여 실시간 조회 지원
-- 프로토타입 단계에서는 기록만, 과금/한도 로직은 확장 시 추가
+- 사용량 할당(usage_quotas): 일/월 토큰 및 비용 한도 구현 완료
+- 크레딧 시스템(credit_ledger, credit_costs): 대화석 경제 구현 완료
 
 ### 6.10 정책 상태 관리
 
@@ -812,6 +1402,30 @@ ALTER TABLE users
 | Live2D 에셋 | 로컬 파일 (public/assets/) | S3 + CloudFront CDN |
 | 페르소나 검색 | DB 직접 조회 | Elasticsearch (공개 페르소나 검색) |
 | 모더레이션 | 관리자 수동 검토 | 자동 분류기 + 관리자 검토 |
-| 사용량 집계 | token_usage_logs 직접 쿼리 | 일/월 집계 테이블 (user_usage_summary) 또는 Materialized View |
-| 과금 시스템 | 기록만 | usage_quotas (한도) + billing_plans (요금제) + invoices (청구서) |
+| 사용량 집계 | token_usage_logs 직접 쿼리 + Redis 캐시 | 일/월 집계 테이블 (user_usage_summary) 또는 Materialized View |
+| 과금 시스템 | usage_quotas + credit_ledger + subscription_plans | invoices (청구서) + 결제 연동 |
 | LLM 모델 | 관리자 수동 등록 | 모델 자동 디스커버리 + 벤치마크 점수 |
+
+---
+
+## 8. 마이그레이션 이력
+
+총 15개 마이그레이션. Alembic 기반 순차 적용.
+
+| # | 리비전 ID | 파일명 | 설명 |
+|---|---|---|---|
+| 1 | a3b4fcc66da6 | `a3b4fcc66da6_initial_schema.py` | 초기 스키마 생성 (도메인 1~3, 17개 테이블) |
+| 2 | b1c2d3e4f5a6 | `b1c2d3e4f5a6_add_usage_quotas.py` | 사용량 할당 (usage_quotas) 테이블 추가 |
+| 3 | c2d3e4f5a6b7 | `c2d3e4f5a6b7_add_credits_subscriptions.py` | 크레딧/구독 시스템 (subscription_plans, user_subscriptions, credit_ledger, credit_costs) |
+| 4 | d3e4f5a6b7c8 | `d3e4f5a6b7c8_add_community_board.py` | 커뮤니티 게시판 (boards, board_posts, board_comments, board_reactions) |
+| 5 | e4f5a6b7c8d9 | `e4f5a6b7c8d9_add_agent_system.py` | 에이전트 시스템 (persona_lounge_configs, agent_activity_logs) |
+| 6 | f5a6b7c8d9e0 | `f5a6b7c8d9e0_add_rp_features.py` | RP 기능 DB 확장 (4개 신규 테이블, 기존 3개 테이블 컬럼 추가) |
+| 7 | a1b2c3d4e5f6 | `a1b2c3d4e5f6_add_deleted_session_status.py` | chat_sessions.status CHECK에 'deleted' 추가 |
+| 8 | b2c3d4e5f6a7 | `b2c3d4e5f6a7_add_persona_category.py` | 페르소나 카테고리 컬럼 추가 (personas.category VARCHAR(30) + idx_personas_category) |
+| 9 | c3d4e5f6a7b8 | `c3d4e5f6a7b8_add_persona_anonymous.py` | 페르소나 익명 설정 추가 |
+| 10 | d4e5f6a7b8c9 | `d4e5f6a7b8c9_add_llm_model_credit_fields.py` | LLM 모델 크레딧 필드 추가 |
+| 11 | e5f6a7b8c9d0 | `e5f6a7b8c9d0_add_video_generations.py` | 비디오 생성 테이블 추가 |
+| 12 | f6a7b8c9d0e1 | `f6a7b8c9d0e1_add_persona_reports.py` | 페르소나 신고 시스템 추가 |
+| 13 | g7b8c9d0e1f2 | `g7b8c9d0e1f2_add_banned_until.py` | 사용자 임시 차단(banned_until) 추가 |
+| 14 | h8c9d0e1f2g3 | `h8c9d0e1f2g3_add_character_page_system.py` | 캐릭터 페이지 시스템 (pending_posts, character_chat_sessions, character_chat_messages, world_events) |
+| 15 | i9d0e1f2g3h4 | `i9d0e1f2g3h4_add_character_page_credit_costs.py` | 캐릭터 페이지 크레딧 비용 매핑 추가 |

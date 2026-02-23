@@ -17,7 +17,7 @@ class ModerationAction(BaseModel):
     action: str  # "approved" or "blocked"
 
 
-@router.get("/", response_model=PersonaListResponse)
+@router.get("", response_model=PersonaListResponse)
 async def list_personas_for_moderation(
     moderation_status: str = Query("pending"),
     skip: int = Query(0, ge=0),

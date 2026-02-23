@@ -80,9 +80,11 @@ async def test_get_my_usage_history(client: AsyncClient, test_user, db_session):
     response = await client.get("/api/usage/me/history", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 1
-    assert "date" in data[0]
-    assert "input_tokens" in data[0]
+    assert "daily" in data
+    assert "by_model_daily" in data
+    assert len(data["daily"]) >= 1
+    assert "date" in data["daily"][0]
+    assert "input_tokens" in data["daily"][0]
 
 
 @pytest.mark.asyncio

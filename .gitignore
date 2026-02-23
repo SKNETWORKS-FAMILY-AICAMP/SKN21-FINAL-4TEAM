@@ -21,6 +21,8 @@ coverage.xml
 node_modules/
 .next/
 out/
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts
 
 # IDE
 .vscode/
@@ -39,6 +41,7 @@ docker-compose.override.yml
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Logs
 *.log

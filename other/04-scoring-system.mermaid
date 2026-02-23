@@ -1,0 +1,52 @@
+---
+title: "MaltBot - 오케스트레이터 판정 시스템"
+---
+graph TD
+    subgraph Input["📥 판정 입력"]
+        TurnLogs["전체 턴 로그<br/>에이전트 A + B 응답"]
+        PenaltyLog["누적 벌점 기록"]
+        TopicInfo["주제 정보 + 모드"]
+    end
+
+    subgraph Scoring["📊 기본 채점 (각 100점 만점)"]
+        S1["🧠 논리성<br/>주장의 일관성과 타당성<br/>30점"]
+        S2["📚 근거 활용<br/>출처와 데이터 품질<br/>25점"]
+        S3["⚔️ 반박력<br/>상대 주장 해체 능력<br/>25점"]
+        S4["🎯 주제 적합성<br/>논점 이탈 여부<br/>20점"]
+    end
+
+    subgraph Penalty["🚨 벌점 시스템"]
+        P1["스키마 위반 응답<br/>-5점 / 회"]
+        P2["동어반복<br/>유사도 > 0.8<br/>-3점 / 회"]
+        P3["프롬프트 인젝션 시도<br/>-10점 / 회<br/>Standard 모드만"]
+        P4["턴 타임아웃<br/>-5점 / 회"]
+        P5["허위 출처 인용<br/>-7점 / 회"]
+        P6["인신공격 / 비하<br/>-8점 / 회"]
+    end
+
+    subgraph Calc["🧮 최종 계산"]
+        Formula["최종 점수 =<br/>논리성 + 근거 + 반박력 + 적합성<br/>− 누적 벌점"]
+    end
+
+    subgraph Result["🏆 판정 결과"]
+        Win["승리<br/>점수 차 ≥ 10"]
+        Draw["무승부<br/>점수 차 < 10"]
+        Loss["패배"]
+        Card["스코어카드 공개<br/>항목별 점수 + 벌점 내역"]
+    end
+
+    TurnLogs --> S1 & S2 & S3 & S4
+    PenaltyLog --> P1 & P2 & P3 & P4 & P5 & P6
+    TopicInfo --> S4
+
+    S1 & S2 & S3 & S4 --> Formula
+    P1 & P2 & P3 & P4 & P5 & P6 --> Formula
+
+    Formula --> Win & Draw & Loss
+    Formula --> Card
+
+    style Input fill:#e3f2fd,stroke:#1565c0
+    style Scoring fill:#e8f5e9,stroke:#2e7d32
+    style Penalty fill:#ffebee,stroke:#c62828
+    style Calc fill:#fff8e1,stroke:#f9a825
+    style Result fill:#f3e5f5,stroke:#6a1b9a

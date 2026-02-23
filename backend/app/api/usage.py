@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.schemas.usage import UsageSummary
+from app.schemas.usage import UsageHistoryResponse, UsageSummary
+from app.services.quota_service import QuotaService
 from app.services.usage_service import UsageService
 
 router = APIRouter()
@@ -20,7 +21,7 @@ async def get_my_usage(
     return await service.get_user_summary(user.id)
 
 
-@router.get("/me/history")
+@router.get("/me/history", response_model=UsageHistoryResponse)
 async def get_my_usage_history(
     days: int = Query(30, ge=1, le=365),
     user: User = Depends(get_current_user),
@@ -29,3 +30,13 @@ async def get_my_usage_history(
     """일별 사용량 히스토리 (차트용)."""
     service = UsageService(db)
     return await service.get_user_history(user.id, days=days)
+
+
+@router.get("/me/quota")
+async def get_my_quota(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """내 사용량 할당 상태 조회."""
+    service = QuotaService(db)
+    return await service.check_quota(user.id)

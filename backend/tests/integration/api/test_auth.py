@@ -1,7 +1,49 @@
+import uuid
+
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import auth_header
+
+
+@pytest_asyncio.fixture
+async def test_user_2(db_session: AsyncSession):
+    """추가 사용자 (성인인증 테스트용)."""
+    from app.core.auth import get_password_hash
+    from app.models.user import User
+
+    user = User(
+        id=uuid.uuid4(),
+        nickname="testuser2",
+        password_hash=get_password_hash("testpass"),
+        role="user",
+        age_group="unverified",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def test_user_3(db_session: AsyncSession):
+    """추가 사용자 (미성년 거부 테스트용)."""
+    from app.core.auth import get_password_hash
+    from app.models.user import User
+
+    user = User(
+        id=uuid.uuid4(),
+        nickname="testuser3",
+        password_hash=get_password_hash("testpass"),
+        role="user",
+        age_group="unverified",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
 
 
 @pytest.mark.asyncio
@@ -31,11 +73,11 @@ async def test_register_with_email(client: AsyncClient):
 async def test_register_duplicate_nickname(client: AsyncClient):
     await client.post("/api/auth/register", json={
         "nickname": "dupuser",
-        "password": "pass1",
+        "password": "password1A",
     })
     response = await client.post("/api/auth/register", json={
         "nickname": "dupuser",
-        "password": "pass2",
+        "password": "password2B",
     })
     assert response.status_code == 409
     assert "Nickname already taken" in response.json()["detail"]
@@ -53,11 +95,11 @@ async def test_register_missing_password(client: AsyncClient):
 async def test_login_success(client: AsyncClient):
     await client.post("/api/auth/register", json={
         "nickname": "loginuser",
-        "password": "mypassword",
+        "password": "mypassword1",
     })
     response = await client.post("/api/auth/login", json={
         "nickname": "loginuser",
-        "password": "mypassword",
+        "password": "mypassword1",
     })
     assert response.status_code == 200
     data = response.json()
@@ -69,7 +111,7 @@ async def test_login_success(client: AsyncClient):
 async def test_login_wrong_password(client: AsyncClient):
     await client.post("/api/auth/register", json={
         "nickname": "wrongpwuser",
-        "password": "correct",
+        "password": "correct1A",
     })
     response = await client.post("/api/auth/login", json={
         "nickname": "wrongpwuser",
@@ -112,25 +154,70 @@ async def test_me_invalid_token(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_adult_verify_success(client: AsyncClient, test_user):
+async def test_adult_verify_self_declare_success(client: AsyncClient, test_user):
+    """자가선언 성인인증: 만 19세 이상 생년 → 성공."""
     headers = auth_header(test_user)
-    response = await client.post("/api/auth/adult-verify", json={"method": "phone_verify"}, headers=headers)
+    response = await client.post(
+        "/api/auth/adult-verify",
+        json={"method": "self_declare", "birth_year": 1995},
+        headers=headers,
+    )
     assert response.status_code == 200
     data = response.json()
-    assert data["age_group"] == "adult_verified"
-    assert data["adult_verified_at"] is not None
+    assert data["status"] == "verified"
+    assert data["verified_at"] is not None
+    assert data["method"] == "self_declare"
+
+
+@pytest.mark.asyncio
+async def test_adult_verify_phone_success(client: AsyncClient, test_user_2):
+    """휴대폰 인증: 올바른 코드 + 전화번호 → 성공."""
+    headers = auth_header(test_user_2)
+    response = await client.post(
+        "/api/auth/adult-verify",
+        json={"method": "phone", "phone_number": "01012345678", "code": "123456"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "verified"
+    assert data["method"] == "phone"
+
+
+@pytest.mark.asyncio
+async def test_adult_verify_underage_rejected(client: AsyncClient, test_user_3):
+    """만 19세 미만 생년 → 403 거부."""
+    headers = auth_header(test_user_3)
+    response = await client.post(
+        "/api/auth/adult-verify",
+        json={"method": "self_declare", "birth_year": 2015},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_adult_verify_phone_wrong_code(client: AsyncClient, test_user_3):
+    """휴대폰 인증: 잘못된 코드 → 403 거부."""
+    headers = auth_header(test_user_3)
+    response = await client.post(
+        "/api/auth/adult-verify",
+        json={"method": "phone", "phone_number": "01012345678", "code": "000000"},
+        headers=headers,
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_admin_endpoint_blocked_for_user(client: AsyncClient, test_user):
     headers = auth_header(test_user)
-    response = await client.get("/api/admin/users/", headers=headers)
+    response = await client.get("/api/admin/users", headers=headers)
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_admin_endpoint_allowed_for_admin(client: AsyncClient, test_admin):
     headers = auth_header(test_admin)
-    response = await client.get("/api/admin/users/", headers=headers)
+    response = await client.get("/api/admin/users", headers=headers)
     # 501 (NotImplementedError) 이 아닌 403이 아님을 확인 — 관리자는 통과
     assert response.status_code != 403

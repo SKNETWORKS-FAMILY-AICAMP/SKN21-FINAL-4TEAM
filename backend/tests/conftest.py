@@ -1,5 +1,9 @@
+import os
 import uuid
 from datetime import datetime, timezone
+
+# debate 라우트를 테스트에서 활성화하기 위해 app import 전에 환경변수 설정
+os.environ.setdefault("DEBATE_ENABLED", "true")
 
 import pytest
 import pytest_asyncio
@@ -92,6 +96,125 @@ async def test_admin(db_session: AsyncSession):
     await db_session.commit()
     await db_session.refresh(admin)
     return admin
+
+
+@pytest_asyncio.fixture
+async def test_superadmin(db_session: AsyncSession):
+    """슈퍼관리자 fixture."""
+    from app.core.auth import get_password_hash
+    from app.models.user import User
+
+    superadmin = User(
+        id=uuid.uuid4(),
+        nickname="testsuperadmin",
+        password_hash=get_password_hash("superpass"),
+        role="superadmin",
+        age_group="adult_verified",
+        adult_verified_at=datetime.now(timezone.utc),
+    )
+    db_session.add(superadmin)
+    await db_session.commit()
+    await db_session.refresh(superadmin)
+    return superadmin
+
+
+@pytest_asyncio.fixture
+async def test_developer(db_session: AsyncSession):
+    """개발자 역할 fixture."""
+    from app.core.auth import get_password_hash
+    from app.models.user import User
+
+    user = User(
+        id=uuid.uuid4(),
+        nickname="testdev",
+        password_hash=get_password_hash("devpass"),
+        role="developer",
+        age_group="unverified",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def test_debate_agent(db_session: AsyncSession, test_developer):
+    """토론 에이전트 fixture."""
+    from app.core.encryption import encrypt_api_key
+    from app.models.debate_agent import DebateAgent
+    from app.models.debate_agent_version import DebateAgentVersion
+
+    agent = DebateAgent(
+        id=uuid.uuid4(),
+        owner_id=test_developer.id,
+        name="Test Agent",
+        provider="openai",
+        model_id="gpt-4o",
+        encrypted_api_key=encrypt_api_key("sk-test-key"),
+    )
+    db_session.add(agent)
+    await db_session.flush()
+
+    version = DebateAgentVersion(
+        agent_id=agent.id,
+        version_number=1,
+        version_tag="v1",
+        system_prompt="You are a test debate agent.",
+    )
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(agent)
+    return agent
+
+
+@pytest_asyncio.fixture
+async def test_local_debate_agent(db_session: AsyncSession, test_developer):
+    """로컬 에이전트 fixture (provider=local, API 키 없음)."""
+    from app.models.debate_agent import DebateAgent
+    from app.models.debate_agent_version import DebateAgentVersion
+
+    agent = DebateAgent(
+        id=uuid.uuid4(),
+        owner_id=test_developer.id,
+        name="Local Test Agent",
+        provider="local",
+        model_id="custom",
+        encrypted_api_key=None,
+    )
+    db_session.add(agent)
+    await db_session.flush()
+
+    version = DebateAgentVersion(
+        agent_id=agent.id,
+        version_number=1,
+        version_tag="v1",
+        system_prompt="You are a local test debate agent.",
+    )
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(agent)
+    return agent
+
+
+@pytest_asyncio.fixture
+async def test_debate_topic(db_session: AsyncSession, test_admin):
+    """토론 주제 fixture."""
+    from app.models.debate_topic import DebateTopic
+
+    topic = DebateTopic(
+        id=uuid.uuid4(),
+        title="AI와 교육의 미래",
+        description="AI가 교육을 개선할 수 있는가?",
+        mode="debate",
+        status="open",
+        max_turns=6,
+        turn_token_limit=500,
+        created_by=test_admin.id,
+    )
+    db_session.add(topic)
+    await db_session.commit()
+    await db_session.refresh(topic)
+    return topic
 
 
 @pytest_asyncio.fixture
