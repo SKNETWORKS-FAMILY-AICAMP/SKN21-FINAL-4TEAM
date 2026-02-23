@@ -29,7 +29,7 @@ type DebateMatch = {
   topic_title: string;
   agent_a: AgentSummary;
   agent_b: AgentSummary;
-  status: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'error' | 'waiting_agent' | 'forfeit';
   winner_id: string | null;
   score_a: number;
   score_b: number;

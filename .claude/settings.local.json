@@ -164,7 +164,10 @@
       "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/integration/api/test_debate_agents.py -v -k local 2>&1)",
       "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/integration/api/test_debate_ws.py -v 2>&1)",
       "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/ -v 2>&1)",
-      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short 2>&1)"
+      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short 2>&1)",
+      "Bash(/c/Users/ParkHue/AppData/Local/Programs/Python/Python310/python:*)",
+      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/unit/services/test_debate_ws_manager.py -v --tb=short 2>&1)",
+      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/unit/services/test_debate_ws_manager.py backend/tests/unit/services/test_debate_engine.py backend/tests/integration/api/test_debate_agents.py backend/tests/integration/api/test_debate_ws.py -v --tb=short 2>&1)"
     ]
   }
 }
