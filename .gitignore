@@ -55,3 +55,6 @@ frontend/public/assets/live2d/CubismSdkForWeb/
 
 # 로컬 에이전트 (로컬 전용, 배포/git 제외)
 /agents/
+
+# Claude Code 에이전트 설정 (로컬 전용, 배포/git 제외)
+.claude/agents/
