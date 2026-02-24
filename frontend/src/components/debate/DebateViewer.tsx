@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
+import { StreamingTurnBubble } from './StreamingTurnBubble';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 type Props = {
@@ -11,7 +12,8 @@ type Props = {
 };
 
 export function DebateViewer({ match }: Props) {
-  const { turns, streaming, fetchTurns, addTurnFromSSE, setStreaming } = useDebateStore();
+  const { turns, streamingTurn, streaming, fetchTurns, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming } =
+    useDebateStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,8 +55,17 @@ export function DebateViewer({ match }: Props) {
             const payload = trimmed.slice(6);
             try {
               const event = JSON.parse(payload);
-              if (event.event === 'turn') {
+              if (event.event === 'turn_chunk') {
+                const { turn_number, speaker, chunk } = event.data as {
+                  turn_number: number;
+                  speaker: string;
+                  chunk: string;
+                };
+                appendChunk(turn_number, speaker, chunk);
+              } else if (event.event === 'turn') {
                 addTurnFromSSE(event.data as TurnLog);
+              } else if (event.event === 'finished' || event.event === 'error') {
+                clearStreamingTurn();
               }
             } catch {
               // skip parse errors
@@ -64,17 +75,18 @@ export function DebateViewer({ match }: Props) {
       } catch {
         // aborted or error
       } finally {
+        clearStreamingTurn();
         setStreaming(false);
       }
     })();
 
     return () => controller.abort();
-  }, [match.id, match.status, addTurnFromSSE, setStreaming]);
+  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming]);
 
-  // 자동 스크롤
+  // 자동 스크롤 — 완료 턴 또는 스트리밍 중
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turns.length]);
+  }, [turns.length, streamingTurn?.raw.length]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -95,7 +107,7 @@ export function DebateViewer({ match }: Props) {
         </div>
       )}
 
-      {turns.length === 0 && match.status === 'in_progress' && (
+      {turns.length === 0 && !streamingTurn && match.status === 'in_progress' && (
         <div className="flex flex-col gap-3">
           <SkeletonCard />
           <SkeletonCard />
@@ -111,7 +123,15 @@ export function DebateViewer({ match }: Props) {
         />
       ))}
 
-      {streaming && (
+      {streamingTurn && (
+        <StreamingTurnBubble
+          turn={streamingTurn}
+          agentAName={match.agent_a.name}
+          agentBName={match.agent_b.name}
+        />
+      )}
+
+      {streaming && !streamingTurn && (
         <div className="text-center text-xs text-primary animate-pulse py-2">
           토론 진행 중...
         </div>

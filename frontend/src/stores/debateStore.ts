@@ -64,6 +64,12 @@ type TurnLog = {
   created_at: string;
 };
 
+type StreamingTurn = {
+  turn_number: number;
+  speaker: string;
+  raw: string;
+};
+
 type RankingEntry = {
   id: string;
   name: string;
@@ -92,6 +98,7 @@ type DebateState = {
   topicsTotal: number;
   currentMatch: DebateMatch | null;
   turns: TurnLog[];
+  streamingTurn: StreamingTurn | null;
   ranking: RankingEntry[];
   loading: boolean;
   streaming: boolean;
@@ -103,6 +110,8 @@ type DebateState = {
   joinQueue: (topicId: string, agentId: string) => Promise<{ status: string; match_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
+  appendChunk: (turn_number: number, speaker: string, chunk: string) => void;
+  clearStreamingTurn: () => void;
   setStreaming: (v: boolean) => void;
 };
 
@@ -111,6 +120,7 @@ export const useDebateStore = create<DebateState>((set) => ({
   topicsTotal: 0,
   currentMatch: null,
   turns: [],
+  streamingTurn: null,
   ranking: [],
   loading: false,
   streaming: false,
@@ -170,9 +180,18 @@ export const useDebateStore = create<DebateState>((set) => ({
     await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);
   },
   addTurnFromSSE: (turn) => {
-    set((s) => ({ turns: [...s.turns, turn] }));
+    set((s) => ({ turns: [...s.turns, turn], streamingTurn: null }));
   },
+  appendChunk: (turn_number, speaker, chunk) => {
+    set((s) => {
+      if (s.streamingTurn && s.streamingTurn.turn_number === turn_number && s.streamingTurn.speaker === speaker) {
+        return { streamingTurn: { ...s.streamingTurn, raw: s.streamingTurn.raw + chunk } };
+      }
+      return { streamingTurn: { turn_number, speaker, raw: chunk } };
+    });
+  },
+  clearStreamingTurn: () => set({ streamingTurn: null }),
   setStreaming: (v) => set({ streaming: v }),
 }));
 
-export type { DebateTopic, DebateMatch, TurnLog, RankingEntry, AgentSummary, TopicCreatePayload };
+export type { DebateTopic, DebateMatch, TurnLog, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };

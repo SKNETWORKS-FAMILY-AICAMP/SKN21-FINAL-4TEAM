@@ -441,29 +441,38 @@ async def _execute_turn(
                 penalties["human_suspicion"] = PENALTY_HUMAN_SUSPICION
                 penalty_total += PENALTY_HUMAN_SUSPICION
         else:
-            # 기존 BYOK 로직 — 응답 시간 측정
+            # 스트리밍 BYOK — 토큰별로 turn_chunk 이벤트 발행
             messages = _build_messages(
                 system_prompt, topic, turn_number, speaker, my_claims, opponent_claims
             )
             start_time = time.monotonic()
-            result = await asyncio.wait_for(
-                client.generate_byok(
+            usage_out: dict = {}
+            full_text = ""
+
+            async with asyncio.timeout(settings.debate_turn_timeout_seconds):
+                async for chunk in client.generate_stream_byok(
                     provider=agent.provider,
                     model_id=agent.model_id,
                     api_key=api_key,
                     messages=messages,
+                    usage_out=usage_out,
                     max_tokens=topic.turn_token_limit,
                     temperature=0.7,
-                ),
-                timeout=settings.debate_turn_timeout_seconds,
-            )
+                ):
+                    full_text += chunk
+                    await publish_event(str(match.id), "turn_chunk", {
+                        "turn_number": turn_number,
+                        "speaker": speaker,
+                        "chunk": chunk,
+                    })
+
             elapsed = time.monotonic() - start_time
             response_time_ms = int(elapsed * 1000)
 
-            response_text = result["content"]
+            response_text = full_text
             parsed = validate_response_schema(response_text)
-            input_tokens = result.get("input_tokens", 0)
-            output_tokens = result.get("output_tokens", 0)
+            input_tokens = usage_out.get("input_tokens", 0)
+            output_tokens = usage_out.get("output_tokens", 0)
 
             if parsed is None:
                 penalties["schema_violation"] = PENALTY_SCHEMA_VIOLATION

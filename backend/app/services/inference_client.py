@@ -106,6 +106,31 @@ class InferenceClient:
             case _:
                 raise ValueError(f"BYOK not supported for provider: {provider}")
 
+    async def generate_stream_byok(
+        self,
+        provider: str,
+        model_id: str,
+        api_key: str,
+        messages: list[dict],
+        usage_out: dict | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """사용자 API 키로 스트리밍 호출. 토론 엔진 실시간 출력용."""
+        if usage_out is None:
+            usage_out = {}
+        match provider:
+            case "openai":
+                async for chunk in self._stream_openai_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
+                    yield chunk
+            case "anthropic":
+                async for chunk in self._stream_anthropic_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
+                    yield chunk
+            case "google":
+                async for chunk in self._stream_google_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
+                    yield chunk
+            case _:
+                raise ValueError(f"BYOK streaming not supported for provider: {provider}")
+
     async def _call_openai_byok(
         self, model_id: str, api_key: str, messages: list[dict], **kwargs
     ) -> dict:
@@ -129,6 +154,46 @@ class InferenceClient:
                 "output_tokens": data["usage"]["completion_tokens"],
                 "finish_reason": choice["finish_reason"],
             }
+
+    async def _stream_openai_byok(
+        self,
+        model_id: str,
+        api_key: str,
+        messages: list[dict],
+        usage_out: dict | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """OpenAI BYOK 스트리밍."""
+        async with (
+            httpx.AsyncClient(timeout=120.0) as client,
+            client.stream(
+                "POST",
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model_id,
+                    "messages": messages,
+                    "max_tokens": kwargs.get("max_tokens", 1024),
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "stream": True,
+                    "stream_options": {"include_usage": True},
+                },
+            ) as response,
+        ):
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:]
+                if payload == "[DONE]":
+                    break
+                chunk = json.loads(payload)
+                if chunk.get("usage") and usage_out is not None:
+                    usage_out["input_tokens"] = chunk["usage"].get("prompt_tokens", 0)
+                    usage_out["output_tokens"] = chunk["usage"].get("completion_tokens", 0)
+                delta = chunk["choices"][0].get("delta", {}) if chunk.get("choices") else {}
+                if "content" in delta:
+                    yield delta["content"]
 
     async def _call_anthropic_byok(
         self, model_id: str, api_key: str, messages: list[dict], **kwargs
@@ -162,6 +227,57 @@ class InferenceClient:
                 "finish_reason": data.get("stop_reason", "end_turn"),
             }
 
+    async def _stream_anthropic_byok(
+        self,
+        model_id: str,
+        api_key: str,
+        messages: list[dict],
+        usage_out: dict | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """Anthropic BYOK 스트리밍."""
+        system_prompt, api_messages = self._split_system_messages(messages)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            body: dict = {
+                "model": model_id,
+                "messages": api_messages,
+                "max_tokens": kwargs.get("max_tokens", 1024),
+                "temperature": kwargs.get("temperature", 0.7),
+                "stream": True,
+            }
+            if system_prompt:
+                body["system"] = system_prompt
+            async with client.stream(
+                "POST",
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    try:
+                        event = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    event_type = event.get("type")
+                    if event_type == "message_start" and usage_out is not None:
+                        usage_out["input_tokens"] = event.get("message", {}).get("usage", {}).get("input_tokens", 0)
+                    elif event_type == "message_delta" and usage_out is not None:
+                        usage_out["output_tokens"] = event.get("usage", {}).get("output_tokens", 0)
+                    elif event_type == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            yield delta["text"]
+                    elif event_type == "message_stop":
+                        break
+
     async def _call_google_byok(
         self, model_id: str, api_key: str, messages: list[dict], **kwargs
     ) -> dict:
@@ -193,6 +309,54 @@ class InferenceClient:
                 "output_tokens": usage_meta.get("candidatesTokenCount", 0),
                 "finish_reason": candidate.get("finishReason", "STOP"),
             }
+
+    async def _stream_google_byok(
+        self,
+        model_id: str,
+        api_key: str,
+        messages: list[dict],
+        usage_out: dict | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """Google BYOK 스트리밍."""
+        system_prompt, gemini_contents = self._to_gemini_format(messages)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            body: dict = {
+                "contents": gemini_contents,
+                "generationConfig": {
+                    "maxOutputTokens": kwargs.get("max_tokens", 1024),
+                    "temperature": kwargs.get("temperature", 0.7),
+                },
+            }
+            if system_prompt:
+                body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            async with client.stream(
+                "POST",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:streamGenerateContent",
+                params={"key": api_key, "alt": "sse"},
+                headers={"Content-Type": "application/json"},
+                json=body,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    try:
+                        chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if chunk.get("usageMetadata") and usage_out is not None:
+                        meta = chunk["usageMetadata"]
+                        usage_out["input_tokens"] = meta.get("promptTokenCount", 0)
+                        usage_out["output_tokens"] = meta.get("candidatesTokenCount", 0)
+                    candidates = chunk.get("candidates", [])
+                    if not candidates:
+                        continue
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    for part in parts:
+                        if "text" in part:
+                            yield part["text"]
 
     # ── OpenAI ──
 
