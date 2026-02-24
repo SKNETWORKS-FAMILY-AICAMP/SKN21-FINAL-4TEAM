@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,6 +23,7 @@ from app.schemas.chat import (
 )
 from app.services.chat_service import ChatService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -140,9 +142,16 @@ async def send_message_stream(
     service = ChatService(db)
 
     async def event_generator():
-        async for chunk in service.send_message_stream(session_id, user, data.content):
-            yield f"data: {json.dumps({'content': chunk})}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for chunk in service.send_message_stream(session_id, user, data.content):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except HTTPException as e:
+            logger.error("SSE stream HTTPException: status=%s detail=%s", e.status_code, e.detail)
+            yield f"data: {json.dumps({'error': e.detail, 'status': e.status_code})}\n\n"
+        except Exception as e:
+            logger.error("SSE stream error: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -206,9 +215,16 @@ async def regenerate_message(
     service = ChatService(db)
 
     async def event_generator():
-        async for chunk in service.regenerate_message(session_id, message_id, user):
-            yield f"data: {json.dumps({'content': chunk})}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for chunk in service.regenerate_message(session_id, message_id, user):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except HTTPException as e:
+            logger.error("SSE regenerate HTTPException: status=%s detail=%s", e.status_code, e.detail)
+            yield f"data: {json.dumps({'error': e.detail, 'status': e.status_code})}\n\n"
+        except Exception as e:
+            logger.error("SSE regenerate error: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),

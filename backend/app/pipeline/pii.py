@@ -58,6 +58,14 @@ class PIIDetector:
 
         logger.info("Initializing PII Detector...")
         try:
+            import spacy
+            # Skip Presidio init if the required spaCy model isn't installed locally.
+            # Trying to initialize AnalyzerEngine() without the model triggers a 400MB
+            # download that fails in production due to permission issues.
+            if not spacy.util.is_package("en_core_web_lg"):
+                logger.warning("spaCy model en_core_web_lg not installed — using regex-only PII fallback")
+                self._initialized = True
+                return
             self.analyzer = AnalyzerEngine()
 
             # 한국어 패턴 인식기 — "en" 언어로 등록 (Presidio 기본 NLP 엔진이 en만 지원)

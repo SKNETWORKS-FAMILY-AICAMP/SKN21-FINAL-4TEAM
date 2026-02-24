@@ -304,8 +304,12 @@ class ChatService:
             from app.services.credit_service import CreditService
 
             credit_svc = CreditService(self.db)
+            logger.info("[stream] granting daily credits for user %s", user.id)
             await credit_svc.grant_daily_credits(user.id)
-            if not await credit_svc.check_has_credits(user.id):
+            logger.info("[stream] checking credits for user %s", user.id)
+            has_credits = await credit_svc.check_has_credits(user.id)
+            logger.info("[stream] has_credits=%s for user %s", has_credits, user.id)
+            if not has_credits:
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
                     detail="대화석이 부족합니다",
@@ -324,6 +328,7 @@ class ChatService:
                 )
 
         # 1. 사용자 메시지 저장 (마스킹된 텍스트)
+        logger.info("[stream] saving user message for session %s", session_id)
         user_msg = ChatMessage(
             session_id=session.id,
             role="user",
@@ -333,9 +338,11 @@ class ChatService:
         await self.db.flush()
 
         # 2. 프롬프트 빌드
+        logger.info("[stream] building prompt for session %s", session_id)
         prompt_messages = await self._build_prompt(session, safe_content)
 
         # 3. SSE 스트리밍 (usage_out으로 토큰 수 캡처)
+        logger.info("[stream] starting LLM stream for session %s, model=%s", session_id, llm_model.model_id)
         full_response = []
         usage_out: dict = {}
         async for chunk in self.inference.generate_stream(llm_model, prompt_messages, usage_out=usage_out):
