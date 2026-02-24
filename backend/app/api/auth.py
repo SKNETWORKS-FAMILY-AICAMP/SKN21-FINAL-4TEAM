@@ -28,6 +28,12 @@ async def check_nickname(nickname: str, db: AsyncSession = Depends(get_db)):
 @router.post("/register", response_model=TokenResponse)
 async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
     """사용자 회원가입 → JWT 발급."""
+    # 관리자 사칭 방지 — 일반 가입에서 'admin' 포함 닉네임 차단
+    if "admin" in data.nickname.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nickname cannot contain 'admin'",
+        )
     service = UserService(db)
     try:
         user = await service.create_user(data)
@@ -76,6 +82,12 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
 ):
     """프로필 정보 수정 (닉네임)."""
+    # 일반 유저가 'admin' 포함 닉네임으로 변경하는 것 차단
+    if data.nickname and "admin" in data.nickname.lower() and user.role == "user":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nickname cannot contain 'admin'",
+        )
     service = UserService(db)
     try:
         updated = await service.update_profile(user, data)
