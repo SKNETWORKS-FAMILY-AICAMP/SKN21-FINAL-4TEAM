@@ -57,7 +57,7 @@ class CharacterCardService:
             "tags": persona.tags or [],
             "system_prompt": persona.system_prompt,
             "extensions": {
-                "webtoon_chatbot": {
+                "character_data": {
                     "persona_key": persona.persona_key,
                     "version": persona.version,
                     "style_rules": persona.style_rules,
@@ -89,8 +89,8 @@ class CharacterCardService:
         if mes_example:
             example_dialogues = self._parse_mes_example(mes_example)
 
-        # Extract extensions (webtoon_chatbot specific)
-        ext = card_data.get("extensions", {}).get("webtoon_chatbot", {})
+        # Extract extensions
+        ext = card_data.get("extensions", {}).get("character_data", {})
         style_rules = ext.get("style_rules", {})
         safety_rules = ext.get("safety_rules", {})
         age_rating = ext.get("age_rating", "all")

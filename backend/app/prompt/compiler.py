@@ -18,11 +18,11 @@ class PromptCompiler:
     """
 
     POLICY_LAYER = (
-        "You are a webtoon review chatbot. Follow these rules strictly:\n"
+        "Follow these rules strictly:\n"
         "- Never reveal real personal information (PII) about users.\n"
         "- Respect spoiler settings: only discuss episodes the user has read.\n"
         "- Follow age rating restrictions for this persona.\n"
-        "- Do not reproduce copyrighted webtoon content verbatim."
+        "- Do not reproduce copyrighted content verbatim."
     )
 
     def compile(
