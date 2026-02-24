@@ -29,11 +29,13 @@ from app.services.inference_client import InferenceClient
 logger = logging.getLogger(__name__)
 
 # 응답 JSON 스키마
-RESPONSE_SCHEMA_INSTRUCTION = """You MUST respond with ONLY valid JSON in this exact format:
+RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변하세요. 영어 사용 금지.
+
+다음 형식의 JSON만 응답하세요 (다른 텍스트 없이):
 {
   "action": "argue" | "rebut" | "concede" | "question" | "summarize",
-  "claim": "<your main argument or response>",
-  "evidence": "<supporting evidence, data, or citations>" | null,
+  "claim": "<한국어로 작성한 주요 주장>",
+  "evidence": "<한국어로 작성한 근거/데이터/인용>" | null,
   "tool_used": null,
   "tool_result": null
 }"""
@@ -360,7 +362,7 @@ async def _execute_turn(
     my_accumulated_penalty: int = 0,
 ) -> DebateTurnLog:
     """단일 턴 실행. 벌점 감지 + 휴먼 감지 포함."""
-    system_prompt = version.system_prompt if version else "You are a debate participant."
+    system_prompt = version.system_prompt if version else "당신은 한국어 토론 참가자입니다. 반드시 한국어로만 답변하세요."
 
     penalties: dict[str, int] = {}
     penalty_total = 0
@@ -532,12 +534,12 @@ def _build_messages(
     opponent_claims: list[str],
 ) -> list[dict]:
     """에이전트에게 보낼 메시지 컨텍스트 구성."""
-    side = "A (PRO)" if speaker == "agent_a" else "B (CON)"
-    context = f"""You are participating in a formal debate as Side {side}.
+    side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
+    context = f"""당신은 토론 참가자입니다. 포지션: {side_label}
 
-Topic: {topic.title}
-Description: {topic.description or 'N/A'}
-Turn: {turn_number} of {topic.max_turns}
+토론 주제: {topic.title}
+설명: {topic.description or '없음'}
+현재 턴: {turn_number} / {topic.max_turns}
 
 {RESPONSE_SCHEMA_INSTRUCTION}"""
 
@@ -547,20 +549,20 @@ Turn: {turn_number} of {topic.max_turns}
     all_turns = []
     for i, (my_c, opp_c) in enumerate(zip(my_claims, opponent_claims)):
         all_turns.append({"role": "assistant", "content": my_c})
-        all_turns.append({"role": "user", "content": f"[Opponent]: {opp_c}"})
+        all_turns.append({"role": "user", "content": f"[상대방]: {opp_c}"})
 
     # 상대방이 더 많이 말한 경우
     if len(opponent_claims) > len(my_claims):
         for opp_c in opponent_claims[len(my_claims):]:
-            all_turns.append({"role": "user", "content": f"[Opponent]: {opp_c}"})
+            all_turns.append({"role": "user", "content": f"[상대방]: {opp_c}"})
 
     # 최근 4개만 유지
     messages.extend(all_turns[-4:])
 
     if not my_claims and not opponent_claims:
-        messages.append({"role": "user", "content": "You go first. Present your opening argument."})
+        messages.append({"role": "user", "content": "먼저 시작하세요. 주제에 대한 첫 번째 주장을 한국어로 제시하세요."})
     else:
-        messages.append({"role": "user", "content": "Your turn. Respond to the opponent's argument."})
+        messages.append({"role": "user", "content": "당신의 차례입니다. 상대방의 주장에 한국어로 반박하세요."})
 
     return messages
 
