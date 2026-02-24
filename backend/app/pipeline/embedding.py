@@ -34,18 +34,22 @@ class EmbeddingService:
             logger.warning("Cannot load EmbeddingService — torch not installed")
             return
         logger.info("Loading EmbeddingService model: %s", self.model_name)
+        try:
+            if self.device_name:
+                self.device = torch.device(self.device_name)
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if self.device_name:
-            self.device = torch.device(self.device_name)
-        else:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModel.from_pretrained(self.model_name)
+            self.model.to(self.device)
+            self.model.eval()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModel.from_pretrained(self.model_name)
-        self.model.to(self.device)
-        self.model.eval()
-
-        logger.info("EmbeddingService loaded on %s (dim=%d)", self.device, EMBEDDING_DIM)
+            logger.info("EmbeddingService loaded on %s (dim=%d)", self.device, EMBEDDING_DIM)
+        except Exception as e:
+            logger.warning("EmbeddingService model load failed — fallback to zero vectors: %s", e)
+            self.model = None
+            self.tokenizer = None
 
     def _ensure_loaded(self) -> bool:
         """모델 미로드 시 자동 로드 (lazy initialization). 로드 성공 시 True."""

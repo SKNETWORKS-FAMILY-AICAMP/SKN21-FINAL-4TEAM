@@ -57,45 +57,49 @@ class PIIDetector:
             return
 
         logger.info("Initializing PII Detector...")
+        try:
+            self.analyzer = AnalyzerEngine()
 
-        self.analyzer = AnalyzerEngine()
+            # 한국어 패턴 인식기 — "en" 언어로 등록 (Presidio 기본 NLP 엔진이 en만 지원)
+            kr_phone_recognizer = PatternRecognizer(
+                supported_entity="KR_PHONE_NUMBER",
+                patterns=[_KR_PHONE_PATTERN],
+                supported_language="en",
+            )
+            kr_resident_recognizer = PatternRecognizer(
+                supported_entity="KR_RESIDENT_ID",
+                patterns=[_KR_RESIDENT_ID_PATTERN],
+                supported_language="en",
+            )
+            kr_email_recognizer = PatternRecognizer(
+                supported_entity="EMAIL_ADDRESS",
+                patterns=[_KR_EMAIL_PATTERN],
+                supported_language="en",
+            )
+            kr_card_recognizer = PatternRecognizer(
+                supported_entity="KR_CREDIT_CARD",
+                patterns=[_KR_CARD_PATTERN],
+                supported_language="en",
+            )
+            kr_account_recognizer = PatternRecognizer(
+                supported_entity="KR_BANK_ACCOUNT",
+                patterns=[_KR_ACCOUNT_PATTERN],
+                supported_language="en",
+            )
 
-        # 한국어 패턴 인식기 — "en" 언어로 등록 (Presidio 기본 NLP 엔진이 en만 지원)
-        kr_phone_recognizer = PatternRecognizer(
-            supported_entity="KR_PHONE_NUMBER",
-            patterns=[_KR_PHONE_PATTERN],
-            supported_language="en",
-        )
-        kr_resident_recognizer = PatternRecognizer(
-            supported_entity="KR_RESIDENT_ID",
-            patterns=[_KR_RESIDENT_ID_PATTERN],
-            supported_language="en",
-        )
-        kr_email_recognizer = PatternRecognizer(
-            supported_entity="EMAIL_ADDRESS",
-            patterns=[_KR_EMAIL_PATTERN],
-            supported_language="en",
-        )
-        kr_card_recognizer = PatternRecognizer(
-            supported_entity="KR_CREDIT_CARD",
-            patterns=[_KR_CARD_PATTERN],
-            supported_language="en",
-        )
-        kr_account_recognizer = PatternRecognizer(
-            supported_entity="KR_BANK_ACCOUNT",
-            patterns=[_KR_ACCOUNT_PATTERN],
-            supported_language="en",
-        )
+            self.analyzer.registry.add_recognizer(kr_phone_recognizer)
+            self.analyzer.registry.add_recognizer(kr_resident_recognizer)
+            self.analyzer.registry.add_recognizer(kr_email_recognizer)
+            self.analyzer.registry.add_recognizer(kr_card_recognizer)
+            self.analyzer.registry.add_recognizer(kr_account_recognizer)
 
-        self.analyzer.registry.add_recognizer(kr_phone_recognizer)
-        self.analyzer.registry.add_recognizer(kr_resident_recognizer)
-        self.analyzer.registry.add_recognizer(kr_email_recognizer)
-        self.analyzer.registry.add_recognizer(kr_card_recognizer)
-        self.analyzer.registry.add_recognizer(kr_account_recognizer)
-
-        self.anonymizer = AnonymizerEngine()
+            self.anonymizer = AnonymizerEngine()
+            logger.info("PII Detector initialized.")
+        except Exception as e:
+            logger.warning("PII Detector init failed — fallback to regex-only: %s", e)
+            self.analyzer = None
+            self.anonymizer = None
         self._initialized = True
-        logger.info("PII Detector initialized.")
 
     def _ensure_initialized(self) -> None:
         """미초기화 시 자동 초기화 (lazy initialization)."""
