@@ -20,21 +20,21 @@ SCORING_CRITERIA = {
     "relevance": 20,   # 주제 적합성
 }
 
-JUDGE_SYSTEM_PROMPT = """You are an impartial debate judge. Evaluate both sides of the debate and provide scores.
+JUDGE_SYSTEM_PROMPT = """당신은 공정한 토론 심판입니다. 토론 양측을 평가하고 점수를 부여하세요. 반드시 한국어로 답변하세요.
 
-Scoring criteria (total 100 points per side):
-- logic (30): Logical consistency, valid reasoning chains
-- evidence (25): Use of evidence, data, and citations
-- rebuttal (25): Quality of counter-arguments and responses to opponent
-- relevance (20): Staying on topic, addressing the core question
+채점 기준 (각 측 100점 만점):
+- logic (30점): 논리적 일관성, 타당한 추론 체계
+- evidence (25점): 근거, 데이터, 인용 활용도
+- rebuttal (25점): 반박 논리의 질, 상대 주장에 대한 대응 수준
+- relevance (20점): 주제 적합성, 핵심 쟁점 집중도
 
-Apply penalty deductions that have already been assessed during the debate.
+토론 중 이미 부과된 벌점은 별도로 차감됩니다.
 
-Respond with ONLY valid JSON:
+다음 형식의 JSON만 응답하세요 (다른 텍스트 없이):
 {
   "agent_a": {"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>},
   "agent_b": {"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>},
-  "reasoning": "<brief explanation of scoring>"
+  "reasoning": "<한국어로 작성한 채점 근거 설명>"
 }"""
 
 
@@ -69,7 +69,7 @@ class DebateOrchestrator:
             scorecard = {
                 "agent_a": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
                 "agent_b": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
-                "reasoning": "Judge scoring failed, equal scores assigned.",
+                "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
             }
 
         # 기본 점수 합산
@@ -99,15 +99,15 @@ class DebateOrchestrator:
         }
 
     def _format_debate_log(self, turns: list[DebateTurnLog], topic: DebateTopic) -> str:
-        lines = [f"Topic: {topic.title}", f"Description: {topic.description or 'N/A'}", ""]
+        lines = [f"토론 주제: {topic.title}", f"설명: {topic.description or '없음'}", ""]
         for turn in turns:
-            label = "Agent A" if turn.speaker == "agent_a" else "Agent B"
-            lines.append(f"[Turn {turn.turn_number}] {label} ({turn.action}):")
-            lines.append(f"Claim: {turn.claim}")
+            label = "에이전트 A (찬성)" if turn.speaker == "agent_a" else "에이전트 B (반대)"
+            lines.append(f"[턴 {turn.turn_number}] {label} ({turn.action}):")
+            lines.append(f"주장: {turn.claim}")
             if turn.evidence:
-                lines.append(f"Evidence: {turn.evidence}")
+                lines.append(f"근거: {turn.evidence}")
             if turn.penalty_total > 0:
-                lines.append(f"Penalties: -{turn.penalty_total} ({json.dumps(turn.penalties)})")
+                lines.append(f"벌점: -{turn.penalty_total} ({json.dumps(turn.penalties, ensure_ascii=False)})")
             lines.append("")
         return "\n".join(lines)
 
