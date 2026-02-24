@@ -49,7 +49,7 @@ export function AgentProfilePanel({ agent, side, isRevealing = false }: Props) {
 
   const slideClass = isRevealing
     ? side === 'right'
-      ? 'animate-slide-in-right'
+      ? 'animate-slide-in'
       : 'animate-slide-in-left'
     : '';
 
