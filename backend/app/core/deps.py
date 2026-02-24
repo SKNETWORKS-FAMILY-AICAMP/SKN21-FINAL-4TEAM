@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,15 +10,19 @@ from app.core.auth import decode_access_token, is_token_blacklisted
 from app.core.database import get_db
 from app.models.user import User
 
-security = HTTPBearer()
+# auto_error=False: Authorization 헤더가 없어도 에러 미발생 (쿠키로 fallback)
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token: Optional[str] = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """JWT에서 현재 사용자를 추출한다. 블랙리스트 토큰은 거부."""
-    token = credentials.credentials
+    """JWT에서 현재 사용자를 추출한다. Authorization 헤더 또는 쿠키를 지원. 블랙리스트 토큰은 거부."""
+    token = credentials.credentials if credentials else access_token
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

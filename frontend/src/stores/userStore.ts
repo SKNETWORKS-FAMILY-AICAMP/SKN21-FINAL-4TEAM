@@ -1,8 +1,9 @@
 /**
- * 사용자 인증/상태 스토어. JWT 토큰 관리, 역할(RBAC) 체크, 성인인증 상태 확인.
- * initialize()로 페이지 로드 시 토큰 복원 + /auth/me로 사용자 정보 재조회.
+ * 사용자 인증/상태 스토어. HttpOnly 쿠키 기반 인증.
+ * initialize()로 페이지 로드 시 /auth/me로 사용자 정보 조회 (쿠키 자동 전송).
  */
 import { create } from 'zustand';
+import { api } from '@/lib/api';
 
 type User = {
   id: string;
@@ -17,14 +18,14 @@ type User = {
 
 type UserState = {
   user: User | null;
-  token: string | null;
+  token: string | null; // 하위 호환성 유지 (실제로 사용되지 않음 — 쿠키 기반 인증)
   initialized: boolean;
   setUser: (user: User | null) => void;
-  setToken: (token: string | null) => void;
+  setToken: (token: string | null) => void; // 하위 호환성 유지 (no-op)
   isAdultVerified: () => boolean;
   isAdmin: () => boolean;
   isSuperAdmin: () => boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
   initialize: () => Promise<void>;
 };
 
@@ -33,12 +34,18 @@ export const useUserStore = create<UserState>((set, get) => ({
   token: null,
   initialized: false,
   setUser: (user) => set({ user }),
-  setToken: (token) => set({ token }),
+  // 쿠키 기반으로 전환 — token 필드는 하위 호환성만 유지
+  setToken: (_token) => set({ token: _token }),
   isAdultVerified: () => get().user?.adultVerifiedAt != null,
   isAdmin: () => ['admin', 'superadmin'].includes(get().user?.role ?? ''),
   isSuperAdmin: () => get().user?.role === 'superadmin',
-  logout: () => {
-    localStorage.removeItem('token');
+  logout: async () => {
+    try {
+      // 서버 측 쿠키 삭제 + 토큰 블랙리스트 등록
+      await api.post('/auth/logout');
+    } catch {
+      // 네트워크 오류 등 무시 — 클라이언트 상태는 항상 초기화
+    }
     set({ user: null, token: null });
   },
   initialize: (() => {
@@ -47,22 +54,18 @@ export const useUserStore = create<UserState>((set, get) => ({
       if (get().initialized) return Promise.resolve();
       if (pending) return pending;
       pending = (async () => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          set({ initialized: true });
-          return;
-        }
-        set({ token });
         try {
-          const res = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) {
-            localStorage.removeItem('token');
-            set({ token: null, initialized: true });
-            return;
-          }
-          const data = await res.json();
+          // 쿠키가 유효하면 자동으로 인증됨 (credentials: 'include' in api.ts)
+          const data = await api.get<{
+            id: string;
+            nickname: string;
+            role: 'user' | 'admin' | 'superadmin';
+            age_group: string;
+            adult_verified_at: string | null;
+            preferred_llm_model_id: string | null;
+            credit_balance?: number;
+            subscription_plan_key?: string | null;
+          }>('/auth/me');
           set({
             user: {
               id: data.id,
@@ -77,8 +80,10 @@ export const useUserStore = create<UserState>((set, get) => ({
             initialized: true,
           });
         } catch {
-          localStorage.removeItem('token');
-          set({ token: null, initialized: true });
+          // 미인증 상태 (쿠키 없음 또는 만료) — 정상적인 비로그인 상태
+          set({ user: null, token: null, initialized: true });
+        } finally {
+          pending = null;
         }
       })();
       return pending;

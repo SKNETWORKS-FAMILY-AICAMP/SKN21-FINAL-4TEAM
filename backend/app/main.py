@@ -1,11 +1,11 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import (
     auth,
@@ -53,6 +53,7 @@ from app.api.admin import video_gen as admin_video_gen
 from app.api.admin import world_events as admin_world_events
 from app.core.config import settings
 from app.core.database import engine
+from app.core.deps import get_current_user
 from app.core.observability import flush_langfuse, init_sentry, setup_prometheus
 from app.core.rate_limit import RateLimitMiddleware
 
@@ -138,7 +139,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Cookie"],
 )
 
 app.add_middleware(RateLimitMiddleware)
@@ -199,6 +200,23 @@ app.include_router(admin_world_events.router, prefix="/api/admin/world-events", 
 if settings.debate_enabled:
     app.include_router(admin_debate.router, prefix="/api/admin/debate", tags=["admin-debate"])
 
-# 업로드 파일 정적 서빙 (라우터 등록 이후에 마운트 — catch-all이므로 순서 중요)
+# 업로드 파일 디렉토리 생성
 os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+@app.get("/uploads/{path:path}")
+async def serve_upload_file(
+    path: str,
+    user=Depends(get_current_user),
+):
+    """업로드 파일 서빙. 인증 필수 (Authorization 헤더 또는 쿠키)."""
+    upload_dir = Path(settings.upload_dir).resolve()
+    file_path = (upload_dir / path).resolve()
+
+    # 경로 순회 공격 방지
+    if not file_path.is_relative_to(upload_dir):
+        return JSONResponse(status_code=403, content={"detail": "Access denied"})
+    if not file_path.is_file():
+        return JSONResponse(status_code=404, content={"detail": "File not found"})
+
+    return FileResponse(str(file_path))

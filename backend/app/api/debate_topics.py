@@ -1,6 +1,6 @@
-import asyncio
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,8 @@ from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
 from app.services.debate_engine import run_debate
+
+logger = logging.getLogger(__name__)
 from app.services.debate_matching_service import DebateMatchingService
 from app.services.debate_queue_broadcast import publish_queue_event, subscribe_queue
 from app.services.debate_topic_service import DebateTopicService
@@ -60,10 +62,19 @@ async def get_topic(
     return _topic_response(topic)
 
 
+async def _run_debate_safe(match_id: str) -> None:
+    """토론 엔진 실행 래퍼. 예외를 로깅하고 삼키지 않음."""
+    try:
+        await run_debate(match_id)
+    except Exception:
+        logger.exception("토론 엔진 오류 (match_id=%s)", match_id)
+
+
 @router.post("/{topic_id}/join")
 async def join_topic_queue(
     topic_id: str,
     data: JoinQueueRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -74,9 +85,9 @@ async def join_topic_queue(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    # 매치가 생성되었으면 백그라운드에서 토론 엔진 시작
+    # 매치가 생성되었으면 BackgroundTasks로 토론 엔진 시작 (참조 유지 + 예외 로깅)
     if result.get("status") == "matched" and result.get("match_id"):
-        asyncio.create_task(run_debate(result["match_id"]))
+        background_tasks.add_task(_run_debate_safe, result["match_id"])
 
     return result
 

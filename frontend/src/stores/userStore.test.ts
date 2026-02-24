@@ -96,7 +96,7 @@ describe('useUserStore', () => {
     expect(useUserStore.getState().isAdmin()).toBe(true);
   });
 
-  it('should clear user and token on logout', () => {
+  it('should clear user and token on logout', async () => {
     useUserStore.getState().setUser({
       id: '1',
       nickname: 'test',
@@ -108,7 +108,7 @@ describe('useUserStore', () => {
       subscriptionPlanKey: null,
     });
     useUserStore.getState().setToken('token');
-    useUserStore.getState().logout();
+    await useUserStore.getState().logout();
 
     expect(useUserStore.getState().user).toBeNull();
     expect(useUserStore.getState().token).toBeNull();

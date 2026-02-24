@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.consent_log import ConsentLog
 from app.models.user import User
 
@@ -55,6 +56,13 @@ class AdultVerifyService:
                 "verified_at": user.adult_verified_at.isoformat(),
                 "method": user.auth_method,
             }
+
+        # 자가선언 비활성화 체크 (프로덕션 보안)
+        if method == VerifyMethod.SELF_DECLARE and not settings.allow_self_declare:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Self-declaration verification is disabled. Please use phone, card, or SSO verification.",
+            )
 
         # method 검증
         if method not in [m.value for m in VerifyMethod]:
@@ -112,10 +120,11 @@ class AdultVerifyService:
     async def check_status(self, user: User) -> dict:
         """성인인증 상태 확인."""
         if user.adult_verified_at is None:
-            return {
+            available = [m.value for m in VerifyMethod if m != VerifyMethod.SELF_DECLARE or settings.allow_self_declare]
+        return {
                 "verified": False,
                 "age_group": user.age_group,
-                "available_methods": [m.value for m in VerifyMethod],
+                "available_methods": available,
             }
 
         # 동의 만료 체크

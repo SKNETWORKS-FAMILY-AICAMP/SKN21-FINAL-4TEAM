@@ -81,6 +81,10 @@ class Settings(BaseSettings):
         "image/gif",
     ]
 
+    # Adult Verification
+    # 프로덕션에서는 False로 설정 — 자가선언(생년월일 입력)으로 성인인증 우회 방지
+    allow_self_declare: bool = False
+
     # Debate Platform
     debate_enabled: bool = False
     debate_default_elo: int = 1500

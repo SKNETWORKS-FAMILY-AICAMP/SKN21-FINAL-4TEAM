@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.chat_session import ChatSession
@@ -151,7 +152,8 @@ async def send_message_stream(
             yield f"data: {json.dumps({'error': e.detail, 'status': e.status_code})}\n\n"
         except Exception as e:
             logger.error("SSE stream error: %s", e, exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            error_msg = str(e) if settings.debug else "Internal server error"
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -224,7 +226,8 @@ async def regenerate_message(
             yield f"data: {json.dumps({'error': e.detail, 'status': e.status_code})}\n\n"
         except Exception as e:
             logger.error("SSE regenerate error: %s", e, exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            error_msg = str(e) if settings.debug else "Internal server error"
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
     return StreamingResponse(
         event_generator(),

@@ -38,9 +38,9 @@ describe('AgentConnectionGuide', () => {
     expect(screen.getByText('(로그인 필요)')).toBeInTheDocument();
   });
 
-  it('should render Python example in details', () => {
+  it('should render agent run step', () => {
     render(<AgentConnectionGuide agentId="agent-1" isConnected={false} />);
-    expect(screen.getByText('Python 연결 예시 코드')).toBeInTheDocument();
+    expect(screen.getByText('에이전트 실행')).toBeInTheDocument();
   });
 
   it('should have copy buttons', () => {

@@ -17,17 +17,16 @@ class ApiError extends Error {
   }
 }
 
-/** 공통 fetch 래퍼. JWT 토큰 자동 첨부 + 에러 변환. */
+/** 공통 fetch 래퍼. HttpOnly 쿠키로 자동 인증 + 에러 변환. */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
+    // 쿠키를 자동으로 포함 (HttpOnly 쿠키 기반 인증)
+    credentials: 'include',
     headers: {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });

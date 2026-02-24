@@ -91,23 +91,31 @@ class CreditService:
         model_tier: str,
         reference_id: str | None = None,
     ) -> CreditLedger:
-        """크레딧 잔액 확인 후 차감. 부족하면 402 반환."""
+        """크레딧 잔액 확인 후 원자적 차감. 부족하면 402 반환."""
         cost = await self._get_cost(action, model_tier)
 
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        # 원자적 UPDATE: 잔액이 충분할 때만 차감 (레이스 컨디션 방지)
+        result = await self.db.execute(
+            update(User)
+            .where(User.id == user_id, User.credit_balance >= cost)
+            .values(credit_balance=User.credit_balance - cost)
+            .returning(User.credit_balance)
+        )
+        row = result.fetchone()
 
-        if user.credit_balance < cost:
+        if row is None:
+            # UPDATE가 적용되지 않음 — 사용자 없음 또는 잔액 부족
+            check = await self.db.execute(select(User.credit_balance).where(User.id == user_id))
+            balance = check.scalar_one_or_none()
+            if balance is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"대화석이 부족합니다 (필요: {cost}, 보유: {user.credit_balance})",
+                detail=f"대화석이 부족합니다 (필요: {cost}, 보유: {balance})",
                 headers={"X-Error-Code": "CREDITS_INSUFFICIENT"},
             )
 
-        new_balance = user.credit_balance - cost
-
+        new_balance = row.credit_balance
         ledger = CreditLedger(
             user_id=user_id,
             amount=-cost,
@@ -117,8 +125,6 @@ class CreditService:
             description=f"{action} ({model_tier}): -{cost}석",
         )
         self.db.add(ledger)
-
-        await self.db.execute(update(User).where(User.id == user_id).values(credit_balance=new_balance))
         await self.db.flush()
         return ledger
 
@@ -129,23 +135,31 @@ class CreditService:
         credit_per_1k_tokens: int,
         reference_id: str | None = None,
     ) -> CreditLedger:
-        """토큰 수 기반 크레딧 차감. cost = ceil(total_tokens / 1000 * rate), 최소 1석."""
+        """토큰 수 기반 원자적 크레딧 차감. cost = ceil(total_tokens / 1000 * rate), 최소 1석."""
         cost = max(1, -(-total_tokens * credit_per_1k_tokens // 1000))  # ceiling division
 
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        # 원자적 UPDATE: 잔액이 충분할 때만 차감 (동시 요청 레이스 컨디션 방지)
+        result = await self.db.execute(
+            update(User)
+            .where(User.id == user_id, User.credit_balance >= cost)
+            .values(credit_balance=User.credit_balance - cost)
+            .returning(User.credit_balance)
+        )
+        row = result.fetchone()
 
-        if user.credit_balance < cost:
+        if row is None:
+            # UPDATE가 적용되지 않음 — 사용자 없음 또는 잔액 부족
+            check = await self.db.execute(select(User.credit_balance).where(User.id == user_id))
+            balance = check.scalar_one_or_none()
+            if balance is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"대화석이 부족합니다 (필요: {cost}, 보유: {user.credit_balance})",
+                detail=f"대화석이 부족합니다 (필요: {cost}, 보유: {balance})",
                 headers={"X-Error-Code": "CREDITS_INSUFFICIENT"},
             )
 
-        new_balance = user.credit_balance - cost
-
+        new_balance = row.credit_balance
         ledger = CreditLedger(
             user_id=user_id,
             amount=-cost,
@@ -155,8 +169,6 @@ class CreditService:
             description=f"chat ({total_tokens} tokens × {credit_per_1k_tokens}석/1K): -{cost}석",
         )
         self.db.add(ledger)
-
-        await self.db.execute(update(User).where(User.id == user_id).values(credit_balance=new_balance))
         await self.db.flush()
         return ledger
 

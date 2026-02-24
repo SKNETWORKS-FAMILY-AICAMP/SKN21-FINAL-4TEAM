@@ -103,13 +103,15 @@ class TestCheckAndDeduct:
         user = _make_user(credit_balance=50)
 
         db = AsyncMock()
-        # _get_cost
+        # _get_cost → scalar_one_or_none returns 3
         cost_result = MagicMock()
         cost_result.scalar_one_or_none.return_value = 3
-        # select(User)
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = user
-        db.execute = AsyncMock(side_effect=[cost_result, user_result, AsyncMock()])
+        # UPDATE...RETURNING → fetchone returns row with credit_balance=47
+        update_result = MagicMock()
+        row = MagicMock()
+        row.credit_balance = 47
+        update_result.fetchone.return_value = row
+        db.execute = AsyncMock(side_effect=[cost_result, update_result])
 
         service = CreditService(db)
         ledger = await service.check_and_deduct(user.id, "chat", "standard")
@@ -123,11 +125,16 @@ class TestCheckAndDeduct:
         user = _make_user(credit_balance=1)
 
         db = AsyncMock()
+        # _get_cost → cost = 5
         cost_result = MagicMock()
         cost_result.scalar_one_or_none.return_value = 5
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = user
-        db.execute = AsyncMock(side_effect=[cost_result, user_result])
+        # UPDATE...RETURNING → fetchone returns None (balance insufficient)
+        update_result = MagicMock()
+        update_result.fetchone.return_value = None
+        # SELECT User.credit_balance → balance = 1
+        balance_result = MagicMock()
+        balance_result.scalar_one_or_none.return_value = 1
+        db.execute = AsyncMock(side_effect=[cost_result, update_result, balance_result])
 
         service = CreditService(db)
 

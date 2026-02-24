@@ -212,15 +212,26 @@ class PersonaService:
 
     @staticmethod
     def _allowed_ratings(user: User) -> list[str]:
-        """사용자 연령 인증 상태에 따라 허용되는 등급 목록."""
-        if user.adult_verified_at is not None:
+        """사용자 age_group에 따라 허용되는 연령등급 목록.
+        unverified → all만 / minor_safe → all+15+ / adult_verified → 전체
+        """
+        if user.age_group == "adult_verified":
             return ["all", "15+", "18+"]
-        return ["all", "15+"]
+        if user.age_group == "minor_safe":
+            return ["all", "15+"]
+        # unverified (기본값)
+        return ["all"]
 
     @staticmethod
     def _check_age_gate(user: User, age_rating: str) -> None:
-        if age_rating == "18+" and user.adult_verified_at is None:
+        """연령 게이트. age_group 기반으로 15+/18+ 접근 제한."""
+        if age_rating == "18+" and user.age_group != "adult_verified":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Adult verification required",
+            )
+        if age_rating == "15+" and user.age_group not in ("minor_safe", "adult_verified"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Age verification required for 15+ content",
             )

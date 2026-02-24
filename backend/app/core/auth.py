@@ -31,7 +31,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict | None:
     """JWT 토큰 디코딩. 유효하지 않으면 None 반환."""
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])

@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import blacklist_token, create_access_token
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -12,7 +15,26 @@ from app.schemas.user import PasswordChange, TokenResponse, UserCreate, UserLogi
 from app.services.adult_verify_service import AdultVerifyService
 from app.services.user_service import UserService
 
-_bearer = HTTPBearer()
+# auto_error=False: 쿠키 기반 인증 fallback 허용
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _set_auth_cookie(response: Response, token: str) -> None:
+    """HttpOnly 쿠키로 JWT 설정."""
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.access_token_expire_minutes * 60,
+        # HTTPS 환경에서만 secure=True (개발 환경 편의상 dev에서는 False)
+        secure=settings.app_env != "development",
+    )
+
+
+def _clear_auth_cookie(response: Response) -> None:
+    """인증 쿠키 삭제."""
+    response.delete_cookie(key="access_token", samesite="lax")
 
 router = APIRouter()
 
@@ -26,8 +48,8 @@ async def check_nickname(nickname: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/register", response_model=TokenResponse)
-async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """사용자 회원가입 → JWT 발급."""
+async def register(data: UserCreate, response: Response, db: AsyncSession = Depends(get_db)):
+    """사용자 회원가입 → JWT 발급 + HttpOnly 쿠키 설정."""
     # 관리자 사칭 방지 — 일반 가입에서 'admin' 포함 닉네임 차단
     if "admin" in data.nickname.lower():
         raise HTTPException(
@@ -43,12 +65,13 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
             detail="Nickname already taken",
         ) from None
     token = create_access_token({"sub": str(user.id), "role": user.role})
+    _set_auth_cookie(response, token)
     return TokenResponse(access_token=token)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
-    """로그인 → JWT 발급."""
+async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
+    """로그인 → JWT 발급 + HttpOnly 쿠키 설정."""
     service = UserService(db)
     user = await service.authenticate(data)
     if user is None:
@@ -57,15 +80,21 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Invalid credentials",
         )
     token = create_access_token({"sub": str(user.id), "role": user.role})
+    _set_auth_cookie(response, token)
     return TokenResponse(access_token=token)
 
 
 @router.post("/logout")
 async def logout(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    response: Response,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    access_token: Optional[str] = Cookie(default=None),
 ):
-    """로그아웃. 현재 토큰을 블랙리스트에 추가하여 재사용 차단."""
-    await blacklist_token(credentials.credentials)
+    """로그아웃. 현재 토큰을 블랙리스트에 추가하고 쿠키를 삭제."""
+    token = credentials.credentials if credentials else access_token
+    if token:
+        await blacklist_token(token)
+    _clear_auth_cookie(response)
     return {"message": "Logged out successfully"}
 
 
@@ -102,11 +131,13 @@ async def update_me(
 @router.put("/me/password")
 async def change_password(
     data: PasswordChange,
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    response: Response,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    access_token: Optional[str] = Cookie(default=None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """비밀번호 변경. 성공 시 현재 토큰 무효화 + 새 토큰 발급."""
+    """비밀번호 변경. 성공 시 현재 토큰 무효화 + 새 토큰 발급 + 쿠키 갱신."""
     service = UserService(db)
     success = await service.change_password(user, data)
     if not success:
@@ -115,9 +146,12 @@ async def change_password(
             detail="Current password is incorrect",
         )
     # 현재 토큰 무효화
-    await blacklist_token(credentials.credentials)
-    # 새 토큰 발급
+    old_token = credentials.credentials if credentials else access_token
+    if old_token:
+        await blacklist_token(old_token)
+    # 새 토큰 발급 + 쿠키 갱신
     new_token = create_access_token({"sub": str(user.id), "role": user.role})
+    _set_auth_cookie(response, new_token)
     return {"message": "Password changed successfully", "access_token": new_token}
 
 

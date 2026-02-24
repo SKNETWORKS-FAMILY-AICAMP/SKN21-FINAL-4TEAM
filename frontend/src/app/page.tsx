@@ -144,8 +144,8 @@ export default function HomePage() {
     try {
       if (mode === 'login') {
         const res = await login(nickname, password);
-        localStorage.setItem('token', res.access_token);
-        setToken(res.access_token);
+        // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
+        setToken(res.access_token); // 하위 호환성 (no-op)
         const user = await api.get<{
           id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
           age_group: string; adult_verified_at: string | null;
@@ -162,9 +162,8 @@ export default function HomePage() {
         router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/personas');
       } else {
         const res = await register(nickname.trim(), password, email || undefined);
-        // 가입 성공 → 토큰 저장 후 테마 선택 단계로
-        localStorage.setItem('token', res.access_token);
-        setToken(res.access_token);
+        // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
+        setToken(res.access_token); // 하위 호환성 (no-op)
         setRegisteredToken(res.access_token);
         setStep('themes');
       }
