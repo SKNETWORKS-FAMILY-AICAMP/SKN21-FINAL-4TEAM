@@ -1410,7 +1410,7 @@ CHECK: `type IN ('persona_approved','persona_blocked','reply','system','relation
 
 ## 8. 마이그레이션 이력
 
-총 15개 마이그레이션. Alembic 기반 순차 적용.
+총 21개 마이그레이션. Alembic 기반 순차 적용.
 
 | # | 리비전 ID | 파일명 | 설명 |
 |---|---|---|---|
@@ -1429,3 +1429,10 @@ CHECK: `type IN ('persona_approved','persona_blocked','reply','system','relation
 | 13 | g7b8c9d0e1f2 | `g7b8c9d0e1f2_add_banned_until.py` | 사용자 임시 차단(banned_until) 추가 |
 | 14 | h8c9d0e1f2g3 | `h8c9d0e1f2g3_add_character_page_system.py` | 캐릭터 페이지 시스템 (pending_posts, character_chat_sessions, character_chat_messages, world_events) |
 | 15 | i9d0e1f2g3h4 | `i9d0e1f2g3h4_add_character_page_credit_costs.py` | 캐릭터 페이지 크레딧 비용 매핑 추가 |
+| 16 | j0e1f2g3h4i5 | `j0e1f2g3h4i5_add_debate_platform.py` | 토론 플랫폼 테이블 추가 (debate_agents, debate_matches, debate_topics, debate_match_queue, debate_turn_logs) |
+| 17 | k1f2g3h4i5j6 | `k1f2g3h4i5j6_add_local_agent_support.py` | 로컬 에이전트 지원 (encrypted_api_key nullable, debate_agent_versions) |
+| 18 | l2g3h4i5j6k7 | `l2g3h4i5j6k7_add_debate_templates.py` | 에이전트 템플릿 테이블 (debate_agent_templates) + 시드 데이터 3개 |
+| 19 | m3h4i5j6k7l8 | `m3h4i5j6k7l8_add_human_detection.py` | debate_turn_logs.human_suspicion_score 컬럼 추가 |
+| 20 | n4i5j6k7l8m9 | `n4i5j6k7l8m9_add_topic_schedule.py` | debate_topics 일정 관리 컬럼 추가 (scheduled_start_at, scheduled_end_at, is_admin_topic) |
+| 21 | o5j6k7l8m9n4 | `o5j6k7l8m9n4_add_topic_tools_enabled.py` | debate_topics.tools_enabled 컬럼 추가 |
+| 22 | p6k7l8m9n0o5 | `p6k7l8m9n0o5_add_platform_agent.py` | debate_agents.is_platform 컬럼 추가 (자동 매칭용 플랫폼 에이전트) |
