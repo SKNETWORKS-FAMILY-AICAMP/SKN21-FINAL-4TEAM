@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,9 @@ class DebateTopic(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="open")
     max_turns: Mapped[int] = mapped_column(Integer, nullable=False, server_default="6")
     turn_token_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default="500")
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_admin_topic: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -41,7 +44,7 @@ class DebateTopic(Base):
             name="ck_debate_topics_mode",
         ),
         CheckConstraint(
-            "status IN ('open', 'in_progress', 'closed')",
+            "status IN ('scheduled', 'open', 'in_progress', 'closed')",
             name="ck_debate_topics_status",
         ),
     )

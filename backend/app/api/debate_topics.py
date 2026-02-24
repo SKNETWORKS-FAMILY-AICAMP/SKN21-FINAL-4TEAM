@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
@@ -18,10 +18,11 @@ router = APIRouter()
 @router.post("", response_model=TopicResponse, status_code=status.HTTP_201_CREATED)
 async def create_topic(
     data: TopicCreate,
-    user: User = Depends(require_admin),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """토론 주제 생성 (관리자 전용)."""
+    """토론 주제 생성. 관리자는 스케줄 설정 가능, 일반 유저는 즉시 open."""
+    # 일반 유저가 스케줄 필드를 보내도 서비스에서 무시함
     service = DebateTopicService(db)
     topic = await service.create_topic(data, user)
     return _topic_response(topic)
@@ -83,6 +84,9 @@ def _topic_response(topic) -> dict:
         "status": topic.status,
         "max_turns": topic.max_turns,
         "turn_token_limit": topic.turn_token_limit,
+        "scheduled_start_at": topic.scheduled_start_at,
+        "scheduled_end_at": topic.scheduled_end_at,
+        "is_admin_topic": topic.is_admin_topic,
         "queue_count": 0,
         "match_count": 0,
         "created_at": topic.created_at,

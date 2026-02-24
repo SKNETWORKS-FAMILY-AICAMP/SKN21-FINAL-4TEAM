@@ -17,6 +17,9 @@ type DebateTopic = {
   status: string;
   max_turns: number;
   turn_token_limit: number;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  is_admin_topic: boolean;
   queue_count: number;
   match_count: number;
   created_at: string;
@@ -72,6 +75,16 @@ type RankingEntry = {
   draws: number;
 };
 
+type TopicCreatePayload = {
+  title: string;
+  description?: string | null;
+  mode?: string;
+  max_turns?: number;
+  turn_token_limit?: number;
+  scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
+};
+
 type DebateState = {
   topics: DebateTopic[];
   topicsTotal: number;
@@ -84,6 +97,7 @@ type DebateState = {
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
   fetchRanking: () => Promise<void>;
+  createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   joinQueue: (topicId: string, agentId: string) => Promise<{ status: string; match_id?: string }>;
   addTurnFromSSE: (turn: TurnLog) => void;
   setStreaming: (v: boolean) => void;
@@ -139,6 +153,11 @@ export const useDebateStore = create<DebateState>((set) => ({
       set({ loading: false });
     }
   },
+  createTopic: async (payload) => {
+    const data = await api.post<DebateTopic>('/topics', payload);
+    set((s) => ({ topics: [data, ...s.topics], topicsTotal: s.topicsTotal + 1 }));
+    return data;
+  },
   joinQueue: async (topicId, agentId) => {
     return api.post<{ status: string; match_id?: string }>(`/topics/${topicId}/join`, {
       agent_id: agentId,
@@ -150,4 +169,4 @@ export const useDebateStore = create<DebateState>((set) => ({
   setStreaming: (v) => set({ streaming: v }),
 }));
 
-export type { DebateTopic, DebateMatch, TurnLog, RankingEntry, AgentSummary };
+export type { DebateTopic, DebateMatch, TurnLog, RankingEntry, AgentSummary, TopicCreatePayload };

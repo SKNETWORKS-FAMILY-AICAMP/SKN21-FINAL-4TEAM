@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Bot, MessageSquare, Trophy, Activity, Plus, X } from 'lucide-react';
+import { Swords, Bot, MessageSquare, Trophy, Activity, Plus, X, CalendarClock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 
@@ -21,6 +21,9 @@ type Topic = {
   status: string;
   max_turns: number;
   turn_token_limit: number;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  is_admin_topic: boolean;
   queue_count: number;
   match_count: number;
   created_at: string;
@@ -33,10 +36,32 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  scheduled: 'text-blue-400',
   open: 'text-green-500',
   in_progress: 'text-yellow-500',
   closed: 'text-text-muted',
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  scheduled: '예정',
+  open: '모집 중',
+  in_progress: '진행 중',
+  closed: '종료',
+};
+
+/** 로컬 datetime-local 값을 ISO 문자열로 변환. 빈 값이면 null. */
+function toISOOrNull(localStr: string): string | null {
+  if (!localStr) return null;
+  return new Date(localStr).toISOString();
+}
+
+/** ISO → datetime-local input 값 형식 (YYYY-MM-DDTHH:mm) */
+function toLocalDatetime(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function AdminDebatePage() {
   const [stats, setStats] = useState<DebateStats | null>(null);
@@ -52,12 +77,14 @@ export default function AdminDebatePage() {
     mode: 'debate',
     max_turns: 6,
     turn_token_limit: 500,
+    scheduled_start_at: '',
+    scheduled_end_at: '',
   });
 
   const fetchData = () => {
     api.get<DebateStats>('/admin/debate/stats').then(setStats).catch(() => {});
     api
-      .get<{ items: Topic[]; total: number }>('/topics?limit=20')
+      .get<{ items: Topic[]; total: number }>('/topics?limit=50')
       .then((r) => setTopics(r.items))
       .catch(() => {});
   };
@@ -69,6 +96,15 @@ export default function AdminDebatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const startAt = toISOOrNull(form.scheduled_start_at);
+    const endAt = toISOOrNull(form.scheduled_end_at);
+
+    if (startAt && endAt && new Date(endAt) <= new Date(startAt)) {
+      setError('종료 시각은 시작 시각보다 뒤여야 합니다.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await api.post('/topics', {
@@ -77,9 +113,19 @@ export default function AdminDebatePage() {
         mode: form.mode,
         max_turns: form.max_turns,
         turn_token_limit: form.turn_token_limit,
+        scheduled_start_at: startAt,
+        scheduled_end_at: endAt,
       });
       setSuccess(true);
-      setForm({ title: '', description: '', mode: 'debate', max_turns: 6, turn_token_limit: 500 });
+      setForm({
+        title: '',
+        description: '',
+        mode: 'debate',
+        max_turns: 6,
+        turn_token_limit: 500,
+        scheduled_start_at: '',
+        scheduled_end_at: '',
+      });
       setShowForm(false);
       fetchData();
       setTimeout(() => setSuccess(false), 3000);
@@ -188,9 +234,7 @@ export default function AdminDebatePage() {
               </div>
 
               <div>
-                <label className="block text-xs text-text-muted mb-1">
-                  최대 턴수 (2–20)
-                </label>
+                <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
                 <input
                   type="number"
                   min={2}
@@ -202,9 +246,7 @@ export default function AdminDebatePage() {
               </div>
 
               <div>
-                <label className="block text-xs text-text-muted mb-1">
-                  턴 토큰 한도 (100–2000)
-                </label>
+                <label className="block text-xs text-text-muted mb-1">턴 토큰 한도 (100–2000)</label>
                 <input
                   type="number"
                   min={100}
@@ -214,6 +256,37 @@ export default function AdminDebatePage() {
                   onChange={(e) => setForm({ ...form, turn_token_limit: Number(e.target.value) })}
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
+              </div>
+            </div>
+
+            {/* 스케줄 설정 (관리자 전용) */}
+            <div className="border border-primary/20 rounded-lg p-3 bg-primary/5">
+              <p className="text-xs font-semibold text-primary mb-2 flex items-center gap-1.5">
+                <CalendarClock size={13} />
+                자동 스케줄 설정 (선택)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">시작 시각</label>
+                  <input
+                    type="datetime-local"
+                    value={form.scheduled_start_at}
+                    onChange={(e) => setForm({ ...form, scheduled_start_at: e.target.value })}
+                    className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                  />
+                  <p className="text-[10px] text-text-muted mt-0.5">비워두면 즉시 모집 시작</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">종료 시각</label>
+                  <input
+                    type="datetime-local"
+                    value={form.scheduled_end_at}
+                    min={form.scheduled_start_at || undefined}
+                    onChange={(e) => setForm({ ...form, scheduled_end_at: e.target.value })}
+                    className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                  />
+                  <p className="text-[10px] text-text-muted mt-0.5">도달 시 자동으로 토론 종료</p>
+                </div>
               </div>
             </div>
 
@@ -252,6 +325,7 @@ export default function AdminDebatePage() {
                   <th className="pb-2 pr-4 font-medium">제목</th>
                   <th className="pb-2 pr-4 font-medium">방식</th>
                   <th className="pb-2 pr-4 font-medium">상태</th>
+                  <th className="pb-2 pr-4 font-medium">스케줄</th>
                   <th className="pb-2 pr-4 font-medium text-right">턴수</th>
                   <th className="pb-2 pr-4 font-medium text-right">매치</th>
                   <th className="pb-2 font-medium text-right">대기</th>
@@ -261,22 +335,37 @@ export default function AdminDebatePage() {
                 {topics.map((t) => (
                   <tr key={t.id} className="hover:bg-bg transition-colors">
                     <td className="py-2 pr-4">
-                      <span className="font-medium text-text">{t.title}</span>
+                      <div className="flex items-center gap-1.5">
+                        {t.is_admin_topic && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold">
+                            공식
+                          </span>
+                        )}
+                        <span className="font-medium text-text">{t.title}</span>
+                      </div>
                       {t.description && (
                         <p className="text-xs text-text-muted mt-0.5 line-clamp-1">
                           {t.description}
                         </p>
                       )}
                     </td>
-                    <td className="py-2 pr-4 text-text-muted">
-                      {MODE_LABELS[t.mode] ?? t.mode}
-                    </td>
+                    <td className="py-2 pr-4 text-text-muted">{MODE_LABELS[t.mode] ?? t.mode}</td>
                     <td className={`py-2 pr-4 font-medium ${STATUS_COLORS[t.status] ?? ''}`}>
-                      {t.status === 'open'
-                        ? '모집 중'
-                        : t.status === 'in_progress'
-                          ? '진행 중'
-                          : '종료'}
+                      {STATUS_LABELS[t.status] ?? t.status}
+                    </td>
+                    <td className="py-2 pr-4 text-xs text-text-muted">
+                      {t.scheduled_start_at || t.scheduled_end_at ? (
+                        <div className="flex flex-col gap-0.5">
+                          {t.scheduled_start_at && (
+                            <span>시작: {toLocalDatetime(t.scheduled_start_at).replace('T', ' ')}</span>
+                          )}
+                          {t.scheduled_end_at && (
+                            <span>종료: {toLocalDatetime(t.scheduled_end_at).replace('T', ' ')}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-text-muted/50">-</span>
+                      )}
                     </td>
                     <td className="py-2 pr-4 text-right text-text-muted">{t.max_turns}</td>
                     <td className="py-2 pr-4 text-right text-text-muted">{t.match_count}</td>

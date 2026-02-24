@@ -1,6 +1,7 @@
 import logging
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.debate_match import DebateMatch
@@ -17,13 +18,26 @@ class DebateTopicService:
         self.db = db
 
     async def create_topic(self, data: TopicCreate, user: User) -> DebateTopic:
-        """관리자가 토론 주제 생성."""
+        """토론 주제 생성. 관리자는 스케줄 설정 가능, 일반 유저는 즉시 open."""
+        is_admin = user.role in ("admin", "superadmin")
+        now = datetime.now(UTC)
+
+        # 시작 시각이 미래이면 scheduled, 아니면 open
+        if data.scheduled_start_at and data.scheduled_start_at > now:
+            initial_status = "scheduled"
+        else:
+            initial_status = "open"
+
         topic = DebateTopic(
             title=data.title,
             description=data.description,
             mode=data.mode,
             max_turns=data.max_turns,
             turn_token_limit=data.turn_token_limit,
+            scheduled_start_at=data.scheduled_start_at if is_admin else None,
+            scheduled_end_at=data.scheduled_end_at if is_admin else None,
+            is_admin_topic=is_admin,
+            status=initial_status,
             created_by=user.id,
         )
         self.db.add(topic)
@@ -40,7 +54,9 @@ class DebateTopicService:
     async def list_topics(
         self, status: str | None = None, skip: int = 0, limit: int = 20
     ) -> tuple[list[dict], int]:
-        """토픽 목록 조회. 큐 인원/매치 수 포함."""
+        """토픽 목록 조회. 조회 전 스케줄 상태 자동 동기화."""
+        await self._sync_scheduled_topics()
+
         query = select(DebateTopic)
         count_query = select(func.count(DebateTopic.id))
 
@@ -68,6 +84,9 @@ class DebateTopicService:
                 "status": topic.status,
                 "max_turns": topic.max_turns,
                 "turn_token_limit": topic.turn_token_limit,
+                "scheduled_start_at": topic.scheduled_start_at,
+                "scheduled_end_at": topic.scheduled_end_at,
+                "is_admin_topic": topic.is_admin_topic,
                 "queue_count": queue_count,
                 "match_count": match_count,
                 "created_at": topic.created_at,
@@ -84,20 +103,39 @@ class DebateTopicService:
         if topic is None:
             raise ValueError("Topic not found")
 
-        if data.title is not None:
-            topic.title = data.title
-        if data.description is not None:
-            topic.description = data.description
-        if data.status is not None:
-            topic.status = data.status
-        if data.max_turns is not None:
-            topic.max_turns = data.max_turns
-        if data.turn_token_limit is not None:
-            topic.turn_token_limit = data.turn_token_limit
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(topic, field, value)
 
         await self.db.commit()
         await self.db.refresh(topic)
         return topic
+
+    async def _sync_scheduled_topics(self) -> None:
+        """scheduled_start_at/end_at 기준으로 status 자동 갱신."""
+        now = datetime.now(UTC)
+
+        # scheduled → open (시작 시각 도달)
+        await self.db.execute(
+            update(DebateTopic)
+            .where(
+                DebateTopic.status == "scheduled",
+                DebateTopic.scheduled_start_at <= now,
+            )
+            .values(status="open")
+        )
+
+        # open/in_progress → closed (종료 시각 초과)
+        await self.db.execute(
+            update(DebateTopic)
+            .where(
+                DebateTopic.status.in_(["open", "in_progress"]),
+                DebateTopic.scheduled_end_at.isnot(None),
+                DebateTopic.scheduled_end_at <= now,
+            )
+            .values(status="closed")
+        )
+
+        await self.db.commit()
 
     async def _count_queue(self, topic_id) -> int:
         result = await self.db.execute(
