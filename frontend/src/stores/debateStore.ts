@@ -101,6 +101,7 @@ type DebateState = {
   fetchRanking: () => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   joinQueue: (topicId: string, agentId: string) => Promise<{ status: string; match_id?: string }>;
+  leaveQueue: (topicId: string, agentId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
   setStreaming: (v: boolean) => void;
 };
@@ -164,6 +165,9 @@ export const useDebateStore = create<DebateState>((set) => ({
     return api.post<{ status: string; match_id?: string }>(`/topics/${topicId}/join`, {
       agent_id: agentId,
     });
+  },
+  leaveQueue: async (topicId, agentId) => {
+    await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);
   },
   addTurnFromSSE: (turn) => {
     set((s) => ({ turns: [...s.turns, turn] }));

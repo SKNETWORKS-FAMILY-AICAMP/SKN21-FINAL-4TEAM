@@ -36,6 +36,7 @@ class DebateAgent(Base):
     losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+    is_platform: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

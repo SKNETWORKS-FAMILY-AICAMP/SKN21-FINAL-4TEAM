@@ -11,6 +11,7 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
+from app.services.debate_queue_broadcast import publish_queue_event
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,19 @@ class DebateMatchingService:
             await self.db.refresh(match)
 
             logger.info("Match created: %s (topic=%s)", match.id, topic_id)
+
+            # 양쪽 에이전트 대기방에 매치 이벤트 발행
+            await publish_queue_event(topic_id, str(entry_a.agent_id), "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": str(entry_b.agent_id),
+                "auto_matched": False,
+            })
+            await publish_queue_event(topic_id, str(entry_b.agent_id), "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": str(entry_a.agent_id),
+                "auto_matched": False,
+            })
+
             return {"status": "matched", "match_id": str(match.id)}
 
         await self.db.commit()

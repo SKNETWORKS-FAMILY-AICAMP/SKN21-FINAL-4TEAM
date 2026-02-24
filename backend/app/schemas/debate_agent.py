@@ -116,6 +116,7 @@ class AgentResponse(BaseModel):
     losses: int
     draws: int
     is_active: bool
+    is_platform: bool = False
     is_connected: bool = False
     template_id: UUID | None
     customizations: dict | None

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MessageSquare, Users, ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -13,6 +13,7 @@ import type { DebateTopic, DebateMatch } from '@/stores/debateStore';
 
 export default function TopicDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { joinQueue } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
   const addToast = useToastStore((s) => s.addToast);
@@ -35,14 +36,13 @@ export default function TopicDetailPage() {
     setJoining(true);
     try {
       const result = await joinQueue(id, selectedAgent);
-      if (result.status === 'matched') {
-        addToast('success', '매치가 생성되었습니다!');
+      if (result.status === 'matched' && result.match_id) {
+        router.push(`/debate/matches/${result.match_id}`);
       } else {
-        addToast('info', '대기열에 등록되었습니다.');
+        router.push(`/debate/waiting/${id}?agent=${selectedAgent}`);
       }
     } catch {
       addToast('error', '참가에 실패했습니다.');
-    } finally {
       setJoining(false);
     }
   };

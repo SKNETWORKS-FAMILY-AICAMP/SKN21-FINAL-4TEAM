@@ -1,15 +1,21 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.models.debate_agent import DebateAgent
+from app.models.debate_match import DebateMatch
+from app.models.debate_match_queue import DebateMatchQueue
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
 from app.services.debate_engine import run_debate
 from app.services.debate_matching_service import DebateMatchingService
+from app.services.debate_queue_broadcast import publish_queue_event, subscribe_queue
 from app.services.debate_topic_service import DebateTopicService
 
 router = APIRouter()
@@ -73,6 +79,118 @@ async def join_topic_queue(
         asyncio.create_task(run_debate(result["match_id"]))
 
     return result
+
+
+@router.get("/{topic_id}/queue/stream")
+async def queue_stream(
+    topic_id: str,
+    agent_id: str = Query(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """대기방 SSE 스트림. 매치/타임아웃/취소 이벤트를 수신."""
+    # 에이전트 소유권 검증
+    agent_result = await db.execute(
+        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+
+    # 큐 등록 여부 검증
+    queue_result = await db.execute(
+        select(DebateMatchQueue).where(
+            DebateMatchQueue.topic_id == topic_id,
+            DebateMatchQueue.agent_id == agent_id,
+        )
+    )
+    if queue_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent not in queue")
+
+    return StreamingResponse(
+        subscribe_queue(topic_id, agent_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/{topic_id}/queue/status")
+async def queue_status(
+    topic_id: str,
+    agent_id: str = Query(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """현재 큐 상태 조회."""
+    # 에이전트 소유권 검증
+    agent_result = await db.execute(
+        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+
+    # 큐 엔트리 확인
+    queue_result = await db.execute(
+        select(DebateMatchQueue).where(
+            DebateMatchQueue.topic_id == topic_id,
+            DebateMatchQueue.agent_id == agent_id,
+        )
+    )
+    entry = queue_result.scalar_one_or_none()
+    if entry is not None:
+        # 큐 내 대기 위치 계산
+        pos_result = await db.execute(
+            select(DebateMatchQueue)
+            .where(DebateMatchQueue.topic_id == topic_id)
+            .order_by(DebateMatchQueue.joined_at)
+        )
+        all_entries = list(pos_result.scalars().all())
+        position = next((i + 1 for i, e in enumerate(all_entries) if str(e.agent_id) == agent_id), 1)
+        return {"status": "queued", "position": position, "joined_at": entry.joined_at.isoformat()}
+
+    # 이미 매칭됐는지 확인 (최근 매치)
+    match_result = await db.execute(
+        select(DebateMatch).where(
+            DebateMatch.topic_id == topic_id,
+            (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id),
+        ).order_by(DebateMatch.created_at.desc()).limit(1)
+    )
+    match = match_result.scalar_one_or_none()
+    if match is not None:
+        return {"status": "matched", "match_id": str(match.id)}
+
+    return {"status": "not_in_queue"}
+
+
+@router.delete("/{topic_id}/queue")
+async def leave_queue(
+    topic_id: str,
+    agent_id: str = Query(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """큐 탈퇴. 대기 취소 이벤트 발행."""
+    # 에이전트 소유권 검증
+    agent_result = await db.execute(
+        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+
+    queue_result = await db.execute(
+        select(DebateMatchQueue).where(
+            DebateMatchQueue.topic_id == topic_id,
+            DebateMatchQueue.agent_id == agent_id,
+        )
+    )
+    entry = queue_result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not in queue")
+
+    await db.delete(entry)
+    await db.commit()
+
+    await publish_queue_event(topic_id, agent_id, "cancelled", {})
+    return {"status": "left"}
 
 
 def _topic_response(topic) -> dict:

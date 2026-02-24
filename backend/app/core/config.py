@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     debate_orchestrator_model: str = "gpt-4o"
     debate_agent_connect_timeout: int = 30  # 로컬 에이전트 접속 대기 (초)
     debate_ws_heartbeat_interval: int = 15  # WebSocket 핑 간격 (초)
+    debate_queue_timeout_seconds: int = 120  # 대기 큐 자동 매칭 타임아웃 (초)
 
     # Rate Limiting
     rate_limit_auth: int = 20
