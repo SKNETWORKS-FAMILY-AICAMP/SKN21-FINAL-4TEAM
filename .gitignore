@@ -52,3 +52,6 @@ frontend/public/assets/live2d/CubismSdkForWeb/
 
 # Database
 *.sql.bak
+
+# 로컬 에이전트 (로컬 전용, 배포/git 제외)
+agents/
