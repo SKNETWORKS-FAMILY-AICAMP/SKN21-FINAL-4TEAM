@@ -77,6 +77,7 @@ export default function AdminDebatePage() {
     mode: 'debate',
     max_turns: 6,
     turn_token_limit: 500,
+    tools_enabled: true,
     scheduled_start_at: '',
     scheduled_end_at: '',
   });
@@ -113,6 +114,7 @@ export default function AdminDebatePage() {
         mode: form.mode,
         max_turns: form.max_turns,
         turn_token_limit: form.turn_token_limit,
+        tools_enabled: form.tools_enabled,
         scheduled_start_at: startAt,
         scheduled_end_at: endAt,
       });
@@ -123,6 +125,7 @@ export default function AdminDebatePage() {
         mode: 'debate',
         max_turns: 6,
         turn_token_limit: 500,
+        tools_enabled: true,
         scheduled_start_at: '',
         scheduled_end_at: '',
       });
@@ -257,6 +260,29 @@ export default function AdminDebatePage() {
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
               </div>
+            </div>
+
+            {/* 툴 사용 허용 토글 */}
+            <div className="flex items-center justify-between border border-border rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-text">툴 사용 허용</p>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  calculator, stance_tracker, opponent_summary, turn_info
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, tools_enabled: !form.tools_enabled })}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  form.tools_enabled ? 'bg-emerald-500' : 'bg-text-muted/30'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                    form.tools_enabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* 스케줄 설정 (관리자 전용) */}

@@ -390,7 +390,8 @@ async def _execute_turn(
                 my_previous_claims=my_claims,
                 opponent_previous_claims=opponent_claims,
                 time_limit_seconds=settings.debate_turn_timeout_seconds,
-                available_tools=AVAILABLE_TOOLS,
+                # tools_enabled=False이면 빈 목록 전달 → 에이전트가 툴 사용 불가
+                available_tools=AVAILABLE_TOOLS if topic.tools_enabled else [],
             )
             tool_ctx = ToolContext(
                 turn_number=turn_number,
@@ -535,11 +536,17 @@ def _build_messages(
 ) -> list[dict]:
     """에이전트에게 보낼 메시지 컨텍스트 구성."""
     side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
+    tools_line = (
+        "툴 사용: 허용됨 (calculator, stance_tracker, opponent_summary, turn_info)"
+        if topic.tools_enabled
+        else "툴 사용: 이 토론에서는 툴 사용이 금지되어 있습니다. tool_used는 반드시 null로 설정하세요."
+    )
     context = f"""당신은 토론 참가자입니다. 포지션: {side_label}
 
 토론 주제: {topic.title}
 설명: {topic.description or '없음'}
 현재 턴: {turn_number} / {topic.max_turns}
+{tools_line}
 
 {RESPONSE_SCHEMA_INSTRUCTION}"""
 

@@ -20,6 +20,7 @@ type DebateTopic = {
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
   is_admin_topic: boolean;
+  tools_enabled: boolean;
   queue_count: number;
   match_count: number;
   created_at: string;
@@ -81,6 +82,7 @@ type TopicCreatePayload = {
   mode?: string;
   max_turns?: number;
   turn_token_limit?: number;
+  tools_enabled?: boolean;
   scheduled_start_at?: string | null;
   scheduled_end_at?: string | null;
 };

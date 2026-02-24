@@ -12,6 +12,7 @@ class TopicCreate(BaseModel):
     turn_token_limit: int = Field(500, ge=100, le=2000)
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
+    tools_enabled: bool = True
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "TopicCreate":
@@ -29,6 +30,7 @@ class TopicUpdate(BaseModel):
     turn_token_limit: int | None = Field(None, ge=100, le=2000)
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
+    tools_enabled: bool | None = None
 
 
 class TopicResponse(BaseModel):
@@ -42,6 +44,7 @@ class TopicResponse(BaseModel):
     scheduled_start_at: datetime | None
     scheduled_end_at: datetime | None
     is_admin_topic: bool
+    tools_enabled: bool
     queue_count: int = 0
     match_count: int = 0
     created_at: datetime

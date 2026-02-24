@@ -87,6 +87,7 @@ def _topic_response(topic) -> dict:
         "scheduled_start_at": topic.scheduled_start_at,
         "scheduled_end_at": topic.scheduled_end_at,
         "is_admin_topic": topic.is_admin_topic,
+        "tools_enabled": topic.tools_enabled,
         "queue_count": 0,
         "match_count": 0,
         "created_at": topic.created_at,

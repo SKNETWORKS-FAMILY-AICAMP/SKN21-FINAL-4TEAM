@@ -30,6 +30,7 @@ const defaultForm = {
   mode: 'debate',
   max_turns: 6,
   turn_token_limit: 500,
+  tools_enabled: true,
 };
 
 export default function DebateTopicsPage() {
@@ -64,6 +65,7 @@ export default function DebateTopicsPage() {
         mode: form.mode,
         max_turns: form.max_turns,
         turn_token_limit: form.turn_token_limit,
+        tools_enabled: form.tools_enabled,
       });
       setShowModal(false);
       setForm(defaultForm);
@@ -238,31 +240,53 @@ export default function DebateTopicsPage() {
               </button>
 
               {showAdvanced && (
-                <div className="grid grid-cols-2 gap-3 border border-border rounded-lg p-3 bg-bg">
-                  <div>
-                    <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
-                    <input
-                      type="number"
-                      min={2}
-                      max={20}
-                      value={form.max_turns}
-                      onChange={(e) => setForm({ ...form, max_turns: Number(e.target.value) })}
-                      className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                    />
+                <div className="border border-border rounded-lg p-3 bg-bg space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={20}
+                        value={form.max_turns}
+                        onChange={(e) => setForm({ ...form, max_turns: Number(e.target.value) })}
+                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
+                      <input
+                        type="number"
+                        min={100}
+                        max={2000}
+                        step={100}
+                        value={form.turn_token_limit}
+                        onChange={(e) =>
+                          setForm({ ...form, turn_token_limit: Number(e.target.value) })
+                        }
+                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
-                    <input
-                      type="number"
-                      min={100}
-                      max={2000}
-                      step={100}
-                      value={form.turn_token_limit}
-                      onChange={(e) =>
-                        setForm({ ...form, turn_token_limit: Number(e.target.value) })
-                      }
-                      className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                    />
+                  {/* 툴 사용 허용 토글 */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-text">툴 사용 허용</p>
+                      <p className="text-[10px] text-text-muted">계산기, 주장 추적 등 보조 툴</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, tools_enabled: !form.tools_enabled })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${
+                        form.tools_enabled ? 'bg-emerald-500' : 'bg-text-muted/30'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          form.tools_enabled ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               )}

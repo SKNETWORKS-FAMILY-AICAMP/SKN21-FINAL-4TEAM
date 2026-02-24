@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MessageSquare, Users, Clock, Shield, CalendarClock } from 'lucide-react';
+import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench } from 'lucide-react';
 import type { DebateTopic } from '@/stores/debateStore';
 import { getTimeAgo } from '@/lib/format';
 
@@ -80,6 +80,18 @@ export function TopicCard({ topic }: Props) {
       <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
         <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
           {MODE_LABELS[topic.mode] || topic.mode}
+        </span>
+        {/* 툴 허용 여부 배지 */}
+        <span
+          title={topic.tools_enabled ? '툴 사용 허용' : '툴 사용 금지'}
+          className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded font-medium ${
+            topic.tools_enabled
+              ? 'bg-emerald-500/10 text-emerald-500'
+              : 'bg-red-500/10 text-red-400'
+          }`}
+        >
+          <Wrench size={10} />
+          {topic.tools_enabled ? '툴 허용' : '툴 금지'}
         </span>
         <span className="flex items-center gap-1">
           <Users size={12} />
