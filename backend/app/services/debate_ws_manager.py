@@ -203,10 +203,15 @@ class WSConnectionManager:
             logger.debug("Unknown message type from agent %s: %s", agent_id, msg_type)
 
     async def send_match_ready(self, agent_id: UUID, msg: WSMatchReady) -> None:
+        """match_ready 전송. 로컬 연결이 없으면 Redis pub/sub으로 다른 워커에 전달."""
         ws = self._connections.get(agent_id)
-        if ws is None:
-            raise ConnectionError(f"Agent {agent_id} is not connected")
-        await ws.send_json(msg.model_dump(mode="json"))
+        if ws is not None:
+            await ws.send_json(msg.model_dump(mode="json"))
+        else:
+            is_present = await self.check_presence(agent_id)
+            if not is_present:
+                raise ConnectionError(f"Agent {agent_id} is not connected")
+            await self._publish_to_agent(agent_id, msg.model_dump(mode="json"))
 
     async def send_error(self, agent_id: UUID, message: str, code: str | None = None) -> None:
         ws = self._connections.get(agent_id)
@@ -316,10 +321,13 @@ class WSConnectionManager:
             logger.debug("Failed to publish message to agent %s via Redis", agent_id)
 
     async def wait_for_connection(self, agent_id: UUID, timeout: float) -> bool:
-        """에이전트 접속 대기. timeout 초 내에 접속하면 True."""
+        """에이전트 접속 대기. timeout 초 내에 접속하면 True.
+
+        멀티 워커 환경에서 다른 워커에 연결된 에이전트도 Redis 프레즌스로 감지.
+        """
         deadline = asyncio.get_event_loop().time() + timeout
         while asyncio.get_event_loop().time() < deadline:
-            if self.is_connected(agent_id):
+            if await self.check_presence(agent_id):
                 return True
             await asyncio.sleep(0.5)
-        return self.is_connected(agent_id)
+        return await self.check_presence(agent_id)

@@ -51,8 +51,12 @@ export default function AgentProfilePage() {
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-              <Bot size={24} />
+            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden">
+              {agent.image_url ? (
+                <img src={agent.image_url} alt={agent.name} className="w-full h-full object-cover" />
+              ) : (
+                <Bot size={26} />
+              )}
             </div>
             <div>
               <h1 className="text-lg font-bold text-text">{agent.name}</h1>
@@ -62,10 +66,11 @@ export default function AgentProfilePage() {
             </div>
           </div>
           <Link
-            href={`/debate/agents/${agent.id}`}
-            className="p-2 text-text-muted hover:text-text"
+            href={`/debate/agents/${agent.id}/edit`}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"
           >
-            <Edit size={16} />
+            <Edit size={13} />
+            수정
           </Link>
         </div>
 

@@ -70,6 +70,7 @@ class DebateAgentService:
             provider=data.provider,
             model_id=data.model_id,
             encrypted_api_key=encrypted_key,
+            image_url=data.image_url,
             template_id=template.id if template else None,
             customizations=validated,
         )
@@ -107,6 +108,8 @@ class DebateAgentService:
             agent.model_id = data.model_id
         if data.api_key is not None and agent.provider != "local":
             agent.encrypted_api_key = encrypt_api_key(data.api_key)
+        if data.image_url is not None:
+            agent.image_url = data.image_url
 
         # 새 버전 생성이 필요한지 판단
         new_prompt: str | None = None

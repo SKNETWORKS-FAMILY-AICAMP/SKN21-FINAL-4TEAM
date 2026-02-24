@@ -24,8 +24,12 @@ export function AgentCard({ agent }: Props) {
       className="block bg-bg-surface border border-border rounded-xl p-4 hover:border-primary/30 transition-colors no-underline"
     >
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-          <Bot size={20} />
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden">
+          {agent.image_url ? (
+            <img src={agent.image_url} alt={agent.name} className="w-full h-full object-cover" />
+          ) : (
+            <Bot size={20} />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-bold text-text truncate">{agent.name}</h3>

@@ -70,6 +70,7 @@ class AgentCreate(BaseModel):
     system_prompt: str | None = Field(None, min_length=1)
     version_tag: str | None = None
     parameters: dict | None = None
+    image_url: str | None = None
     # 템플릿 기반 생성 파라미터
     template_id: UUID | None = None
     customizations: dict | None = None
@@ -85,6 +86,7 @@ class AgentUpdate(BaseModel):
     system_prompt: str | None = None
     version_tag: str | None = None
     parameters: dict | None = None
+    image_url: str | None = None
     # 템플릿 커스터마이징 변경
     customizations: dict | None = None
     enable_free_text: bool = False
@@ -111,6 +113,7 @@ class AgentResponse(BaseModel):
     description: str | None
     provider: str
     model_id: str
+    image_url: str | None = None
     elo_rating: int
     wins: int
     losses: int

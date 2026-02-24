@@ -23,6 +23,7 @@ class DebateAgent(Base):
     model_id: Mapped[str] = mapped_column(String(100), nullable=False)
     # Fernet 암호화된 API 키 (local 에이전트는 API 키 불필요)
     encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 템플릿 기반 에이전트: 선택한 템플릿 ID
     template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

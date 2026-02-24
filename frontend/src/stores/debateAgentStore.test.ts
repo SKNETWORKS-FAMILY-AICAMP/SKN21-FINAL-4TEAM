@@ -92,6 +92,7 @@ describe('debateAgentStore', () => {
           wins: 0,
           losses: 0,
           draws: 0,
+          image_url: null,
           is_active: true,
           is_connected: false,
           template_id: null,

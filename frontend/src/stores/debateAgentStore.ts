@@ -8,6 +8,7 @@ type DebateAgent = {
   description: string | null;
   provider: string;
   model_id: string;
+  image_url: string | null;
   elo_rating: number;
   wins: number;
   losses: number;
@@ -85,6 +86,7 @@ type CreateAgentPayload = {
   system_prompt?: string;
   version_tag?: string;
   parameters?: Record<string, unknown>;
+  image_url?: string;
   // 템플릿 기반 생성 필드
   template_id?: string;
   customizations?: Record<string, unknown>;

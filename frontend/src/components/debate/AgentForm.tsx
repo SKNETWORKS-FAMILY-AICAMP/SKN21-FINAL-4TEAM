@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Camera, X } from 'lucide-react';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import type { AgentTemplate, CreateAgentPayload } from '@/stores/debateAgentStore';
 import { useToastStore } from '@/stores/toastStore';
+import { api } from '@/lib/api';
 import { TemplateCard } from './TemplateCard';
 import { TemplateCustomizer } from './TemplateCustomizer';
 
 type Props = {
-  initialData?: Partial<CreateAgentPayload> & { id?: string };
+  initialData?: Partial<CreateAgentPayload> & { id?: string; image_url?: string };
   isEdit?: boolean;
 };
 
@@ -31,6 +33,8 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   const [step, setStep] = useState<1 | 2>(isEdit ? 2 : 1);
   const [submitting, setSubmitting] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // 선택된 템플릿 (null이면 BYOK/로컬 모드)
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
@@ -46,6 +50,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
     api_key: '',
     system_prompt: initialData?.system_prompt || '',
     version_tag: '',
+    image_url: initialData?.image_url || '',
   });
 
   const isLocal = form.provider === 'local';
@@ -72,6 +77,21 @@ export function AgentForm({ initialData, isEdit }: Props) {
   // 커스터마이징 단일 값 변경
   const handleCustomizationChange = (key: string, value: unknown) => {
     setCustomizations((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageUploading(true);
+    try {
+      const resp = await api.upload<{ url: string }>('/uploads/image', file);
+      setForm((f) => ({ ...f, image_url: resp.url }));
+    } catch {
+      addToast('error', '이미지 업로드에 실패했습니다.');
+    } finally {
+      setImageUploading(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
   };
 
   // Step 1 → Step 2 진행 (템플릿 or BYOK/로컬 선택 완료)
@@ -106,6 +126,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
         provider: form.provider,
         model_id: form.model_id || (isLocal ? 'custom' : undefined),
         version_tag: form.version_tag || undefined,
+        image_url: form.image_url || undefined,
       };
 
       if (useTemplate && selectedTemplate) {
@@ -228,6 +249,49 @@ export function AgentForm({ initialData, isEdit }: Props) {
         </div>
       )}
 
+      {/* 프로필 이미지 */}
+      <div>
+        <label className="text-sm font-semibold text-text block mb-2">프로필 이미지</label>
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-xl border-2 border-dashed border-border bg-bg flex items-center justify-center overflow-hidden shrink-0">
+            {form.image_url ? (
+              <img src={form.image_url} alt="프로필" className="w-full h-full object-cover" />
+            ) : (
+              <Camera size={24} className="text-text-muted" />
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={imageUploading}
+              className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text
+                hover:bg-border/20 disabled:opacity-50 transition-colors"
+            >
+              {imageUploading ? '업로드 중...' : '이미지 선택'}
+            </button>
+            {form.image_url && (
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, image_url: '' }))}
+                className="flex items-center gap-1 text-xs text-text-muted hover:text-red-500 transition-colors"
+              >
+                <X size={12} />
+                제거
+              </button>
+            )}
+            <p className="text-[11px] text-text-muted">JPG, PNG, WebP · 최대 5MB</p>
+          </div>
+        </div>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+      </div>
+
       {/* 기본 정보 */}
       <div>
         <label className="text-sm font-semibold text-text block mb-1">에이전트 이름 *</label>
@@ -312,13 +376,25 @@ export function AgentForm({ initialData, isEdit }: Props) {
       </div>
 
       {isLocal ? (
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <p className="text-sm font-semibold text-text mb-1">로컬 에이전트 안내</p>
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+          <p className="text-sm font-semibold text-text">로컬 에이전트 안내</p>
           <p className="text-xs text-text-muted">
-            로컬 에이전트는 내 PC에서 LLM을 직접 구동합니다. API 키와 시스템 프롬프트는 로컬에서
-            관리하므로 플랫폼에 입력할 필요가 없습니다. 에이전트 생성 후 상세 페이지에서 WebSocket
-            연결 정보를 확인하세요.
+            내 PC에서 Ollama로 LLM을 직접 구동하는 에이전트입니다. API 키·시스템 프롬프트는
+            로컬에서 관리하므로 플랫폼에 입력할 필요 없습니다.
           </p>
+          <ol className="text-xs text-text-muted list-decimal list-inside space-y-0.5">
+            <li>
+              에이전트 생성 후 <strong className="text-text">상세 페이지</strong>에서 설정 파일
+              및 실행 명령어를 확인하세요.
+            </li>
+            <li>
+              <code className="text-text bg-primary/10 px-1 rounded">
+                python ollama_agent.py --config my_agent.json
+              </code>{' '}
+              으로 에이전트를 실행합니다.
+            </li>
+            <li>토론 토픽에서 이 에이전트를 선택하고 큐에 참가하면 자동으로 토론이 시작됩니다.</li>
+          </ol>
         </div>
       ) : (
         <>

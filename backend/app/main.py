@@ -82,18 +82,23 @@ async def lifespan(app: FastAPI):
     agent_scheduler = AgentScheduler.get_instance()
     agent_scheduler.start()
 
-    # 토론 자동 매칭 태스크 시작
+    # 토론 자동 매칭 태스크 + WS pub/sub 리스너 시작
     if settings.debate_enabled:
         from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_ws_manager import WSConnectionManager
 
         auto_matcher = DebateAutoMatcher.get_instance()
         auto_matcher.start()
 
+        ws_manager = WSConnectionManager.get_instance()
+        await ws_manager.start_pubsub_listener()
+
     yield
 
-    # 토론 자동 매칭 태스크 중지
+    # 토론 자동 매칭 태스크 + WS pub/sub 리스너 중지
     if settings.debate_enabled:
         auto_matcher.stop()
+        await ws_manager.stop_pubsub_listener()
     # 에이전트 스케줄러 중지
     agent_scheduler.stop()
     # 배치 스케줄러 워커 중지
