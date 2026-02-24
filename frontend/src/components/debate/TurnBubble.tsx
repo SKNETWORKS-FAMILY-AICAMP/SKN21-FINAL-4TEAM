@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight } from 'lucide-react';
 import type { TurnLog } from '@/stores/debateStore';
 
 type Props = {
@@ -17,19 +18,48 @@ const ACTION_STYLES: Record<string, string> = {
   summarize: 'bg-text-muted/10 text-text-muted',
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  argue: '주장',
+  rebut: '반박',
+  concede: '인정',
+  question: '질문',
+  summarize: '요약',
+};
+
+/** 벌점 키 → 한국어 레이블 + 설명 */
+const PENALTY_INFO: Record<string, { label: string; desc: string }> = {
+  schema_violation:    { label: 'JSON 형식 위반',   desc: '응답이 요구된 JSON 스키마를 따르지 않음' },
+  repetition:         { label: '주장 반복',          desc: '이전 턴과 지나치게 유사한 주장을 반복함' },
+  prompt_injection:   { label: '프롬프트 인젝션',    desc: '시스템 지시를 무력화하려는 패턴이 감지됨' },
+  timeout:            { label: '응답 시간 초과',     desc: '제한 시간 내에 응답하지 못함' },
+  false_source:       { label: '허위 출처 인용',     desc: '존재하지 않는 데이터·인용을 사용함' },
+  ad_hominem:         { label: '인신공격',           desc: '논거 대신 상대방을 직접 비하하는 표현 사용' },
+  human_suspicion:    { label: '인간 개입 의심',     desc: '응답 패턴이 AI가 아닌 인간의 개입을 암시함' },
+};
+
+/** 툴 이름 → 한국어 */
+const TOOL_LABELS: Record<string, string> = {
+  calculator:       '계산기',
+  stance_tracker:   '주장 추적',
+  opponent_summary: '상대 요약',
+  turn_info:        '턴 정보',
+};
+
 export function TurnBubble({ turn, agentAName, agentBName }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
+  const [toolExpanded, setToolExpanded] = useState(false);
 
   return (
     <div className={`flex ${isAgentA ? 'justify-start' : 'justify-end'}`}>
       <div
-        className={`max-w-[80%] rounded-xl p-3 ${
+        className={`max-w-[82%] rounded-xl p-3 ${
           isAgentA
             ? 'bg-bg-surface border border-border rounded-tl-none'
             : 'bg-primary/5 border border-primary/20 rounded-tr-none'
         }`}
       >
+        {/* 헤더: 이름 + 액션 배지 + 턴 번호 */}
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-xs font-bold text-text">{name}</span>
           <span
@@ -37,50 +67,97 @@ export function TurnBubble({ turn, agentAName, agentBName }: Props) {
               ACTION_STYLES[turn.action] || ACTION_STYLES.argue
             }`}
           >
-            {turn.action}
+            {ACTION_LABELS[turn.action] || turn.action}
           </span>
           <span className="text-[10px] text-text-muted">Turn {turn.turn_number}</span>
         </div>
 
+        {/* 주장 본문 */}
         <p className="text-sm text-text whitespace-pre-wrap">{turn.claim}</p>
 
+        {/* 근거 */}
         {turn.evidence && (
           <div className="mt-2 px-2.5 py-1.5 bg-bg rounded border border-border">
-            <span className="text-[10px] text-text-muted font-semibold uppercase">Evidence</span>
+            <span className="text-[10px] text-text-muted font-semibold">근거</span>
             <p className="text-xs text-text-secondary mt-0.5">{turn.evidence}</p>
           </div>
         )}
 
-        {turn.penalty_total > 0 && (
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-danger">
-            <AlertTriangle size={12} />
-            <span>-{turn.penalty_total} 벌점</span>
-            {turn.penalties && (
-              <span className="text-text-muted">
-                ({Object.entries(turn.penalties).map(([k, v]) => `${k}: -${v}`).join(', ')})
+        {/* 툴 사용 내역 */}
+        {turn.tool_used && (
+          <div className="mt-2 border border-emerald-500/20 rounded-lg bg-emerald-500/5 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setToolExpanded(!toolExpanded)}
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left"
+            >
+              <Wrench size={11} className="text-emerald-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-emerald-600">
+                툴 사용: {TOOL_LABELS[turn.tool_used] || turn.tool_used}
               </span>
+              {toolExpanded ? (
+                <ChevronDown size={11} className="text-emerald-500 ml-auto" />
+              ) : (
+                <ChevronRight size={11} className="text-emerald-500 ml-auto" />
+              )}
+            </button>
+            {toolExpanded && turn.tool_result && (
+              <div className="px-2.5 pb-2 border-t border-emerald-500/20">
+                <p className="text-[10px] text-text-muted mt-1 mb-0.5">실행 결과</p>
+                <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono bg-bg rounded p-1.5 overflow-x-auto">
+                  {turn.tool_result}
+                </pre>
+              </div>
             )}
           </div>
         )}
 
+        {/* 벌점 내역 */}
+        {turn.penalty_total > 0 && turn.penalties && (
+          <div className="mt-2 border border-red-500/20 rounded-lg bg-red-500/5 px-2.5 py-2 space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-red-400">
+              <AlertTriangle size={12} />
+              <span>벌점 -{turn.penalty_total}점</span>
+            </div>
+            {Object.entries(turn.penalties).map(([key, value]) => {
+              const info = PENALTY_INFO[key];
+              return (
+                <div key={key} className="flex items-start gap-2 text-[11px]">
+                  <span className="shrink-0 text-red-400 font-semibold mt-0.5">-{value}</span>
+                  <div>
+                    <span className="text-text font-medium">
+                      {info?.label || key}
+                    </span>
+                    {info?.desc && (
+                      <span className="text-text-muted ml-1">— {info.desc}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 인간 의심 경보 */}
         {turn.human_suspicion_score > 30 && (
           <div
             className={`mt-2 flex items-center gap-1.5 text-xs ${
-              turn.human_suspicion_score > 60
-                ? 'text-red-500'
-                : 'text-yellow-500'
+              turn.human_suspicion_score > 60 ? 'text-red-500' : 'text-yellow-500'
             }`}
           >
             <ShieldAlert size={12} />
             <span>
-              {turn.human_suspicion_score > 60 ? '높은 의심' : '의심'}
-              {' '}(점수: {turn.human_suspicion_score})
+              인간 개입 {turn.human_suspicion_score > 60 ? '강한 의심' : '의심'}
+            </span>
+            <span className="text-text-muted text-[10px]">
+              (점수: {turn.human_suspicion_score})
             </span>
           </div>
         )}
 
-        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-text-muted">
-          <span>{turn.input_tokens + turn.output_tokens} tokens</span>
+        {/* 메타 정보 */}
+        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-text-muted">
+          <span>{turn.input_tokens + turn.output_tokens} 토큰</span>
           {turn.response_time_ms != null && (
             <span>{(turn.response_time_ms / 1000).toFixed(1)}s</span>
           )}
