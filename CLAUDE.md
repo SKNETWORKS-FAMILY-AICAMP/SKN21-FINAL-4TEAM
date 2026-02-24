@@ -184,6 +184,37 @@ Project_New/
 | 관리자 대시보드 조회 | 0.3–1s | ≤ 2s |
 | 사용량 조회 | 0.1–0.5s | ≤ 1s |
 
+## Deployment (EC2)
+
+| 항목 | 값 |
+|---|---|
+| **EC2 퍼블릭 IP** | `54.180.202.169` (Elastic IP 없음 — 재시작 시 변경) |
+| **리전** | ap-northeast-2 (서울) |
+| **인스턴스** | t4g.small |
+| **SSH 키** | `~/Downloads/chatbot-key.pem` |
+| **배포 경로** | `/opt/chatbot` |
+| **OS 사용자** | `ubuntu` |
+
+### 배포 명령
+
+```bash
+# 코드 업데이트 배포 (일반적인 경우)
+ssh -i ~/Downloads/chatbot-key.pem ubuntu@54.180.202.169 \
+  "cd /opt/chatbot && git pull && bash deploy.sh update"
+
+# 최초 배포 (서버 초기 세팅)
+ssh -i ~/Downloads/chatbot-key.pem ubuntu@54.180.202.169 \
+  "cd /opt/chatbot && sudo bash deploy.sh"
+
+# 서비스 상태 확인
+ssh -i ~/Downloads/chatbot-key.pem ubuntu@54.180.202.169 \
+  "cd /opt/chatbot && docker compose -f docker-compose.prod.yml ps"
+
+# 백엔드 로그 실시간 확인
+ssh -i ~/Downloads/chatbot-key.pem ubuntu@54.180.202.169 \
+  "cd /opt/chatbot && docker compose -f docker-compose.prod.yml logs -f backend"
+```
+
 ## Reference Documents
 
 - `docs/아키텍처 문서.md` — 시스템 아키텍처, 데이터 흐름, 보안, DB, 배포 구조
