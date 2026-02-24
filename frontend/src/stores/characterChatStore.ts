@@ -15,7 +15,7 @@ type ChatSession = {
   max_turns: number;
   current_turn: number;
   is_public: boolean;
-  age_rating: string;
+  age_rating: 'all' | '15+' | '18+';
   total_cost: number;
   requested_at: string;
   started_at: string | null;

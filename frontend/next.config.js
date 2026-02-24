@@ -44,14 +44,16 @@ const nextConfig = {
   },
 
   async rewrites() {
+    // 개발: localhost:8000 / Docker 프로덕션: http://backend:8000 (BACKEND_URL 환경변수)
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
       {
         source: '/uploads/:path*',
-        destination: 'http://localhost:8000/uploads/:path*',
+        destination: `${backendUrl}/uploads/:path*`,
       },
     ];
   },

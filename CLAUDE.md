@@ -625,7 +625,15 @@ Project_New/
 
 ### 테스트 실행
 
+**반드시 Python 가상환경(venv)을 활성화한 후 테스트를 실행한다.** 시스템 Python(3.10 등)으로 실행하면 `datetime.UTC` 등 Python 3.12+ 전용 API에서 ImportError가 발생한다.
+
 ```bash
+# 가상환경 활성화 (Windows)
+backend/.venv/Scripts/activate
+
+# 가상환경 활성화 (Linux/Mac)
+source backend/.venv/bin/activate
+
 # 백엔드 전체 테스트
 pytest backend/tests/ -v --cov=app --cov-report=term-missing
 

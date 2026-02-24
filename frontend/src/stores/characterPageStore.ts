@@ -13,7 +13,7 @@ type CharacterPage = {
   display_name: string;
   description: string | null;
   greeting_message: string | null;
-  age_rating: string;
+  age_rating: 'all' | '15+' | '18+';
   category: string | null;
   tags: string[] | null;
   background_image_url: string | null;

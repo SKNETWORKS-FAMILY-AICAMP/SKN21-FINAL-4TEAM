@@ -30,6 +30,8 @@ class TurnLogResponse(BaseModel):
     tool_result: str | None
     penalties: dict | None
     penalty_total: int
+    human_suspicion_score: int = 0
+    response_time_ms: int | None = None
     input_tokens: int
     output_tokens: int
     created_at: datetime

@@ -9,6 +9,7 @@ from app.models.debate_agent import DebateAgent
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.user import User
 from app.schemas.debate_agent import AgentCreate, AgentUpdate
+from app.services.debate_template_service import DebateTemplateService
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,49 @@ class DebateAgentService:
         self.db = db
 
     async def create_agent(self, data: AgentCreate, user: User) -> DebateAgent:
-        """에이전트 생성 + 초기 버전 자동 생성."""
-        # local 에이전트는 API 키 불필요
+        """에이전트 생성 + 초기 버전 자동 생성.
+
+        생성 경로:
+        1. template_id 있음 → 템플릿 로드 → 커스터마이징 검증 → 프롬프트 조립
+        2. template_id 없음 + non-local → BYOK (system_prompt + api_key 필수)
+        3. template_id 없음 + local → 로컬 에이전트 (API 키 불필요)
+        """
+        is_local = data.provider == "local"
+        template_service = DebateTemplateService(self.db)
+
+        # API 키 처리
         encrypted_key = None
-        if data.provider != "local" and data.api_key:
+        if not is_local and data.api_key:
             encrypted_key = encrypt_api_key(data.api_key)
-        elif data.provider != "local":
+        elif not is_local and data.template_id is None:
+            # BYOK 경로: api_key 필수
             raise ValueError("API key is required for non-local providers")
+
+        # 시스템 프롬프트 결정
+        if data.template_id is not None:
+            # 템플릿 기반 경로
+            template = await template_service.get_template(data.template_id)
+            if template is None:
+                raise ValueError("Template not found")
+            if not template.is_active:
+                raise ValueError("Template is not active")
+
+            validated = template_service.validate_customizations(
+                template, data.customizations, data.enable_free_text
+            )
+            prompt = template_service.assemble_prompt(template, validated)
+        elif is_local:
+            # 로컬 에이전트 기본값
+            template = None
+            validated = None
+            prompt = data.system_prompt or "(로컬 에이전트 — 프롬프트 로컬 관리)"
+        else:
+            # BYOK 경로
+            if not data.system_prompt:
+                raise ValueError("System prompt is required for API agents")
+            template = None
+            validated = None
+            prompt = data.system_prompt
 
         agent = DebateAgent(
             owner_id=user.id,
@@ -33,6 +70,8 @@ class DebateAgentService:
             provider=data.provider,
             model_id=data.model_id,
             encrypted_api_key=encrypted_key,
+            template_id=template.id if template else None,
+            customizations=validated,
         )
         self.db.add(agent)
         await self.db.flush()
@@ -41,7 +80,7 @@ class DebateAgentService:
             agent_id=agent.id,
             version_number=1,
             version_tag=data.version_tag or "v1",
-            system_prompt=data.system_prompt,
+            system_prompt=prompt,
             parameters=data.parameters,
         )
         self.db.add(version)
@@ -50,7 +89,7 @@ class DebateAgentService:
         return agent
 
     async def update_agent(self, agent_id: str, data: AgentUpdate, user: User) -> DebateAgent:
-        """에이전트 수정. 프롬프트 변경 시 새 버전 자동 생성."""
+        """에이전트 수정. 프롬프트/커스터마이징 변경 시 새 버전 자동 생성."""
         result = await self.db.execute(
             select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
         )
@@ -69,8 +108,25 @@ class DebateAgentService:
         if data.api_key is not None and agent.provider != "local":
             agent.encrypted_api_key = encrypt_api_key(data.api_key)
 
-        # 프롬프트 변경 시 새 버전 생성
-        if data.system_prompt is not None:
+        # 새 버전 생성이 필요한지 판단
+        new_prompt: str | None = None
+
+        if data.customizations is not None and agent.template_id is not None:
+            # 템플릿 커스터마이징 변경 → 프롬프트 재조립
+            template_service = DebateTemplateService(self.db)
+            template = await template_service.get_template(agent.template_id)
+            if template is None:
+                raise ValueError("Associated template not found")
+            validated = template_service.validate_customizations(
+                template, data.customizations, data.enable_free_text
+            )
+            new_prompt = template_service.assemble_prompt(template, validated)
+            agent.customizations = validated
+        elif data.system_prompt is not None:
+            # 직접 프롬프트 수정 (BYOK/로컬)
+            new_prompt = data.system_prompt
+
+        if new_prompt is not None:
             max_ver = await self.db.execute(
                 select(func.coalesce(func.max(DebateAgentVersion.version_number), 0)).where(
                     DebateAgentVersion.agent_id == agent.id
@@ -81,7 +137,7 @@ class DebateAgentService:
                 agent_id=agent.id,
                 version_number=next_ver,
                 version_tag=data.version_tag or f"v{next_ver}",
-                system_prompt=data.system_prompt,
+                system_prompt=new_prompt,
                 parameters=data.parameters,
             )
             self.db.add(version)
@@ -126,7 +182,7 @@ class DebateAgentService:
         result = await self.db.execute(
             select(DebateAgent, User.nickname)
             .join(User, DebateAgent.owner_id == User.id)
-            .where(DebateAgent.is_active == True)
+            .where(DebateAgent.is_active == True)  # noqa: E712
             .order_by(DebateAgent.elo_rating.desc())
             .offset(offset)
             .limit(limit)

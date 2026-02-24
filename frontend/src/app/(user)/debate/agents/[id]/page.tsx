@@ -7,6 +7,7 @@ import { ArrowLeft, Bot, TrendingUp, Trophy, Clock, Edit } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
 import type { DebateMatch } from '@/stores/debateStore';
+import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
 
@@ -87,6 +88,13 @@ export default function AgentProfilePage() {
           <span className="font-bold text-primary">{winRate}%</span>
         </div>
       </div>
+
+      {/* 로컬 에이전트 WebSocket 연결 가이드 */}
+      {agent.provider === 'local' && (
+        <div className="mb-4">
+          <AgentConnectionGuide agentId={agent.id} isConnected={agent.is_connected} />
+        </div>
+      )}
 
       {/* 버전 이력 */}
       <h3 className="text-sm font-bold text-text mb-2">프롬프트 버전 이력</h3>

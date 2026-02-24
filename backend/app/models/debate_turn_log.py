@@ -30,6 +30,8 @@ class DebateTurnLog(Base):
     raw_response: Mapped[dict | None] = mapped_column(JSONB)
     penalties: Mapped[dict | None] = mapped_column(JSONB)
     penalty_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    human_suspicion_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    response_time_ms: Mapped[int | None] = mapped_column(Integer)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(

@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# CPU-only torch 먼저 설치 (CUDA 패키지 ~3GB 절감). requirements.txt의 torch>=2.7.0 은 이미 충족되므로 재설치 안 됨.
+RUN pip install --no-cache-dir "torch>=2.7.0" --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 

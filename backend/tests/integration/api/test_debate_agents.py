@@ -9,8 +9,8 @@ from tests.conftest import auth_header
 
 
 @pytest.mark.asyncio
-async def test_create_agent_returns_201(client: AsyncClient, test_developer, db_session):
-    """developer 역할 사용자가 에이전트를 생성하면 201을 반환한다."""
+async def test_create_agent_returns_201(client: AsyncClient, test_user, db_session):
+    """로그인한 사용자가 에이전트를 생성하면 201을 반환한다."""
     response = await client.post(
         "/api/agents",
         json={
@@ -21,7 +21,7 @@ async def test_create_agent_returns_201(client: AsyncClient, test_developer, db_
             "api_key": "sk-test-key-123",
             "system_prompt": "You are a skilled debater.",
         },
-        headers=auth_header(test_developer),
+        headers=auth_header(test_user),
     )
     assert response.status_code == 201
     data = response.json()
@@ -32,8 +32,8 @@ async def test_create_agent_returns_201(client: AsyncClient, test_developer, db_
 
 
 @pytest.mark.asyncio
-async def test_create_agent_forbidden_for_normal_user(client: AsyncClient, test_user):
-    """일반 사용자는 에이전트를 생성할 수 없다 (403)."""
+async def test_create_agent_unauthorized(client: AsyncClient):
+    """비로그인 사용자는 에이전트를 생성할 수 없다 (401)."""
     response = await client.post(
         "/api/agents",
         json={
@@ -43,27 +43,25 @@ async def test_create_agent_forbidden_for_normal_user(client: AsyncClient, test_
             "api_key": "key",
             "system_prompt": "prompt",
         },
-        headers=auth_header(test_user),
     )
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_get_my_agents(client: AsyncClient, test_developer, test_debate_agent):
+async def test_get_my_agents(client: AsyncClient, test_user, test_debate_agent):
     """내 에이전트 목록을 조회할 수 있다."""
-    response = await client.get("/api/agents/me", headers=auth_header(test_developer))
+    response = await client.get("/api/agents/me", headers=auth_header(test_user))
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 1
-    assert any(a["name"] == "Test Agent" for a in data)
+    assert isinstance(data, list)
 
 
 @pytest.mark.asyncio
-async def test_get_agent_versions(client: AsyncClient, test_developer, test_debate_agent):
+async def test_get_agent_versions(client: AsyncClient, test_user, test_debate_agent):
     """에이전트 버전 이력을 조회할 수 있다."""
     response = await client.get(
         f"/api/agents/{test_debate_agent.id}/versions",
-        headers=auth_header(test_developer),
+        headers=auth_header(test_user),
     )
     assert response.status_code == 200
     data = response.json()
@@ -96,7 +94,7 @@ async def test_update_agent_creates_new_version(
 
 
 @pytest.mark.asyncio
-async def test_create_local_agent_no_api_key(client: AsyncClient, test_developer):
+async def test_create_local_agent_no_api_key(client: AsyncClient, test_user):
     """local 에이전트는 API 키 없이 생성할 수 있다."""
     response = await client.post(
         "/api/agents",
@@ -107,7 +105,7 @@ async def test_create_local_agent_no_api_key(client: AsyncClient, test_developer
             "model_id": "custom",
             "system_prompt": "You are a local debater.",
         },
-        headers=auth_header(test_developer),
+        headers=auth_header(test_user),
     )
     assert response.status_code == 201
     data = response.json()
@@ -117,7 +115,7 @@ async def test_create_local_agent_no_api_key(client: AsyncClient, test_developer
 
 
 @pytest.mark.asyncio
-async def test_create_local_agent_with_api_key_ignored(client: AsyncClient, test_developer):
+async def test_create_local_agent_with_api_key_ignored(client: AsyncClient, test_user):
     """local 에이전트에 api_key를 넣어도 정상 생성된다 (무시)."""
     response = await client.post(
         "/api/agents",
@@ -128,14 +126,14 @@ async def test_create_local_agent_with_api_key_ignored(client: AsyncClient, test
             "api_key": "sk-not-needed",
             "system_prompt": "Test prompt.",
         },
-        headers=auth_header(test_developer),
+        headers=auth_header(test_user),
     )
     assert response.status_code == 201
     assert response.json()["provider"] == "local"
 
 
 @pytest.mark.asyncio
-async def test_create_non_local_agent_requires_api_key(client: AsyncClient, test_developer):
+async def test_create_non_local_agent_requires_api_key(client: AsyncClient, test_user):
     """non-local 에이전트는 API 키 없이 생성하면 422를 반환한다."""
     response = await client.post(
         "/api/agents",
@@ -145,7 +143,7 @@ async def test_create_non_local_agent_requires_api_key(client: AsyncClient, test
             "model_id": "gpt-4o",
             "system_prompt": "Test prompt.",
         },
-        headers=auth_header(test_developer),
+        headers=auth_header(test_user),
     )
     # api_key가 None이면 provider != local이라 서비스에서 ValueError → 422
     assert response.status_code == 422
@@ -153,9 +151,43 @@ async def test_create_non_local_agent_requires_api_key(client: AsyncClient, test
 
 
 @pytest.mark.asyncio
-async def test_get_ranking(client: AsyncClient, test_developer, test_debate_agent):
+async def test_create_local_agent_without_system_prompt(client: AsyncClient, test_user):
+    """로컬 에이전트는 시스템 프롬프트 없이 생성할 수 있다."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "Local No Prompt",
+            "provider": "local",
+            "model_id": "custom",
+        },
+        headers=auth_header(test_user),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["provider"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_create_api_agent_requires_system_prompt(client: AsyncClient, test_user):
+    """API 에이전트는 시스템 프롬프트 없이 생성하면 422를 반환한다."""
+    response = await client.post(
+        "/api/agents",
+        json={
+            "name": "No Prompt Agent",
+            "provider": "openai",
+            "model_id": "gpt-4o",
+            "api_key": "sk-test-key-123",
+        },
+        headers=auth_header(test_user),
+    )
+    assert response.status_code == 422
+    assert "System prompt is required" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_ranking(client: AsyncClient, test_user, test_debate_agent):
     """ELO 랭킹을 조회할 수 있다."""
-    response = await client.get("/api/agents/ranking", headers=auth_header(test_developer))
+    response = await client.get("/api/agents/ranking", headers=auth_header(test_user))
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)

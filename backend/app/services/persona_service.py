@@ -128,6 +128,9 @@ class PersonaService:
                 detail="Adult verification required for 18+ content",
             )
 
+        # public 페르소나는 자동 승인 (관리자가 이후 block 가능)
+        auto_approved = data.visibility == "public"
+
         persona = Persona(
             created_by=user.id,
             type="user_created",
@@ -150,8 +153,8 @@ class PersonaService:
             age_rating=data.age_rating,
             visibility=data.visibility,
             is_anonymous=data.is_anonymous,
-            moderation_status="pending",
-            is_active=False,
+            moderation_status="approved" if auto_approved else "pending",
+            is_active=auto_approved,
         )
         self.db.add(persona)
         await self.db.commit()
@@ -176,9 +179,10 @@ class PersonaService:
             setattr(persona, field, value)
         persona.updated_at = datetime.now(UTC)
 
-        # 내용 변경 시 모더레이션 재심 필요
+        # public으로 변경/유지 시 자동 승인 (관리자가 이후 block 가능)
         if persona.visibility == "public":
-            persona.moderation_status = "pending"
+            persona.moderation_status = "approved"
+            persona.is_active = True
 
         await self.db.commit()
         await self.db.refresh(persona)

@@ -44,7 +44,12 @@ export default function MatchPage() {
         </h1>
         <div className="flex items-center justify-between mt-3">
           <div className="text-center flex-1">
-            <div className="text-sm font-bold text-blue-500">{currentMatch.agent_a.name}</div>
+            <Link
+              href={`/debate/agents/${currentMatch.agent_a.id}`}
+              className="text-sm font-bold text-blue-500 no-underline hover:underline"
+            >
+              {currentMatch.agent_a.name}
+            </Link>
             <div className="text-[11px] text-text-muted">
               ELO {currentMatch.agent_a.elo_rating}
             </div>
@@ -66,7 +71,12 @@ export default function MatchPage() {
             </span>
           </div>
           <div className="text-center flex-1">
-            <div className="text-sm font-bold text-orange-500">{currentMatch.agent_b.name}</div>
+            <Link
+              href={`/debate/agents/${currentMatch.agent_b.id}`}
+              className="text-sm font-bold text-orange-500 no-underline hover:underline"
+            >
+              {currentMatch.agent_b.name}
+            </Link>
             <div className="text-[11px] text-text-muted">
               ELO {currentMatch.agent_b.elo_rating}
             </div>

@@ -61,16 +61,6 @@ async def require_superadmin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_developer(user: User = Depends(get_current_user)) -> User:
-    """개발자 이상 역할(developer/admin/superadmin)만 통과시킨다."""
-    if user.role not in ("developer", "admin", "superadmin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Developer access required",
-            headers={"X-Error-Code": "DEBATE_DEVELOPER_REQUIRED"},
-        )
-    return user
-
 
 async def require_adult_verified(user: User = Depends(get_current_user)) -> User:
     """성인인증 완료 사용자만 통과시킨다."""

@@ -2,11 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_developer
+from app.core.deps import get_current_user
 from app.models.debate_agent import DebateAgent
 from app.models.user import User
-from app.schemas.debate_agent import AgentCreate, AgentResponse, AgentUpdate, AgentVersionResponse
+from app.schemas.debate_agent import (
+    AgentCreate,
+    AgentResponse,
+    AgentTemplateResponse,
+    AgentUpdate,
+    AgentVersionResponse,
+)
 from app.services.debate_agent_service import DebateAgentService
+from app.services.debate_template_service import DebateTemplateService
 from app.services.debate_ws_manager import WSConnectionManager
 
 router = APIRouter()
@@ -21,13 +28,24 @@ def _agent_response(agent: DebateAgent) -> AgentResponse:
     return resp
 
 
+@router.get("/templates", response_model=list[AgentTemplateResponse])
+async def list_templates(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """활성 에이전트 템플릿 목록 조회. base_system_prompt는 미노출."""
+    service = DebateTemplateService(db)
+    templates = await service.list_active_templates()
+    return [AgentTemplateResponse.model_validate(t) for t in templates]
+
+
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     data: AgentCreate,
-    user: User = Depends(require_developer),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """에이전트 생성. developer 이상 역할 필요."""
+    """에이전트 생성. 로그인한 사용자 누구나 가능."""
     service = DebateAgentService(db)
     try:
         agent = await service.create_agent(data, user)
@@ -38,7 +56,7 @@ async def create_agent(
 
 @router.get("/me", response_model=list[AgentResponse])
 async def get_my_agents(
-    user: User = Depends(require_developer),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """내 에이전트 목록 조회."""
@@ -76,10 +94,10 @@ async def get_agent(
 async def update_agent(
     agent_id: str,
     data: AgentUpdate,
-    user: User = Depends(require_developer),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """에이전트 수정. 프롬프트 변경 시 새 버전 자동 생성."""
+    """에이전트 수정. 프롬프트/커스터마이징 변경 시 새 버전 자동 생성."""
     service = DebateAgentService(db)
     try:
         agent = await service.update_agent(agent_id, data, user)

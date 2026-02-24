@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import select, update
@@ -20,7 +21,9 @@ from app.services.debate_agent_service import DebateAgentService
 from app.schemas.debate_ws import WSMatchReady, WSTurnRequest
 from app.services.debate_broadcast import publish_event
 from app.services.debate_orchestrator import DebateOrchestrator, calculate_elo
+from app.services.debate_tool_executor import AVAILABLE_TOOLS, DebateToolExecutor, ToolContext
 from app.services.debate_ws_manager import WSConnectionManager
+from app.services.human_detection import HumanDetectionAnalyzer, TurnContext as HumanTurnContext
 from app.services.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
@@ -42,6 +45,7 @@ PENALTY_PROMPT_INJECTION = 10
 PENALTY_TIMEOUT = 5
 PENALTY_FALSE_SOURCE = 7
 PENALTY_AD_HOMINEM = 8
+PENALTY_HUMAN_SUSPICION = 15
 
 # 프롬프트 인젝션 패턴
 _INJECTION_PATTERNS = [
@@ -229,15 +233,26 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     total_penalty_a = 0
     total_penalty_b = 0
 
+    # 휴먼 감지용 이전 턴 데이터 (로컬 에이전트별)
+    elapsed_history_a: list[float] = []
+    length_history_a: list[int] = []
+    elapsed_history_b: list[float] = []
+    length_history_b: list[int] = []
+
     # 턴 루프
     for turn_num in range(1, topic.max_turns + 1):
         # Agent A 턴
         turn_a = await _execute_turn(
             db, client, match, topic, turn_num, "agent_a",
             agent_a, version_a, key_a, claims_a, claims_b,
+            elapsed_history_a, length_history_a,
+            my_accumulated_penalty=total_penalty_a,
         )
         total_penalty_a += turn_a.penalty_total
         claims_a.append(turn_a.claim)
+        if turn_a.response_time_ms is not None:
+            elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
+            length_history_a.append(len(turn_a.claim))
 
         await publish_event(str(match.id), "turn", {
             "turn_number": turn_num,
@@ -247,15 +262,22 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "evidence": turn_a.evidence,
             "penalties": turn_a.penalties,
             "penalty_total": turn_a.penalty_total,
+            "human_suspicion_score": turn_a.human_suspicion_score,
+            "response_time_ms": turn_a.response_time_ms,
         })
 
         # Agent B 턴
         turn_b = await _execute_turn(
             db, client, match, topic, turn_num, "agent_b",
             agent_b, version_b, key_b, claims_b, claims_a,
+            elapsed_history_b, length_history_b,
+            my_accumulated_penalty=total_penalty_b,
         )
         total_penalty_b += turn_b.penalty_total
         claims_b.append(turn_b.claim)
+        if turn_b.response_time_ms is not None:
+            elapsed_history_b.append(turn_b.response_time_ms / 1000.0)
+            length_history_b.append(len(turn_b.claim))
 
         await publish_event(str(match.id), "turn", {
             "turn_number": turn_num,
@@ -265,6 +287,8 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "evidence": turn_b.evidence,
             "penalties": turn_b.penalties,
             "penalty_total": turn_b.penalty_total,
+            "human_suspicion_score": turn_b.human_suspicion_score,
+            "response_time_ms": turn_b.response_time_ms,
         })
 
     # 벌점 집계
@@ -331,8 +355,11 @@ async def _execute_turn(
     api_key: str,
     my_claims: list[str],
     opponent_claims: list[str],
+    prev_elapsed_history: list[float] | None = None,
+    prev_length_history: list[int] | None = None,
+    my_accumulated_penalty: int = 0,
 ) -> DebateTurnLog:
-    """단일 턴 실행. 벌점 감지 포함."""
+    """단일 턴 실행. 벌점 감지 + 휴먼 감지 포함."""
     system_prompt = version.system_prompt if version else "You are a debate participant."
 
     penalties: dict[str, int] = {}
@@ -343,10 +370,12 @@ async def _execute_turn(
     raw_response = None
     input_tokens = 0
     output_tokens = 0
+    human_suspicion_score = 0
+    response_time_ms: int | None = None
 
     try:
         if agent.provider == "local":
-            # WebSocket 경유 턴 요청
+            # WebSocket 경유 턴 요청 — 응답 시간 측정
             ws_manager = WSConnectionManager.get_instance()
             ws_request = WSTurnRequest(
                 match_id=match.id,
@@ -359,12 +388,28 @@ async def _execute_turn(
                 my_previous_claims=my_claims,
                 opponent_previous_claims=opponent_claims,
                 time_limit_seconds=settings.debate_turn_timeout_seconds,
+                available_tools=AVAILABLE_TOOLS,
             )
+            tool_ctx = ToolContext(
+                turn_number=turn_number,
+                max_turns=topic.max_turns,
+                speaker=speaker,
+                my_previous_claims=my_claims,
+                opponent_previous_claims=opponent_claims,
+                my_penalty_total=my_accumulated_penalty,
+            )
+            start_time = time.monotonic()
             ws_response = await asyncio.wait_for(
-                ws_manager.request_turn(match.id, agent.id, ws_request),
+                ws_manager.request_turn(
+                    match.id, agent.id, ws_request,
+                    tool_executor=DebateToolExecutor(),
+                    tool_context=tool_ctx,
+                ),
                 timeout=settings.debate_turn_timeout_seconds,
             )
-            # local 에이전트는 이미 구조화된 응답을 보내므로 schema 검증 불필요
+            elapsed = time.monotonic() - start_time
+            response_time_ms = int(elapsed * 1000)
+
             action = ws_response.action
             claim = ws_response.claim
             evidence = ws_response.evidence
@@ -375,11 +420,29 @@ async def _execute_turn(
                 "tool_used": ws_response.tool_used,
                 "tool_result": ws_response.tool_result,
             }
+
+            # 휴먼 감지 분석
+            analyzer = HumanDetectionAnalyzer()
+            detection = analyzer.analyze_turn(
+                response_text=claim,
+                elapsed_seconds=elapsed,
+                turn_context=HumanTurnContext(
+                    turn_number=turn_number,
+                    previous_elapsed=prev_elapsed_history or [],
+                    previous_lengths=prev_length_history or [],
+                ),
+            )
+            human_suspicion_score = detection.score
+
+            if detection.score >= 61:
+                penalties["human_suspicion"] = PENALTY_HUMAN_SUSPICION
+                penalty_total += PENALTY_HUMAN_SUSPICION
         else:
-            # 기존 BYOK 로직
+            # 기존 BYOK 로직 — 응답 시간 측정
             messages = _build_messages(
                 system_prompt, topic, turn_number, speaker, my_claims, opponent_claims
             )
+            start_time = time.monotonic()
             result = await asyncio.wait_for(
                 client.generate_byok(
                     provider=agent.provider,
@@ -391,6 +454,9 @@ async def _execute_turn(
                 ),
                 timeout=settings.debate_turn_timeout_seconds,
             )
+            elapsed = time.monotonic() - start_time
+            response_time_ms = int(elapsed * 1000)
+
             response_text = result["content"]
             parsed = validate_response_schema(response_text)
             input_tokens = result.get("input_tokens", 0)
@@ -447,6 +513,8 @@ async def _execute_turn(
         raw_response=raw_response,
         penalties=penalties if penalties else None,
         penalty_total=penalty_total,
+        human_suspicion_score=human_suspicion_score,
+        response_time_ms=response_time_ms,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )

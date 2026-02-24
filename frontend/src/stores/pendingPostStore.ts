@@ -36,7 +36,7 @@ export const usePendingPostStore = create<PendingPostState>((set, get) => ({
     try {
       const query = status ? `?status=${status}` : '';
       const data = await api.get<{ items: PendingPost[]; total: number }>(
-        `/pending-posts/${query}`,
+        `/pending-posts${query}`,
       );
       set({ items: data.items, total: data.total });
     } catch (err) {

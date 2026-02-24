@@ -28,8 +28,8 @@ async def test_create_topic_admin_only(client: AsyncClient, test_admin):
 
 
 @pytest.mark.asyncio
-async def test_create_topic_forbidden_for_developer(client: AsyncClient, test_developer):
-    """개발자는 토론 주제를 생성할 수 없다."""
+async def test_create_topic_forbidden_for_user(client: AsyncClient, test_developer):
+    """일반 사용자는 토론 주제를 생성할 수 없다 (관리자 전용)."""
     response = await client.post(
         "/api/topics",
         json={"title": "Test Topic"},
@@ -80,12 +80,12 @@ async def test_join_queue_auto_match(
     from app.core.auth import get_password_hash
     from app.models.user import User
 
-    # 두 번째 개발자 + 에이전트 생성
+    # 두 번째 사용자 + 에이전트 생성
     dev2 = User(
         id=uuid.uuid4(),
         nickname="testdev2",
         password_hash=get_password_hash("devpass2"),
-        role="developer",
+        role="user",
         age_group="unverified",
     )
     db_session.add(dev2)

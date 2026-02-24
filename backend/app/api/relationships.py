@@ -21,7 +21,7 @@ async def list_relationships(
     return await svc.list_by_user(user.id)
 
 
-@router.get("/{persona_id}", response_model=RelationshipResponse)
+@router.get("/{persona_id}")
 async def get_relationship(
     persona_id: uuid.UUID,
     user: User = Depends(get_current_user),
@@ -30,5 +30,12 @@ async def get_relationship(
     svc = RelationshipService(db)
     rel = await svc.get(user.id, persona_id)
     if rel is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relationship not found")
+        # 아직 대화 이력 없음 → 기본 stranger 상태 반환 (404 대신 200)
+        return {
+            "user_id": str(user.id),
+            "persona_id": str(persona_id),
+            "affection_level": 0,
+            "relationship_stage": "stranger",
+            "interaction_count": 0,
+        }
     return rel

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_admin, require_developer
+from app.core.deps import get_current_user, require_admin
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
@@ -57,7 +57,7 @@ async def get_topic(
 async def join_topic_queue(
     topic_id: str,
     data: JoinQueueRequest,
-    user: User = Depends(require_developer),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """토픽 큐 참가. 2명 도달 시 자동 매치 생성."""

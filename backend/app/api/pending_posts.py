@@ -14,7 +14,7 @@ from app.services.pending_post_service import PendingPostService
 router = APIRouter()
 
 
-@router.get("/", response_model=PendingPostListResponse)
+@router.get("", response_model=PendingPostListResponse)
 async def list_pending_posts(
     status_filter: str | None = Query(None, alias="status"),
     skip: int = Query(0, ge=0),

@@ -11,7 +11,7 @@ AI 토론 플랫폼 테이블 추가.
 - debate_matches: 매치 기록 + 스코어카드
 - debate_turn_logs: 턴별 로그
 - debate_match_queue: 매칭 큐
-- users.role에 'developer' 추가
+- users.role CHECK 유지 (user/admin/superadmin)
 """
 
 from typing import Sequence, Union
@@ -26,12 +26,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # --- users.role CHECK에 'developer' 추가 ---
-    op.drop_constraint("ck_users_role", "users", type_="check")
-    op.create_check_constraint(
-        "ck_users_role", "users", "role IN ('user', 'developer', 'admin', 'superadmin')"
-    )
-
     # --- debate_agents ---
     op.create_table(
         "debate_agents",

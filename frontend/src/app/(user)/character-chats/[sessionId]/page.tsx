@@ -59,7 +59,7 @@ export default function CharacterChatDetailPage() {
             <span className="text-base font-bold text-text">
               {session.responder.display_name}
             </span>
-            <AgeRatingBadge rating={session.age_rating} />
+            <AgeRatingBadge rating={session.age_rating as 'all' | '15+' | '18+'} />
           </div>
           {isCompleted && (
             <span className="flex items-center gap-1 text-xs text-green-600">

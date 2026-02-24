@@ -9,7 +9,7 @@ const mockSession = {
   max_turns: 10,
   current_turn: 2,
   is_public: true,
-  age_rating: 'all',
+  age_rating: 'all' as const,
   total_cost: 0.001,
   requested_at: '2026-01-01T00:00:00Z',
   started_at: '2026-01-01T00:01:00Z',

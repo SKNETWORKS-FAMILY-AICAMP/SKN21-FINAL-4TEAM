@@ -43,6 +43,6 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
-        CheckConstraint("role IN ('user', 'developer', 'admin', 'superadmin')", name="ck_users_role"),
+        CheckConstraint("role IN ('user', 'admin', 'superadmin')", name="ck_users_role"),
         CheckConstraint("age_group IN ('minor_safe', 'adult_verified', 'unverified')", name="ck_users_age_group"),
     )

@@ -53,6 +53,8 @@ type TurnLog = {
   tool_result: string | null;
   penalties: Record<string, number> | null;
   penalty_total: number;
+  human_suspicion_score: number;
+  response_time_ms: number | null;
   input_tokens: number;
   output_tokens: number;
   created_at: string;

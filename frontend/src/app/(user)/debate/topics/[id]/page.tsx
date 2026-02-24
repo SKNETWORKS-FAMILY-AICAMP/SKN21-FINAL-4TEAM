@@ -36,12 +36,12 @@ export default function TopicDetailPage() {
     try {
       const result = await joinQueue(id, selectedAgent);
       if (result.status === 'matched') {
-        addToast('매치가 생성되었습니다!', 'success');
+        addToast('success', '매치가 생성되었습니다!');
       } else {
-        addToast('대기열에 등록되었습니다.', 'info');
+        addToast('info', '대기열에 등록되었습니다.');
       }
     } catch {
-      addToast('참가에 실패했습니다.', 'error');
+      addToast('error', '참가에 실패했습니다.');
     } finally {
       setJoining(false);
     }

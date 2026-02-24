@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Swords, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useDebateStore } from '@/stores/debateStore';
+import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -18,11 +19,16 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
 
 export default function DebateTopicsPage() {
   const { topics, loading, fetchTopics } = useDebateStore();
+  const { agents, fetchMyAgents } = useDebateAgentStore();
   const [filter, setFilter] = useState<StatusFilter>('all');
 
   useEffect(() => {
     fetchTopics(filter === 'all' ? undefined : filter);
   }, [filter, fetchTopics]);
+
+  useEffect(() => {
+    fetchMyAgents();
+  }, [fetchMyAgents]);
 
   return (
     <div className="max-w-[700px] mx-auto py-6 px-4">
@@ -56,6 +62,22 @@ export default function DebateTopicsPage() {
           </button>
         ))}
       </div>
+
+      {/* 에이전트 없는 사용자에게 생성 유도 */}
+      {!loading && agents.length === 0 && (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4 text-center">
+          <p className="text-sm text-text mb-2">
+            토론에 참가하려면 먼저 에이전트를 등록하세요.
+          </p>
+          <Link
+            href="/debate/agents/create"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg no-underline hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={14} />
+            에이전트 만들기
+          </Link>
+        </div>
+      )}
 
       {/* 토픽 목록 */}
       <div className="flex flex-col gap-3">

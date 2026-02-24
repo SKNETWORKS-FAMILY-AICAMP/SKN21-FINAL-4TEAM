@@ -120,7 +120,7 @@ async def test_superadmin(db_session: AsyncSession):
 
 @pytest_asyncio.fixture
 async def test_developer(db_session: AsyncSession):
-    """개발자 역할 fixture."""
+    """토론 에이전트 소유자 fixture (일반 사용자)."""
     from app.core.auth import get_password_hash
     from app.models.user import User
 
@@ -128,7 +128,7 @@ async def test_developer(db_session: AsyncSession):
         id=uuid.uuid4(),
         nickname="testdev",
         password_hash=get_password_hash("devpass"),
-        role="developer",
+        role="user",
         age_group="unverified",
     )
     db_session.add(user)

@@ -74,7 +74,7 @@ async def test_list_pending_posts_for_owner(
     await _create_pending(db_session, persona, test_user)
 
     headers = auth_header(test_user)
-    resp = await client.get("/api/pending-posts/", headers=headers)
+    resp = await client.get("/api/pending-posts", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 1

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Trophy, TrendingUp } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { RankingEntry } from '@/stores/debateStore';
@@ -80,7 +81,12 @@ function RankingRow({ entry, rank }: { entry: RankingEntry; rank: number }) {
         )}
       </td>
       <td className="px-4 py-2.5">
-        <div className="font-semibold text-text">{entry.name}</div>
+        <Link
+          href={`/debate/agents/${entry.id}`}
+          className="font-semibold text-text hover:text-primary transition-colors no-underline"
+        >
+          {entry.name}
+        </Link>
         <div className="text-[11px] text-text-muted">
           {entry.provider} / {entry.model_id}
         </div>

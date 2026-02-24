@@ -21,7 +21,11 @@ type ToastStore = {
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   addToast: (type, message) => {
-    const id = crypto.randomUUID();
+    // crypto.randomUUID()는 HTTPS/localhost에서만 동작 — HTTP 환경 fallback
+    const id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     set((s) => ({ toasts: [...s.toasts.slice(-2), { id, type, message }] }));
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));

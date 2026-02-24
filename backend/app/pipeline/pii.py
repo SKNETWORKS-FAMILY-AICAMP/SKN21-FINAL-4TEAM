@@ -95,7 +95,8 @@ class PIIDetector:
 
             self.anonymizer = AnonymizerEngine()
             logger.info("PII Detector initialized.")
-        except Exception as e:
+        except BaseException as e:
+            # spaCy 모델 다운로드 실패 시 SystemExit(1) 발생 → BaseException으로 잡아야 함
             logger.warning("PII Detector init failed — fallback to regex-only: %s", e)
             self.analyzer = None
             self.anonymizer = None

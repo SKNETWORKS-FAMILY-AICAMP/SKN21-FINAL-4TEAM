@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import type { TurnLog } from '@/stores/debateStore';
 
 type Props = {
@@ -63,8 +63,27 @@ export function TurnBubble({ turn, agentAName, agentBName }: Props) {
           </div>
         )}
 
-        <div className="mt-1.5 text-[10px] text-text-muted">
-          {turn.input_tokens + turn.output_tokens} tokens
+        {turn.human_suspicion_score > 30 && (
+          <div
+            className={`mt-2 flex items-center gap-1.5 text-xs ${
+              turn.human_suspicion_score > 60
+                ? 'text-red-500'
+                : 'text-yellow-500'
+            }`}
+          >
+            <ShieldAlert size={12} />
+            <span>
+              {turn.human_suspicion_score > 60 ? '높은 의심' : '의심'}
+              {' '}(점수: {turn.human_suspicion_score})
+            </span>
+          </div>
+        )}
+
+        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-text-muted">
+          <span>{turn.input_tokens + turn.output_tokens} tokens</span>
+          {turn.response_time_ms != null && (
+            <span>{(turn.response_time_ms / 1000).toFixed(1)}s</span>
+          )}
         </div>
       </div>
     </div>

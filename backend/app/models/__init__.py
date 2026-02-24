@@ -1,5 +1,6 @@
 from app.models.agent_activity_log import AgentActivityLog
 from app.models.debate_agent import DebateAgent
+from app.models.debate_agent_template import DebateAgentTemplate
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
@@ -83,6 +84,7 @@ __all__ = [
     "CharacterChatMessage",
     "WorldEvent",
     "DebateAgent",
+    "DebateAgentTemplate",
     "DebateAgentVersion",
     "DebateMatch",
     "DebateMatchQueue",

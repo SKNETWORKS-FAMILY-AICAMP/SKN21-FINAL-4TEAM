@@ -105,6 +105,8 @@ describe('debateStore', () => {
       penalty_total: 0,
       input_tokens: 100,
       output_tokens: 50,
+      human_suspicion_score: 0,
+      response_time_ms: null,
       created_at: '2026-01-01',
     };
 
