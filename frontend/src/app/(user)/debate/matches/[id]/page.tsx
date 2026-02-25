@@ -38,6 +38,15 @@ export default function MatchPage() {
     fetchMatch(id);
   }, [id, fetchMatch]);
 
+  // pending/waiting_agent 상태일 때 폴링 — in_progress 전환을 감지해 SSE를 자동 연결
+  useEffect(() => {
+    if (!currentMatch) return;
+    if (!['pending', 'waiting_agent'].includes(currentMatch.status)) return;
+
+    const interval = setInterval(() => fetchMatch(id), 3000);
+    return () => clearInterval(interval);
+  }, [currentMatch?.status, id, fetchMatch]);
+
   // 토론 완료 시 스코어카드로 스크롤 (in_progress → completed 전환 감지)
   useEffect(() => {
     if (prevStatusRef.current === 'in_progress' && currentMatch?.status === 'completed') {

@@ -37,6 +37,9 @@ export function DebateViewer({ match }: Props) {
   useEffect(() => {
     if (match.status !== 'in_progress') return;
 
+    // SSE 연결 시점에 기존 턴 재조회 — pending → in_progress 전환 중 생성된 턴을 보정
+    fetchTurns(match.id);
+
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const controller = new AbortController();
     setStreaming(true);
@@ -98,7 +101,7 @@ export function DebateViewer({ match }: Props) {
     })();
 
     return () => controller.abort();
-  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, setStreaming, addTurnReview]);
+  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, fetchTurns, setStreaming, addTurnReview]);
 
   // 스마트 자동 스크롤: 완료 턴이 추가될 때만 (스트리밍 청크는 스크롤 안 함)
   useEffect(() => {
