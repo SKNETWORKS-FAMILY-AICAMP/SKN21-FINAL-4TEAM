@@ -75,7 +75,7 @@ check_env() {
 run_migrations() {
   log "Alembic 마이그레이션 실행 중..."
   docker compose -f "$COMPOSE_FILE" run --rm backend \
-    sh -c "alembic upgrade head"
+    sh -c "PYTHONPATH=/app alembic upgrade head"
   log "마이그레이션 완료"
 }
 
