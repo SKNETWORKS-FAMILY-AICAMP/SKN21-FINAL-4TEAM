@@ -7,7 +7,7 @@ WORKDIR /app
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    build-essential gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
@@ -19,10 +19,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY backend/ .
 
-# 비-root 사용자로 실행
+# 비-root 사용자 생성 (실제 프로세스 전환은 entrypoint에서 수행)
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-USER appuser
+
+# entrypoint: 볼륨 권한 수정 후 appuser로 프로세스 전환
+COPY infra/docker/entrypoint.backend.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+ENTRYPOINT ["/entrypoint.sh"]
