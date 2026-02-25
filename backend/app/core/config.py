@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
-    database_sync_url: str = "postgresql://chatbot:chatbot@localhost:5432/chatbot"
+    database_sync_url: str = "postgresql+psycopg://chatbot:chatbot@localhost:5432/chatbot"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
