@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -17,13 +17,14 @@ from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
-from app.services.debate_agent_service import DebateAgentService
 from app.schemas.debate_ws import WSMatchReady, WSTurnRequest
+from app.services.debate_agent_service import DebateAgentService
 from app.services.debate_broadcast import publish_event
 from app.services.debate_orchestrator import DebateOrchestrator, calculate_elo
 from app.services.debate_tool_executor import AVAILABLE_TOOLS, DebateToolExecutor, ToolContext
 from app.services.debate_ws_manager import WSConnectionManager
-from app.services.human_detection import HumanDetectionAnalyzer, TurnContext as HumanTurnContext
+from app.services.human_detection import HumanDetectionAnalyzer
+from app.services.human_detection import TurnContext as HumanTurnContext
 from app.services.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,33 @@ def validate_response_schema(response_text: str) -> dict | None:
     return data
 
 
+def _resolve_api_key(agent: DebateAgent) -> str:
+    """에이전트 API 키 반환. 우선순위: BYOK 복호화 → 플랫폼 환경변수 → 빈 문자열."""
+    if agent.provider == "local":
+        return ""
+
+    # BYOK 키가 설정돼 있으면 복호화 시도
+    if agent.encrypted_api_key:
+        try:
+            return decrypt_api_key(agent.encrypted_api_key)
+        except ValueError:
+            # 키 불일치(SECRET_KEY 변경 등) → 플랫폼 키로 폴백
+            logger.warning(
+                "Agent %s API key decrypt failed, falling back to platform key", agent.id
+            )
+
+    # 플랫폼 기본 API 키 폴백
+    match agent.provider:
+        case "openai":
+            return settings.openai_api_key or ""
+        case "anthropic":
+            return settings.anthropic_api_key or ""
+        case "google":
+            return settings.google_api_key or ""
+        case _:
+            return ""
+
+
 async def run_debate(match_id: str) -> None:
     """매치 실행. 독립 DB 세션으로 백그라운드 실행."""
     engine = create_async_engine(settings.database_url, echo=False)
@@ -129,7 +157,7 @@ async def run_debate(match_id: str) -> None:
             await db.execute(
                 update(DebateMatch)
                 .where(DebateMatch.id == match_id)
-                .values(status="error", finished_at=datetime.now(timezone.utc))
+                .values(status="error", finished_at=datetime.now(UTC))
             )
             await db.commit()
             await publish_event(match_id, "error", {"message": str(exc)})
@@ -181,7 +209,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 if not connected:
                     # 몰수패 처리
                     match.status = "forfeit"
-                    match.finished_at = datetime.now(timezone.utc)
+                    match.finished_at = datetime.now(UTC)
                     # 미접속 측 패배
                     forfeit_loser = agent.id
                     forfeit_winner_id = agent_b.id if side == "agent_a" else agent_a.id
@@ -218,13 +246,13 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     your_side=side,
                 ))
 
-    # API 키 복호화 (local 에이전트는 스킵)
-    key_a = decrypt_api_key(agent_a.encrypted_api_key) if agent_a.provider != "local" else ""
-    key_b = decrypt_api_key(agent_b.encrypted_api_key) if agent_b.provider != "local" else ""
+    # API 키 복호화 (local 에이전트는 스킵, BYOK 없으면 플랫폼 키 폴백)
+    key_a = _resolve_api_key(agent_a)
+    key_b = _resolve_api_key(agent_b)
 
     # 매치 시작
     match.status = "in_progress"
-    match.started_at = datetime.now(timezone.utc)
+    match.started_at = datetime.now(UTC)
     await db.commit()
 
     await publish_event(str(match.id), "started", {"match_id": str(match.id)})
@@ -308,7 +336,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     match.score_b = judgment["score_b"]
     match.winner_id = judgment["winner_id"]
     match.status = "completed"
-    match.finished_at = datetime.now(timezone.utc)
+    match.finished_at = datetime.now(UTC)
     await db.commit()
 
     # ELO 갱신
@@ -362,7 +390,8 @@ async def _execute_turn(
     my_accumulated_penalty: int = 0,
 ) -> DebateTurnLog:
     """단일 턴 실행. 벌점 감지 + 휴먼 감지 포함."""
-    system_prompt = version.system_prompt if version else "당신은 한국어 토론 참가자입니다. 반드시 한국어로만 답변하세요."
+    default_prompt = "당신은 한국어 토론 참가자입니다. 반드시 한국어로만 답변하세요."
+    system_prompt = version.system_prompt if version else default_prompt
 
     penalties: dict[str, int] = {}
     penalty_total = 0
@@ -501,7 +530,7 @@ async def _execute_turn(
             penalties["ad_hominem"] = PENALTY_AD_HOMINEM
             penalty_total += PENALTY_AD_HOMINEM
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         penalties["timeout"] = PENALTY_TIMEOUT
         penalty_total += PENALTY_TIMEOUT
         claim = "[TIMEOUT: No response within time limit]"
@@ -563,7 +592,7 @@ def _build_messages(
 
     # 이전 턴 히스토리 (최근 4턴)
     all_turns = []
-    for i, (my_c, opp_c) in enumerate(zip(my_claims, opponent_claims)):
+    for _i, (my_c, opp_c) in enumerate(zip(my_claims, opponent_claims, strict=False)):
         all_turns.append({"role": "assistant", "content": my_c})
         all_turns.append({"role": "user", "content": f"[상대방]: {opp_c}"})
 
