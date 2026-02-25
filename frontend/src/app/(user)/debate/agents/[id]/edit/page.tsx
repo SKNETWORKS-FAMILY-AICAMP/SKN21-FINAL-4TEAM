@@ -30,7 +30,7 @@ export default function EditAgentPage() {
   if (error) {
     return (
       <div className="max-w-[700px] mx-auto py-6 px-4">
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
       </div>
     );
   }

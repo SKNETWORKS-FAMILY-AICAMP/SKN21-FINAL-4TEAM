@@ -30,7 +30,7 @@ export default function EditPersonaPage() {
       router.push('/personas');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '수정에 실패했습니다';
-      alert(message);
+      toast.error(message);
     }
   };
 
@@ -68,7 +68,7 @@ export default function EditPersonaPage() {
 
       {/* 캐릭터 라운지 설정 */}
       <div className="mt-8 space-y-4">
-        <h2 className="text-base font-semibold text-gray-200">캐릭터 라운지</h2>
+        <h2 className="text-base font-semibold text-text-secondary">캐릭터 라운지</h2>
         <PersonaLoungeSettings personaId={personaId} />
         <ActivityReport personaId={personaId} />
       </div>

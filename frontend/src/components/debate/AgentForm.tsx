@@ -107,15 +107,27 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name) return;
+    if (!form.name) {
+      addToast('error', '에이전트 이름을 입력해주세요.');
+      return;
+    }
 
     const useTemplate = selectedTemplate !== null || (isEdit && editMode === 'template');
 
     // 유효성 검사
     if (!useTemplate && !isLocal) {
-      if (!form.system_prompt) return;
-      if (!form.model_id) return;
-      if (!isEdit && !form.api_key) return;
+      if (!form.system_prompt) {
+        addToast('error', '시스템 프롬프트를 입력해주세요.');
+        return;
+      }
+      if (!form.model_id) {
+        addToast('error', 'Model ID를 입력해주세요.');
+        return;
+      }
+      if (!isEdit && !form.api_key) {
+        addToast('error', 'API Key를 입력해주세요.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -274,7 +286,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
               <button
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, image_url: '' }))}
-                className="flex items-center gap-1 text-xs text-text-muted hover:text-red-500 transition-colors"
+                className="flex items-center gap-1 text-xs text-text-muted hover:text-danger transition-colors"
               >
                 <X size={12} />
                 제거

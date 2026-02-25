@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { toast } from '@/stores/toastStore';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type LorebookEntry = {
   id: string;
@@ -20,6 +22,9 @@ export function LorebookEditor({ personaId }: Props) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', tags: '' });
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchEntries = async () => {
     setLoading(true);
@@ -47,14 +52,23 @@ export function LorebookEditor({ personaId }: Props) {
         .filter(Boolean),
     };
 
-    if (editing) {
-      await api.put(`/lorebook/${editing}`, body);
-    } else {
-      await api.post('/lorebook', { ...body, persona_id: personaId });
+    setSaving(true);
+    try {
+      if (editing) {
+        await api.put(`/lorebook/${editing}`, body);
+        toast.success('항목이 수정되었습니다.');
+      } else {
+        await api.post('/lorebook', { ...body, persona_id: personaId });
+        toast.success('항목이 추가되었습니다.');
+      }
+      setForm({ title: '', content: '', tags: '' });
+      setEditing(null);
+      fetchEntries();
+    } catch {
+      toast.error('저장에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setSaving(false);
     }
-    setForm({ title: '', content: '', tags: '' });
-    setEditing(null);
-    fetchEntries();
   };
 
   const handleEdit = (entry: LorebookEntry) => {
@@ -62,10 +76,19 @@ export function LorebookEditor({ personaId }: Props) {
     setForm({ title: entry.title, content: entry.content, tags: entry.tags.join(', ') });
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('삭제하시겠습니까?')) return;
-    await api.delete(`/lorebook/${id}`);
-    fetchEntries();
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/lorebook/${deleteTarget}`);
+      toast.success('항목이 삭제되었습니다.');
+      fetchEntries();
+    } catch {
+      toast.error('삭제에 실패했습니다.');
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
   };
 
   return (
@@ -94,10 +117,10 @@ export function LorebookEditor({ personaId }: Props) {
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            className="py-2 px-5 border-none rounded-lg bg-primary text-white text-[13px] font-semibold cursor-pointer"
-            disabled={!form.title || !form.content}
+            className="py-2 px-5 border-none rounded-lg bg-primary text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+            disabled={!form.title || !form.content || saving}
           >
-            {editing ? '수정' : '추가'}
+            {saving ? '저장 중...' : editing ? '수정' : '추가'}
           </button>
           {editing && (
             <button
@@ -132,7 +155,7 @@ export function LorebookEditor({ personaId }: Props) {
                   수정
                 </button>
                 <button
-                  onClick={() => handleDelete(entry.id)}
+                  onClick={() => setDeleteTarget(entry.id)}
                   className="py-1 px-3 border border-border-delete rounded-md bg-bg-surface text-danger-text text-xs cursor-pointer"
                 >
                   삭제
@@ -155,6 +178,17 @@ export function LorebookEditor({ personaId }: Props) {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="항목 삭제"
+        message="이 로어북 항목을 삭제하시겠습니까? 삭제하면 되돌릴 수 없습니다."
+        confirmLabel="삭제"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

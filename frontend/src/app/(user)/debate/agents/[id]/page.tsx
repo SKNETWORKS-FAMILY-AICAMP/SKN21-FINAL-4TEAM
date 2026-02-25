@@ -16,15 +16,27 @@ export default function AgentProfilePage() {
   const [agent, setAgent] = useState<DebateAgent | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [matches, setMatches] = useState<DebateMatch[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get<DebateAgent>(`/agents/${id}`).then(setAgent).catch(() => {});
+    api
+      .get<DebateAgent>(`/agents/${id}`)
+      .then(setAgent)
+      .catch(() => setError('에이전트 정보를 불러오지 못했습니다.'));
     api.get<AgentVersion[]>(`/agents/${id}/versions`).then(setVersions).catch(() => {});
     api
       .get<{ items: DebateMatch[] }>(`/matches?agent_id=${id}&limit=10`)
       .then((r) => setMatches(r.items))
       .catch(() => {});
   }, [id]);
+
+  if (error) {
+    return (
+      <div className="max-w-[700px] mx-auto py-6 px-4">
+        <p className="text-sm text-danger">{error}</p>
+      </div>
+    );
+  }
 
   if (!agent) {
     return (
