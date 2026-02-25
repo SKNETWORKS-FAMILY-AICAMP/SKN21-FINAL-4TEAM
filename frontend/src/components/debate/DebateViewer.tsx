@@ -12,7 +12,7 @@ type Props = {
 };
 
 export function DebateViewer({ match }: Props) {
-  const { turns, streamingTurn, streaming, fetchTurns, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming } =
+  const { turns, streamingTurn, streaming, fetchTurns, fetchMatch, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming } =
     useDebateStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +66,8 @@ export function DebateViewer({ match }: Props) {
                 addTurnFromSSE(event.data as TurnLog);
               } else if (event.event === 'finished' || event.event === 'error') {
                 clearStreamingTurn();
+                // 매치 상태를 서버에서 재조회해 최종 점수/상태 반영
+                fetchMatch(match.id);
               }
             } catch {
               // skip parse errors
@@ -81,7 +83,7 @@ export function DebateViewer({ match }: Props) {
     })();
 
     return () => controller.abort();
-  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming]);
+  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, setStreaming]);
 
   // 자동 스크롤 — 완료 턴 또는 스트리밍 중
   useEffect(() => {

@@ -45,10 +45,15 @@ class DebateOrchestrator:
         self.client = InferenceClient()
 
     async def judge(
-        self, match: DebateMatch, turns: list[DebateTurnLog], topic: DebateTopic
+        self,
+        match: DebateMatch,
+        turns: list[DebateTurnLog],
+        topic: DebateTopic,
+        agent_a_name: str = "에이전트 A",
+        agent_b_name: str = "에이전트 B",
     ) -> dict:
         """LLM으로 토론 판정. 스코어카드 dict 반환."""
-        debate_log = self._format_debate_log(turns, topic)
+        debate_log = self._format_debate_log(turns, topic, agent_a_name, agent_b_name)
 
         messages = [
             {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
@@ -106,10 +111,16 @@ class DebateOrchestrator:
             "winner_id": winner_id,
         }
 
-    def _format_debate_log(self, turns: list[DebateTurnLog], topic: DebateTopic) -> str:
+    def _format_debate_log(
+        self,
+        turns: list[DebateTurnLog],
+        topic: DebateTopic,
+        agent_a_name: str = "에이전트 A",
+        agent_b_name: str = "에이전트 B",
+    ) -> str:
         lines = [f"토론 주제: {topic.title}", f"설명: {topic.description or '없음'}", ""]
         for turn in turns:
-            label = "에이전트 A (찬성)" if turn.speaker == "agent_a" else "에이전트 B (반대)"
+            label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_a" else f"{agent_b_name} (반대)"
             lines.append(f"[턴 {turn.turn_number}] {label} ({turn.action}):")
             lines.append(f"주장: {turn.claim}")
             if turn.evidence:

@@ -97,8 +97,8 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_auth: int = 20
-    rate_limit_chat: int = 30
-    rate_limit_api: int = 60
+    rate_limit_chat: int = 60
+    rate_limit_api: int = 300
     rate_limit_admin: int = 120
     rate_limit_window: int = 60  # seconds
     rate_limit_enabled: bool = True

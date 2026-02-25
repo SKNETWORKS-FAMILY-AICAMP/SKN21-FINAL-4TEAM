@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Swords } from 'lucide-react';
@@ -31,10 +31,22 @@ const STATUS_CLASSES: Record<string, string> = {
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
   const { currentMatch, turns, fetchMatch } = useDebateStore();
+  const scorecardRef = useRef<HTMLDivElement>(null);
+  const prevStatusRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     fetchMatch(id);
   }, [id, fetchMatch]);
+
+  // 토론 완료 시 스코어카드로 스크롤 (in_progress → completed 전환 감지)
+  useEffect(() => {
+    if (prevStatusRef.current === 'in_progress' && currentMatch?.status === 'completed') {
+      setTimeout(() => {
+        scorecardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 600);
+    }
+    prevStatusRef.current = currentMatch?.status;
+  }, [currentMatch?.status]);
 
   if (!currentMatch) {
     return (
@@ -76,9 +88,9 @@ export default function MatchPage() {
         토론 목록
       </Link>
 
-      {/* 배틀 헤더 — 대기화면과 동일한 다크 그라디언트 테마 */}
+      {/* 배틀 헤더 — 대기화면과 동일한 다크 그라디언트 테마 (sticky: 스크롤해도 HP바 상시 노출) */}
       <div
-        className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50
+        className="sticky top-0 z-10 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50
           rounded-xl overflow-hidden mb-4"
       >
         <div className="px-5 pt-5 pb-5">
@@ -139,6 +151,7 @@ export default function MatchPage() {
 
       {/* 스코어카드 (완료된 매치) */}
       {currentMatch.status === 'completed' && (
+        <div ref={scorecardRef}>
         <Scorecard
           matchId={currentMatch.id}
           agentA={currentMatch.agent_a}
@@ -146,6 +159,7 @@ export default function MatchPage() {
           penaltyA={currentMatch.penalty_a}
           penaltyB={currentMatch.penalty_b}
         />
+        </div>
       )}
     </div>
   );

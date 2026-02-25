@@ -329,7 +329,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     # 판정
     turns = await _load_turns(db, match.id)
     orchestrator = DebateOrchestrator()
-    judgment = await orchestrator.judge(match, turns, topic)
+    judgment = await orchestrator.judge(match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name)
 
     match.scorecard = judgment["scorecard"]
     match.score_a = judgment["score_a"]
@@ -606,8 +606,19 @@ def _build_messages(
 
     if not my_claims and not opponent_claims:
         messages.append({"role": "user", "content": "먼저 시작하세요. 주제에 대한 첫 번째 주장을 한국어로 제시하세요."})
+    elif opponent_claims:
+        last_opp = opponent_claims[-1]
+        messages.append({
+            "role": "user",
+            "content": (
+                f"상대방의 최근 주장:\n\"{last_opp}\"\n\n"
+                "위 주장의 구체적인 논점을 직접 언급하며 반박하세요. "
+                "상대 주장의 어떤 부분이 왜 틀렸는지 명확히 지적한 후, "
+                "새로운 근거를 추가하여 당신의 입장을 강화하세요."
+            ),
+        })
     else:
-        messages.append({"role": "user", "content": "당신의 차례입니다. 상대방의 주장에 한국어로 반박하세요."})
+        messages.append({"role": "user", "content": "당신의 차례입니다. 주제에 대한 다음 주장을 한국어로 제시하세요."})
 
     return messages
 

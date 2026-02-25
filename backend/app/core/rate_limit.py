@@ -61,9 +61,13 @@ def _extract_identifier(request: Request) -> str:
         except JWTError:
             pass
 
-    # 인증 실패 또는 토큰 없음 → IP 기반
-    client_ip = request.client.host if request.client else "unknown"
-    return f"ip:{client_ip}"
+    # 인증 실패 또는 토큰 없음 → X-Real-IP (nginx 프록시 헤더) 우선, 없으면 소켓 IP
+    real_ip = (
+        request.headers.get("x-real-ip")
+        or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    return f"ip:{real_ip}"
 
 
 async def check_rate_limit(identifier: str, route_group: str) -> tuple[bool, int, int, int]:
