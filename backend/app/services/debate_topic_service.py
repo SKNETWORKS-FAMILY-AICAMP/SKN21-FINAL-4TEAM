@@ -23,10 +23,7 @@ class DebateTopicService:
         now = datetime.now(UTC)
 
         # 시작 시각이 미래이면 scheduled, 아니면 open
-        if data.scheduled_start_at and data.scheduled_start_at > now:
-            initial_status = "scheduled"
-        else:
-            initial_status = "open"
+        initial_status = "scheduled" if data.scheduled_start_at and data.scheduled_start_at > now else "open"
 
         topic = DebateTopic(
             title=data.title,
@@ -111,6 +108,31 @@ class DebateTopicService:
         await self.db.commit()
         await self.db.refresh(topic)
         return topic
+
+    async def delete_topic(self, topic_id: str) -> None:
+        """토픽 삭제 (매치가 없는 경우만 허용). 대기 큐를 먼저 정리."""
+        from sqlalchemy import delete as sa_delete
+
+        result = await self.db.execute(
+            select(DebateTopic).where(DebateTopic.id == topic_id)
+        )
+        topic = result.scalar_one_or_none()
+        if topic is None:
+            raise ValueError("Topic not found")
+
+        match_count = await self._count_matches(topic.id)
+        if match_count > 0:
+            raise ValueError(
+                f"진행된 매치가 {match_count}개 있어 삭제할 수 없습니다. "
+                "종료 처리 후 매치가 없을 때 삭제 가능합니다."
+            )
+
+        # 대기 큐 먼저 제거
+        await self.db.execute(
+            sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic.id)
+        )
+        await self.db.delete(topic)
+        await self.db.commit()
 
     async def _sync_scheduled_topics(self) -> None:
         """scheduled_start_at/end_at 기준으로 status 자동 갱신."""

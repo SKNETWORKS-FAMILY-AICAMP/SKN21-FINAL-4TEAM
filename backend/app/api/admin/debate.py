@@ -58,13 +58,27 @@ async def update_topic(
     try:
         topic = await service.update_topic(topic_id, data)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return {
         "id": str(topic.id),
         "title": topic.title,
         "status": topic.status,
         "updated_at": topic.updated_at,
     }
+
+
+@router.delete("/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_topic(
+    topic_id: str,
+    superadmin: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """토픽 삭제 (superadmin 전용, 매치가 없는 경우만)."""
+    service = DebateTopicService(db)
+    try:
+        await service.delete_topic(topic_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/matches")
@@ -127,7 +141,7 @@ async def create_template(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        )
+        ) from exc
     return AgentTemplateAdminResponse.model_validate(template)
 
 
@@ -143,5 +157,5 @@ async def update_template(
     try:
         template = await service.update_template(template_id, data)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return AgentTemplateAdminResponse.model_validate(template)

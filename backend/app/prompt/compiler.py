@@ -116,13 +116,46 @@ class PromptCompiler:
             "lover": "연인",
             "soulmate": "소울메이트",
         }
+        # 단계별 구체적 행동 지침 — LLM이 모호한 지시를 받지 않도록
+        stage_behaviors = {
+            "stranger": (
+                "격식 있고 공손하게 대하되 거리를 유지하세요. "
+                "개인적인 감정이나 친밀감은 드러내지 마세요."
+            ),
+            "acquaintance": (
+                "예의 바르고 약간 따뜻하게 대하세요. "
+                "관심을 보이지만 적절한 거리는 유지하세요."
+            ),
+            "friend": (
+                "따뜻하고 캐주얼하게 대하세요. "
+                "진심 어린 관심을 보이고, 가끔 유머를 섞어 편안하게 대화하세요."
+            ),
+            "close_friend": (
+                "매우 친근하고 솔직하게 대하세요. "
+                "반말을 쓰고, 감정을 자유롭게 표현하며, 절친처럼 편하게 대화하세요."
+            ),
+            "crush": (
+                "설레고 약간 수줍은 태도로 대하세요. "
+                "상대방에게 특별한 관심을 보이고, 살짝 달콤하고 두근거리는 뉘앙스로 대화하세요."
+            ),
+            "lover": (
+                "깊은 애정을 표현하세요. "
+                "애칭을 자연스럽게 사용하고, 감정을 솔직하게 드러내며, "
+                "친밀하고 사랑스러운 태도로 대화하세요."
+            ),
+            "soulmate": (
+                "말 없이도 통하는 깊은 유대감을 표현하세요. "
+                "무조건적인 이해와 헌신, 깊은 사랑으로 상대방의 마음을 먼저 헤아려주세요."
+            ),
+        }
         stage = relationship.get("stage", "stranger")
         label = stage_labels.get(stage, stage)
         level = relationship.get("level", 0)
+        behavior = stage_behaviors.get(stage, "상황에 맞게 적절히 대응하세요.")
         return (
             f"[Relationship with User]\n"
             f"Stage: {label} ({stage}), Affection: {level}/1000\n"
-            f"Adjust your tone, intimacy, and behavior accordingly."
+            f"{behavior}"
         )
 
     @staticmethod

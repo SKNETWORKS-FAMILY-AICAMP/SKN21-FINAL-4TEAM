@@ -1,18 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.schemas.relationship import RelationshipResponse
+from app.schemas.relationship import RelationshipWithPersonaResponse
 from app.services.relationship_service import RelationshipService
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[RelationshipResponse])
+@router.get("/", response_model=list[RelationshipWithPersonaResponse])
 async def list_relationships(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

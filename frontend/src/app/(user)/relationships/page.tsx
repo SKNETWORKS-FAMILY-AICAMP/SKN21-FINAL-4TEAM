@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 type Relationship = {
   id: string;
   persona_id: string;
+  persona_display_name: string;
+  persona_background_image_url: string | null;
   affection_level: number;
   relationship_stage: string;
   interaction_count: number;
@@ -73,7 +75,7 @@ export default function RelationshipsPage() {
               className="bg-bg-surface rounded-xl p-5 border border-border hover:border-primary/30 transition-colors"
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="m-0 text-sm font-semibold text-text">{rel.persona_id.slice(0, 8)}...</h3>
+                <h3 className="m-0 text-sm font-semibold text-text">{rel.persona_display_name}</h3>
                 <span className="text-xs font-medium text-primary">{label}</span>
               </div>
 

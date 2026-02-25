@@ -45,13 +45,33 @@ class RelationshipService:
         )
         return result.scalar_one_or_none()
 
-    async def list_by_user(self, user_id: uuid.UUID) -> list[PersonaRelationship]:
+    async def list_by_user(self, user_id: uuid.UUID) -> list[dict]:
+        from app.models.persona import Persona
+
         result = await self.db.execute(
-            select(PersonaRelationship)
+            select(
+                PersonaRelationship,
+                Persona.display_name.label("persona_display_name"),
+                Persona.background_image_url.label("persona_background_image_url"),
+            )
+            .join(Persona, PersonaRelationship.persona_id == Persona.id)
             .where(PersonaRelationship.user_id == user_id)
             .order_by(PersonaRelationship.affection_level.desc())
         )
-        return list(result.scalars().all())
+        rows = result.all()
+        return [
+            {
+                "id": row.PersonaRelationship.id,
+                "persona_id": row.PersonaRelationship.persona_id,
+                "persona_display_name": row.persona_display_name,
+                "persona_background_image_url": row.persona_background_image_url,
+                "affection_level": row.PersonaRelationship.affection_level,
+                "relationship_stage": row.PersonaRelationship.relationship_stage,
+                "interaction_count": row.PersonaRelationship.interaction_count,
+                "last_interaction_at": row.PersonaRelationship.last_interaction_at,
+            }
+            for row in rows
+        ]
 
     async def update_after_interaction(
         self,

@@ -27,3 +27,5 @@ class RelationshipWithPersonaResponse(BaseModel):
     relationship_stage: str
     interaction_count: int
     last_interaction_at: datetime | None
+
+    model_config = {"from_attributes": False}

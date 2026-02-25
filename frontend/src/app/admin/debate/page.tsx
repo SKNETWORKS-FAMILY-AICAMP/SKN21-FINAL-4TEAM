@@ -1,9 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Bot, MessageSquare, Trophy, Activity, Plus, X, CalendarClock } from 'lucide-react';
+import {
+  Swords,
+  Bot,
+  MessageSquare,
+  Trophy,
+  Activity,
+  Plus,
+  X,
+  CalendarClock,
+  StopCircle,
+  Trash2,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type DebateStats = {
   agents_count: number;
@@ -70,6 +82,12 @@ export default function AdminDebatePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // 중지/삭제 상태
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Topic | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -140,6 +158,36 @@ export default function AdminDebatePage() {
     }
   };
 
+  const handleClose = async (topic: Topic) => {
+    setActionError(null);
+    setClosingId(topic.id);
+    try {
+      await api.patch(`/admin/debate/topics/${topic.id}`, { status: 'closed' });
+      fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '중지 실패';
+      setActionError(msg);
+    } finally {
+      setClosingId(null);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      await api.delete(`/admin/debate/topics/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '삭제 실패';
+      setActionError(msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="text-xl font-bold text-text mb-5 flex items-center gap-2">
@@ -186,6 +234,12 @@ export default function AdminDebatePage() {
         {success && (
           <div className="mb-4 text-sm text-green-500 bg-green-500/10 rounded-lg px-3 py-2">
             토론 주제가 생성되었습니다.
+          </div>
+        )}
+
+        {actionError && (
+          <div className="mb-4 text-sm text-danger bg-danger/10 rounded-lg px-3 py-2">
+            {actionError}
           </div>
         )}
 
@@ -354,7 +408,8 @@ export default function AdminDebatePage() {
                   <th className="pb-2 pr-4 font-medium">스케줄</th>
                   <th className="pb-2 pr-4 font-medium text-right">턴수</th>
                   <th className="pb-2 pr-4 font-medium text-right">매치</th>
-                  <th className="pb-2 font-medium text-right">대기</th>
+                  <th className="pb-2 pr-4 font-medium text-right">대기</th>
+                  <th className="pb-2 font-medium text-right">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -395,7 +450,37 @@ export default function AdminDebatePage() {
                     </td>
                     <td className="py-2 pr-4 text-right text-text-muted">{t.max_turns}</td>
                     <td className="py-2 pr-4 text-right text-text-muted">{t.match_count}</td>
-                    <td className="py-2 text-right text-text-muted">{t.queue_count}</td>
+                    <td className="py-2 pr-4 text-right text-text-muted">{t.queue_count}</td>
+
+                    {/* 관리 버튼 */}
+                    <td className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {/* 중지 — closed가 아닌 경우에만 표시 */}
+                        {t.status !== 'closed' && (
+                          <button
+                            onClick={() => handleClose(t)}
+                            disabled={closingId === t.id}
+                            title="토론 중지"
+                            className="p-1.5 rounded hover:bg-yellow-500/10 text-text-muted
+                              hover:text-yellow-400 transition-colors disabled:opacity-50"
+                          >
+                            <StopCircle size={15} />
+                          </button>
+                        )}
+                        {/* 삭제 — superadmin 전용 (서버에서 권한 검증) */}
+                        <button
+                          onClick={() => {
+                            setActionError(null);
+                            setDeleteTarget(t);
+                          }}
+                          title="토론 삭제"
+                          className="p-1.5 rounded hover:bg-danger/10 text-text-muted
+                            hover:text-danger transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -403,6 +488,24 @@ export default function AdminDebatePage() {
           </div>
         )}
       </div>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="토론 주제 삭제"
+        message={
+          deleteTarget
+            ? `"${deleteTarget.title}"을(를) 삭제합니다.\n매치 기록이 있는 주제는 삭제할 수 없습니다.`
+            : ''
+        }
+        confirmLabel={deleting ? '삭제 중...' : '삭제'}
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setActionError(null);
+        }}
+      />
     </div>
   );
 }

@@ -663,32 +663,36 @@ class ChatService:
         return session
 
     async def _update_relationship(self, user: User, persona_id: uuid.UUID, emotion_signal: dict | None) -> None:
-        """호감도 갱신 + 단계 변경 시 알림 생성."""
+        """호감도 갱신 + 단계 변경 시 알림 생성.
+
+        SAVEPOINT를 사용해 실패 시 메인 트랜잭션을 오염시키지 않음.
+        """
         try:
             from app.services.notification_service import NotificationService
             from app.services.relationship_service import RelationshipService
 
-            rel_svc = RelationshipService(self.db)
-            rel, stage_changed = await rel_svc.update_after_interaction(user.id, persona_id, emotion_signal)
-            if stage_changed:
-                stage_labels = {
-                    "stranger": "낯선 사이",
-                    "acquaintance": "아는 사이",
-                    "friend": "친구",
-                    "close_friend": "절친",
-                    "crush": "썸",
-                    "lover": "연인",
-                    "soulmate": "소울메이트",
-                }
-                label = stage_labels.get(rel.relationship_stage, rel.relationship_stage)
-                notif_svc = NotificationService(self.db)
-                await notif_svc.create(
-                    user_id=user.id,
-                    type_="relationship",
-                    title=f"관계가 '{label}'(으)로 발전했어요!",
-                    body=f"호감도: {rel.affection_level}/1000",
-                    link="/relationships",
-                )
+            async with self.db.begin_nested():  # SAVEPOINT — 실패해도 외부 트랜잭션 보호
+                rel_svc = RelationshipService(self.db)
+                rel, stage_changed = await rel_svc.update_after_interaction(user.id, persona_id, emotion_signal)
+                if stage_changed:
+                    stage_labels = {
+                        "stranger": "낯선 사이",
+                        "acquaintance": "아는 사이",
+                        "friend": "친구",
+                        "close_friend": "절친",
+                        "crush": "썸",
+                        "lover": "연인",
+                        "soulmate": "소울메이트",
+                    }
+                    label = stage_labels.get(rel.relationship_stage, rel.relationship_stage)
+                    notif_svc = NotificationService(self.db)
+                    await notif_svc.create(
+                        user_id=user.id,
+                        type_="relationship",
+                        title=f"관계가 '{label}'(으)로 발전했어요!",
+                        body=f"호감도: {rel.affection_level}/1000",
+                        link="/relationships",
+                    )
         except Exception:
             logger.warning("Relationship update failed, skipping", exc_info=True)
 
