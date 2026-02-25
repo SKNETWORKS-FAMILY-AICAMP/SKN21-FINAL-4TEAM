@@ -61,11 +61,13 @@ export default function WaitingRoomPage() {
     if (!myAgent) return;
 
     api
-      .get<{ status: string; match_id?: string }>(`/topics/${topicId}/queue/status?agent_id=${agentId}`)
+      .get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
+        `/topics/${topicId}/queue/status?agent_id=${agentId}`,
+      )
       .then((res) => {
         if (res.status === 'matched' && res.match_id) {
-          // 이미 매칭 완료 상태 — 바로 이동
-          router.push(`/debate/matches/${res.match_id}`);
+          // 이미 매칭 완료 상태 — VS 화면 표시 후 이동 (바로 push 대신)
+          handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
         } else if (res.status === 'not_in_queue') {
           // 큐에서 빠져나간 경우 토픽으로 복귀
           router.push(`/debate/topics/${topicId}`);
@@ -108,6 +110,22 @@ export default function WaitingRoomPage() {
 
     es.onerror = () => {
       es.close();
+      // SSE 연결 오류 시 상태 재확인 (매칭됐거나 큐에서 빠진 경우 대응)
+      api
+        .get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
+          `/topics/${topicId}/queue/status?agent_id=${agentId}`,
+        )
+        .then((res) => {
+          if (res.status === 'matched' && res.match_id) {
+            handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
+          } else if (res.status === 'not_in_queue') {
+            router.push(`/debate/topics/${topicId}`);
+          } else {
+            // 여전히 큐에 있으면 2초 후 재연결
+            setTimeout(connectSSE, 2000);
+          }
+        })
+        .catch(() => setTimeout(connectSSE, 2000));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId, agentId]);

@@ -1,3 +1,4 @@
+import json
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -14,11 +15,11 @@ from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
 from app.services.debate_engine import run_debate
-
-logger = logging.getLogger(__name__)
 from app.services.debate_matching_service import DebateMatchingService
 from app.services.debate_queue_broadcast import publish_queue_event, subscribe_queue
 from app.services.debate_topic_service import DebateTopicService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -83,7 +84,7 @@ async def join_topic_queue(
     try:
         result = await service.join_queue(user, topic_id, data.agent_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     # 매치가 생성되었으면 BackgroundTasks로 토론 엔진 시작 (참조 유지 + 예외 로깅)
     if result.get("status") == "matched" and result.get("match_id"):
@@ -107,15 +108,48 @@ async def queue_stream(
     if agent_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
 
-    # 큐 등록 여부 검증
+    # 큐 등록 여부 확인
     queue_result = await db.execute(
         select(DebateMatchQueue).where(
             DebateMatchQueue.topic_id == topic_id,
             DebateMatchQueue.agent_id == agent_id,
         )
     )
-    if queue_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent not in queue")
+    in_queue = queue_result.scalar_one_or_none() is not None
+
+    if not in_queue:
+        # SSE 연결 전 이미 매칭된 경우 → 즉시 matched 이벤트 반환
+        # (2번째 플레이어가 큐에서 제거된 직후 대기방에 도달하는 레이스 컨디션 처리)
+        match_result = await db.execute(
+            select(DebateMatch)
+            .where(
+                DebateMatch.topic_id == topic_id,
+                (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id),
+            )
+            .order_by(DebateMatch.created_at.desc())
+            .limit(1)
+        )
+        match = match_result.scalar_one_or_none()
+        if match is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent not in queue")
+
+        opponent_id = str(match.agent_b_id) if str(match.agent_a_id) == agent_id else str(match.agent_a_id)
+        payload = json.dumps(
+            {
+                "event": "matched",
+                "data": {"match_id": str(match.id), "opponent_agent_id": opponent_id, "auto_matched": False},
+            },
+            ensure_ascii=False,
+        )
+
+        async def _immediate_matched():
+            yield f"data: {payload}\n\n"
+
+        return StreamingResponse(
+            _immediate_matched(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     return StreamingResponse(
         subscribe_queue(topic_id, agent_id),
@@ -167,7 +201,8 @@ async def queue_status(
     )
     match = match_result.scalar_one_or_none()
     if match is not None:
-        return {"status": "matched", "match_id": str(match.id)}
+        opponent_id = str(match.agent_b_id) if str(match.agent_a_id) == agent_id else str(match.agent_a_id)
+        return {"status": "matched", "match_id": str(match.id), "opponent_agent_id": opponent_id}
 
     return {"status": "not_in_queue"}
 
