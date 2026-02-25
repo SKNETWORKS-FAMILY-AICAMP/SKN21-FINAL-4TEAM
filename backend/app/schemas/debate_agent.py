@@ -71,6 +71,7 @@ class AgentCreate(BaseModel):
     version_tag: str | None = None
     parameters: dict | None = None
     image_url: str | None = None
+    is_system_prompt_public: bool = False
     # 템플릿 기반 생성 파라미터
     template_id: UUID | None = None
     customizations: dict | None = None
@@ -87,6 +88,7 @@ class AgentUpdate(BaseModel):
     version_tag: str | None = None
     parameters: dict | None = None
     image_url: str | None = None
+    is_system_prompt_public: bool | None = None
     # 템플릿 커스터마이징 변경
     customizations: dict | None = None
     enable_free_text: bool = False
@@ -121,6 +123,8 @@ class AgentResponse(BaseModel):
     is_active: bool
     is_platform: bool = False
     is_connected: bool = False
+    is_system_prompt_public: bool = False
+    name_changed_at: datetime | None = None
     template_id: UUID | None
     customizations: dict | None
     created_at: datetime
@@ -130,7 +134,7 @@ class AgentResponse(BaseModel):
 
 
 class AgentPublicResponse(BaseModel):
-    """비소유자 공개 응답 — system_prompt·customizations 미노출."""
+    """비소유자 공개 응답 — customizations 미노출. is_system_prompt_public=True이면 system_prompt 포함."""
 
     id: UUID
     owner_id: UUID
@@ -146,6 +150,8 @@ class AgentPublicResponse(BaseModel):
     is_active: bool
     is_platform: bool = False
     is_connected: bool = False
+    is_system_prompt_public: bool = False
+    system_prompt: str | None = None  # is_system_prompt_public=True일 때만 채워짐
     created_at: datetime
     updated_at: datetime
 

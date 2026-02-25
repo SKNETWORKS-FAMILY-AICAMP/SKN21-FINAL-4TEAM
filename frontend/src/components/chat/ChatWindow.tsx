@@ -4,6 +4,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { MessageActions } from './MessageActions';
+import { ScrollToTop } from '@/components/ui/ScrollToTop';
 
 type Props = {
   sessionId: string;
@@ -14,12 +15,33 @@ type Props = {
 
 export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onRegenerate, onEdit }: Props) {
   const { messages, isStreaming } = useChatStore();
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
 
+  // 바닥 감지: IntersectionObserver로 사용자가 바닥 근처에 있는지 추적
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = containerRef.current;
+    if (!container || !bottomRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isNearBottomRef.current = entry.isIntersecting;
+      },
+      { root: container, threshold: 0, rootMargin: '0px 0px 100px 0px' },
+    );
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 스마트 자동 스크롤: 사용자가 바닥 근처에 있을 때만 스크롤
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const handleEditStart = (id: number) => {
@@ -44,7 +66,7 @@ export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onR
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
       {messages.length === 0 && (
         <div className="text-center text-text-muted mt-10 text-sm">대화를 시작해보세요!</div>
       )}
@@ -58,7 +80,7 @@ export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onR
           }`}
         >
           <div className="text-[11px] font-semibold mb-1 opacity-70">
-            {msg.role === 'user' ? '나' : (personaName || '캐릭터')}
+            {msg.role === 'user' ? '나' : personaName || '캐릭터'}
             {msg.isEdited && <span className="ml-1 text-text-muted">(수정됨)</span>}
           </div>
           {editingId === msg.id ? (
@@ -85,9 +107,7 @@ export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onR
                 <div className="text-[11px] mt-1.5 py-0.5 px-2 rounded-badge bg-bg-hover text-text-secondary inline-flex items-center gap-1">
                   <span>{msg.emotionSignal.label}</span>
                   {typeof msg.emotionSignal.intensity === 'number' && (
-                    <span
-                      className="inline-block w-[32px] h-[4px] rounded-full bg-border overflow-hidden"
-                    >
+                    <span className="inline-block w-[32px] h-[4px] rounded-full bg-border overflow-hidden">
                       <span
                         className="block h-full rounded-full bg-primary"
                         style={{ width: `${Math.round(msg.emotionSignal.intensity * 100)}%` }}
@@ -118,6 +138,7 @@ export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onR
         </div>
       )}
       <div ref={bottomRef} />
+      <ScrollToTop scrollContainer={containerRef} />
     </div>
   );
 });

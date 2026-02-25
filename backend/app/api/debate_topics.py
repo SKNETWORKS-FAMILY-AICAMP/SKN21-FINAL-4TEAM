@@ -33,14 +33,20 @@ async def create_topic(
 ):
     """토론 주제 생성. 모든 사용자가 스케줄 설정 가능, 관리자 여부는 is_admin_topic 플래그로만 구분."""
     service = DebateTopicService(db)
-    topic = await service.create_topic(data, user)
+    try:
+        topic = await service.create_topic(data, user)
+    except ValueError as exc:
+        detail = str(exc)
+        if "한도" in detail:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     return _topic_response(topic)
 
 
 @router.get("", response_model=TopicListResponse)
 async def list_topics(
     status_filter: str | None = Query(None, alias="status", pattern="^(scheduled|open|in_progress|closed)$"),
-    sort: str = Query("recent", pattern="^(recent|popular_week)$"),
+    sort: str = Query("recent", pattern="^(recent|popular_week|queue|matches)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),

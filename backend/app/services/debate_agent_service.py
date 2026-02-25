@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select, update
@@ -71,6 +72,7 @@ class DebateAgentService:
             model_id=data.model_id,
             encrypted_api_key=encrypted_key,
             image_url=data.image_url,
+            is_system_prompt_public=data.is_system_prompt_public,
             template_id=template.id if template else None,
             customizations=validated,
         )
@@ -98,7 +100,16 @@ class DebateAgentService:
         if agent is None:
             raise ValueError("Agent not found or not owned by user")
 
-        if data.name is not None:
+        if data.name is not None and data.name != agent.name:
+            # 이름 변경 7일 제한
+            if agent.name_changed_at is not None:
+                days_since = (datetime.now(UTC) - agent.name_changed_at).days
+                if days_since < 7:
+                    days_left = 7 - days_since
+                    raise ValueError(f"이름은 7일에 한 번만 변경할 수 있습니다 ({days_left}일 후 변경 가능)")
+            agent.name = data.name
+            agent.name_changed_at = datetime.now(UTC)
+        elif data.name is not None:
             agent.name = data.name
         if data.description is not None:
             agent.description = data.description
@@ -110,6 +121,8 @@ class DebateAgentService:
             agent.encrypted_api_key = encrypt_api_key(data.api_key)
         if data.image_url is not None:
             agent.image_url = data.image_url
+        if data.is_system_prompt_public is not None:
+            agent.is_system_prompt_public = data.is_system_prompt_public
 
         # 새 버전 생성이 필요한지 판단
         new_prompt: str | None = None

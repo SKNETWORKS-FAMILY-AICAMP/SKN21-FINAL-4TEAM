@@ -9,7 +9,7 @@ from app.core.database import Base
 
 _LEDGER_TX_TYPES = (
     "'daily_grant','purchase','chat','lounge_post','lounge_comment',"
-    "'review','agent_action','expire','admin_grant','refund'"
+    "'review','agent_action','expire','admin_grant','refund','debate'"
 )
 
 

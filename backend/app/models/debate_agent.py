@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,12 @@ class DebateAgent(Base):
     draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
     is_platform: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    # 이름 변경 제한 (7일 1회)
+    name_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 시스템 프롬프트 공개 여부 (소유자 결정)
+    is_system_prompt_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

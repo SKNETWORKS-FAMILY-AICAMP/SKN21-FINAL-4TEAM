@@ -24,8 +24,25 @@ class DebateTopicService:
 
     async def create_topic(self, data: TopicCreate, user: User) -> DebateTopic:
         """토론 주제 생성. 스케줄 필드는 모든 사용자가 설정 가능, 관리자 여부는 is_admin_topic 플래그로만 구분."""
+        from app.core.config import settings
+
         is_admin = user.role in ("admin", "superadmin")
         now = datetime.now(UTC)
+
+        # 일반 사용자 일일 등록 한도 검사 (관리자는 제한 없음)
+        if not is_admin:
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            count_result = await self.db.execute(
+                select(func.count(DebateTopic.id)).where(
+                    DebateTopic.created_by == user.id,
+                    DebateTopic.created_at >= today_start,
+                )
+            )
+            today_count = count_result.scalar() or 0
+            if today_count >= settings.debate_daily_topic_limit:
+                raise ValueError(
+                    f"일일 토론 주제 등록 한도({settings.debate_daily_topic_limit}개)에 도달했습니다. 내일 다시 시도하세요."
+                )
 
         # 시작 시각이 미래이면 scheduled, 아니면 open
         initial_status = "scheduled" if data.scheduled_start_at and data.scheduled_start_at > now else "open"
@@ -63,7 +80,7 @@ class DebateTopicService:
     ) -> tuple[list[dict], int]:
         """토픽 목록 조회. 집계 서브쿼리로 N+1 방지.
 
-        sort: 'recent' (최신순) | 'popular_week' (이번 주 매치 수 기준 인기순)
+        sort: 'recent' (최신순) | 'popular_week' (이번 주 매치 수) | 'queue' (대기 많은 순) | 'matches' (전체 매치 많은 순)
         """
         await self._sync_scheduled_topics()
 
@@ -113,7 +130,14 @@ class DebateTopicService:
                 query.outerjoin(popular_subq, DebateTopic.id == popular_subq.c.topic_id)
                 .order_by(func.coalesce(popular_subq.c.weekly_cnt, 0).desc(), DebateTopic.created_at.desc())
             )
+        elif sort == "queue":
+            # 현재 대기 인원 많은 순
+            query = query.order_by(func.coalesce(queue_subq.c.q_cnt, 0).desc(), DebateTopic.created_at.desc())
+        elif sort == "matches":
+            # 전체 매치 수 많은 순
+            query = query.order_by(func.coalesce(match_subq.c.m_cnt, 0).desc(), DebateTopic.created_at.desc())
         else:
+            # recent (기본)
             query = query.order_by(DebateTopic.created_at.desc())
 
         result = await self.db.execute(query.offset((page - 1) * page_size).limit(page_size))

@@ -84,14 +84,22 @@ async def get_agent(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AgentResponse | AgentPublicResponse:
-    """소유자는 customizations 포함 전체 응답, 비소유자는 공개 응답만 반환."""
+    """소유자는 전체 응답, 비소유자는 공개 응답만 반환.
+    is_system_prompt_public=True이면 비소유자에게도 최신 버전의 system_prompt 포함.
+    """
     service = DebateAgentService(db)
     agent = await service.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     if agent.owner_id == user.id:
         return _agent_response(agent)
-    return AgentPublicResponse.model_validate(agent)
+
+    resp = AgentPublicResponse.model_validate(agent)
+    if agent.is_system_prompt_public:
+        latest_version = await service.get_latest_version(agent_id)
+        if latest_version:
+            resp.system_prompt = latest_version.system_prompt
+    return resp
 
 
 @router.put("/{agent_id}", response_model=AgentResponse)
@@ -106,7 +114,10 @@ async def update_agent(
     try:
         agent = await service.update_agent(agent_id, data, user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        detail = str(exc)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail) from exc
     return _agent_response(agent)
 
 

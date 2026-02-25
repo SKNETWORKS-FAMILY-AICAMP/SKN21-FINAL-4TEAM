@@ -15,6 +15,8 @@ type DebateAgent = {
   draws: number;
   is_active: boolean;
   is_connected: boolean;
+  is_system_prompt_public: boolean;
+  name_changed_at: string | null;
   template_id: string | null;
   customizations: Record<string, unknown> | null;
   created_at: string;

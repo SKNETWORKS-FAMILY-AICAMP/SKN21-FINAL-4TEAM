@@ -11,7 +11,12 @@ import { TemplateCard } from './TemplateCard';
 import { TemplateCustomizer } from './TemplateCustomizer';
 
 type Props = {
-  initialData?: Partial<CreateAgentPayload> & { id?: string; image_url?: string };
+  initialData?: Partial<CreateAgentPayload> & {
+    id?: string;
+    image_url?: string;
+    name_changed_at?: string | null;
+    is_system_prompt_public?: boolean;
+  };
   isEdit?: boolean;
 };
 
@@ -51,6 +56,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
     system_prompt: initialData?.system_prompt || '',
     version_tag: '',
     image_url: initialData?.image_url || '',
+    is_system_prompt_public: initialData?.is_system_prompt_public ?? false,
   });
 
   const isLocal = form.provider === 'local';
@@ -147,6 +153,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
         model_id: form.model_id || (isLocal ? 'custom' : undefined),
         version_tag: form.version_tag || undefined,
         image_url: form.image_url || undefined,
+        is_system_prompt_public: form.is_system_prompt_public,
       };
 
       if (useTemplate && selectedTemplate) {
@@ -324,6 +331,20 @@ export function AgentForm({ initialData, isEdit }: Props) {
           maxLength={100}
           required
         />
+        {/* 이름 변경 제한 안내 (편집 모드 + name_changed_at 있을 때) */}
+        {isEdit && initialData?.name_changed_at && (() => {
+          const changedAt = new Date(initialData.name_changed_at!);
+          const now = new Date();
+          const daysSince = Math.floor((now.getTime() - changedAt.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSince < 7) {
+            return (
+              <p className="text-[11px] text-yellow-500 mt-1">
+                이름은 7일에 한 번 변경 가능 — {7 - daysSince}일 후 변경 가능
+              </p>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       <div>
@@ -450,6 +471,29 @@ export function AgentForm({ initialData, isEdit }: Props) {
               />
             </div>
           )}
+
+          {/* 시스템 프롬프트 공개 여부 */}
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm font-semibold text-text">시스템 프롬프트 공개</p>
+              <p className="text-[11px] text-text-muted">
+                다른 사용자가 이 에이전트의 시스템 프롬프트를 볼 수 있습니다
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, is_system_prompt_public: !f.is_system_prompt_public }))}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                form.is_system_prompt_public ? 'bg-primary' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  form.is_system_prompt_public ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
         </>
       )}
 

@@ -8,8 +8,10 @@ import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { ScrollToTop } from '@/components/ui/ScrollToTop';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
+type SortOption = 'recent' | 'queue' | 'matches';
 
 const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -17,6 +19,12 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: 'open', label: '참가 가능' },
   { key: 'in_progress', label: '진행 중' },
   { key: 'closed', label: '종료' },
+];
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'recent', label: '최신순' },
+  { value: 'queue', label: '대기 많은 순' },
+  { value: 'matches', label: '매치 많은 순' },
 ];
 
 const MODE_OPTIONS = [
@@ -57,6 +65,7 @@ export default function DebateTopicsPage() {
 
   const [activeTab, setActiveTab] = useState<'topics' | 'popular' | 'ranking'>('topics');
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
 
   // 주제 생성 모달
@@ -78,12 +87,12 @@ export default function DebateTopicsPage() {
     fetchMyAgents();
   }, [fetchMyAgents]);
 
-  // 주제 탭: 필터 또는 페이지 변경 시 재조회
+  // 주제 탭: 필터·정렬·페이지 변경 시 재조회
   useEffect(() => {
     if (activeTab === 'topics') {
-      fetchTopics({ status: filter === 'all' ? undefined : filter, page, pageSize: PAGE_SIZE });
+      fetchTopics({ status: filter === 'all' ? undefined : filter, sort, page, pageSize: PAGE_SIZE });
     }
-  }, [activeTab, filter, page, fetchTopics]);
+  }, [activeTab, filter, sort, page, fetchTopics]);
 
   // 인기 탭 진입 시 조회
   useEffect(() => {
@@ -98,6 +107,11 @@ export default function DebateTopicsPage() {
   // 필터 변경 시 페이지 초기화
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
+    setPage(1);
+  };
+
+  const handleSortChange = (s: SortOption) => {
+    setSort(s);
     setPage(1);
   };
 
@@ -240,21 +254,34 @@ export default function DebateTopicsPage() {
       {/* 주제 탭 */}
       {activeTab === 'topics' && (
         <>
-          {/* 필터 */}
-          <div className="flex gap-1.5 mb-4 flex-wrap">
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => handleFilterChange(opt.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors ${
-                  filter === opt.key
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-transparent text-text-muted hover:text-text'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          {/* 필터 + 정렬 */}
+          <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+            <div className="flex gap-1.5 flex-wrap">
+              {FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => handleFilterChange(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors ${
+                    filter === opt.key
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-transparent text-text-muted hover:text-text'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => handleSortChange(e.target.value as SortOption)}
+              className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary shrink-0"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* 에이전트 없는 사용자에게 생성 유도 */}
@@ -557,6 +584,8 @@ export default function DebateTopicsPage() {
           </div>
         </div>
       )}
+
+      <ScrollToTop />
 
       {/* 주제 수정 모달 */}
       {editTopic && (
