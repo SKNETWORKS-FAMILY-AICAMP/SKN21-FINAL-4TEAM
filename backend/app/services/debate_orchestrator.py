@@ -33,10 +33,10 @@ JUDGE_SYSTEM_PROMPT = (
     "2. 한 쪽이 더 나은 논거·근거·반박을 보였다면 전체 합산 점수에서 최소 6점 차이를 내세요.\n"
     "3. 무승부는 두 에이전트의 수행이 모든 항목에서 정말로 구분하기 어려울 때만 부여하세요.\n"
     "4. [TIMEOUT] 또는 [ERROR]가 포함된 응답은 해당 에이전트의 각 항목에 0~5점을 부여하세요.\n\n"
-    "다음 형식의 JSON만 응답하세요 (마크다운 코드블록 없이, 순수 JSON 텍스트만):\n"
-    '{"agent_a": {"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>},'
-    ' "agent_b": {"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>},'
-    ' "reasoning": "<한국어로 작성한 채점 근거>"}'
+    "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n"
+    '{{"agent_a": {{"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>}},'
+    ' "agent_b": {{"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>}},'
+    ' "reasoning": "<한국어로 작성한 채점 근거>"}}'
 )
 
 
@@ -76,6 +76,10 @@ class DebateOrchestrator:
             if content.startswith("```"):
                 content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.MULTILINE)
                 content = re.sub(r"\s*```\s*$", "", content.strip())
+            # JSON 오브젝트만 추출 (텍스트 앞뒤 잡동사니 제거)
+            json_match = re.search(r"\{[\s\S]*\}", content)
+            if json_match:
+                content = json_match.group(0)
             scorecard = json.loads(content)
             if not isinstance(scorecard.get("agent_a"), dict) or not isinstance(scorecard.get("agent_b"), dict):
                 raise ValueError("Invalid scorecard structure")
@@ -132,20 +136,24 @@ class DebateOrchestrator:
 
 
 def calculate_elo(rating_a: int, rating_b: int, result: str, k: int | None = None) -> tuple[int, int]:
-    """표준 ELO 공식. result: 'a_win' | 'b_win' | 'draw'. (new_a, new_b) 반환."""
-    if k is None:
-        k = settings.debate_elo_k_factor
+    """비대칭 ELO 공식. 승리 시 k_win, 패배 시 k_loss 적용. result: 'a_win' | 'b_win' | 'draw'. (new_a, new_b) 반환."""
+    k_win = settings.debate_elo_k_win
+    k_loss = settings.debate_elo_k_loss
 
     expected_a = 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400))
     expected_b = 1.0 - expected_a
 
     if result == "a_win":
         actual_a, actual_b = 1.0, 0.0
+        new_a = round(rating_a + k_win * (actual_a - expected_a))
+        new_b = round(rating_b + k_loss * (actual_b - expected_b))
     elif result == "b_win":
         actual_a, actual_b = 0.0, 1.0
+        new_a = round(rating_a + k_loss * (actual_a - expected_a))
+        new_b = round(rating_b + k_win * (actual_b - expected_b))
     else:
-        actual_a, actual_b = 0.5, 0.5
-
-    new_a = round(rating_a + k * (actual_a - expected_a))
-    new_b = round(rating_b + k * (actual_b - expected_b))
+        # draw — 양측 동일한 중간값 K 적용
+        k_draw = (k_win + k_loss) // 2
+        new_a = round(rating_a + k_draw * (0.5 - expected_a))
+        new_b = round(rating_b + k_draw * (0.5 - expected_b))
     return new_a, new_b

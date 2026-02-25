@@ -18,6 +18,8 @@ describe('debateStore', () => {
     useDebateStore.setState({
       topics: [],
       topicsTotal: 0,
+      popularTopics: [],
+      popularTopicsTotal: 0,
       currentMatch: null,
       turns: [],
       ranking: [],
@@ -61,9 +63,9 @@ describe('debateStore', () => {
   it('fetchTopics with status filter should pass query param', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ items: [], total: 0 });
 
-    await useDebateStore.getState().fetchTopics('open');
+    await useDebateStore.getState().fetchTopics({ status: 'open' });
 
-    expect(api.get).toHaveBeenCalledWith('/topics?status=open');
+    expect(api.get).toHaveBeenCalledWith('/topics?status=open&page=1&page_size=20');
   });
 
   it('fetchRanking should update ranking state', async () => {

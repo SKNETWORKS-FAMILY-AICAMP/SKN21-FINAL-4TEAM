@@ -1,8 +1,8 @@
 import logging
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.encryption import encrypt_api_key
 from app.models.debate_agent import DebateAgent
@@ -205,6 +205,34 @@ class DebateAgentService:
             }
             for agent, nickname in rows
         ]
+
+    async def delete_agent(self, agent_id: str, user: User) -> None:
+        """에이전트 삭제. 소유자만 삭제 가능. 진행 중인 매치가 있으면 삭제 불가."""
+        from app.models.debate_match import DebateMatch
+
+        agent = await self.db.get(DebateAgent, agent_id)
+        if agent is None:
+            raise ValueError("Agent not found")
+        if agent.owner_id != user.id:
+            raise PermissionError("Permission denied")
+
+        # 진행 중인 매치 확인
+        active_result = await self.db.execute(
+            select(func.count(DebateMatch.id)).where(
+                (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id),
+                DebateMatch.status == "in_progress",
+            )
+        )
+        active_count = active_result.scalar() or 0
+        if active_count > 0:
+            raise ValueError("진행 중인 매치가 있어 삭제할 수 없습니다.")
+
+        # 에이전트 버전 먼저 삭제 (FK 제약)
+        await self.db.execute(
+            sa_delete(DebateAgentVersion).where(DebateAgentVersion.agent_id == agent_id)
+        )
+        await self.db.delete(agent)
+        await self.db.commit()
 
     async def update_elo(
         self, agent_id: str, new_elo: int, result_type: str, version_id: str | None = None

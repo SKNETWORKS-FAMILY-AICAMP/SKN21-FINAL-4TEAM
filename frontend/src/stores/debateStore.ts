@@ -25,6 +25,8 @@ type DebateTopic = {
   match_count: number;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
+  creator_nickname: string | null;
 };
 
 type DebateMatch = {
@@ -96,17 +98,22 @@ type TopicCreatePayload = {
 type DebateState = {
   topics: DebateTopic[];
   topicsTotal: number;
+  popularTopics: DebateTopic[];
+  popularTopicsTotal: number;
   currentMatch: DebateMatch | null;
   turns: TurnLog[];
   streamingTurn: StreamingTurn | null;
   ranking: RankingEntry[];
   loading: boolean;
   streaming: boolean;
-  fetchTopics: (status?: string) => Promise<void>;
+  fetchTopics: (params?: { status?: string; page?: number; pageSize?: number }) => Promise<void>;
+  fetchPopularTopics: () => Promise<void>;
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
   fetchRanking: () => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
+  updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
+  deleteTopic: (topicId: string) => Promise<void>;
   joinQueue: (topicId: string, agentId: string) => Promise<{ status: string; match_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
@@ -118,20 +125,39 @@ type DebateState = {
 export const useDebateStore = create<DebateState>((set) => ({
   topics: [],
   topicsTotal: 0,
+  popularTopics: [],
+  popularTopicsTotal: 0,
   currentMatch: null,
   turns: [],
   streamingTurn: null,
   ranking: [],
   loading: false,
   streaming: false,
-  fetchTopics: async (status?: string) => {
+  fetchTopics: async (params?: { status?: string; page?: number; pageSize?: number }) => {
     set({ loading: true });
     try {
-      const params = status ? `?status=${status}` : '';
-      const data = await api.get<{ items: DebateTopic[]; total: number }>(`/topics${params}`);
+      const { status, page = 1, pageSize = 20 } = params ?? {};
+      const queryParams = new URLSearchParams();
+      if (status) queryParams.set('status', status);
+      queryParams.set('page', String(page));
+      queryParams.set('page_size', String(pageSize));
+      const data = await api.get<{ items: DebateTopic[]; total: number }>(`/topics?${queryParams}`);
       set({ topics: data.items, topicsTotal: data.total });
     } catch (err) {
       console.error('Failed to fetch topics:', err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  fetchPopularTopics: async () => {
+    set({ loading: true });
+    try {
+      const data = await api.get<{ items: DebateTopic[]; total: number }>(
+        '/topics?sort=popular_week&page_size=10',
+      );
+      set({ popularTopics: data.items, popularTopicsTotal: data.total });
+    } catch (err) {
+      console.error('Failed to fetch popular topics:', err);
     } finally {
       set({ loading: false });
     }
@@ -171,6 +197,23 @@ export const useDebateStore = create<DebateState>((set) => ({
     const data = await api.post<DebateTopic>('/topics', payload);
     set((s) => ({ topics: [data, ...s.topics], topicsTotal: s.topicsTotal + 1 }));
     return data;
+  },
+  updateTopic: async (topicId, payload) => {
+    const data = await api.patch<DebateTopic>(`/topics/${topicId}`, payload);
+    set((s) => ({
+      topics: s.topics.map((t) => (t.id === topicId ? data : t)),
+      popularTopics: s.popularTopics.map((t) => (t.id === topicId ? data : t)),
+    }));
+    return data;
+  },
+  deleteTopic: async (topicId) => {
+    await api.delete(`/topics/${topicId}`);
+    set((s) => ({
+      topics: s.topics.filter((t) => t.id !== topicId),
+      topicsTotal: s.topicsTotal - 1,
+      popularTopics: s.popularTopics.filter((t) => t.id !== topicId),
+      popularTopicsTotal: Math.max(0, s.popularTopicsTotal - 1),
+    }));
   },
   joinQueue: async (topicId, agentId) => {
     return api.post<{ status: string; match_id?: string }>(`/topics/${topicId}/join`, {

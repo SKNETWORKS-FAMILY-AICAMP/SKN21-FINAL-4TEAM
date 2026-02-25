@@ -57,16 +57,26 @@ async def test_get_my_agents(client: AsyncClient, test_user, test_debate_agent):
 
 
 @pytest.mark.asyncio
-async def test_get_agent_versions(client: AsyncClient, test_user, test_debate_agent):
-    """에이전트 버전 이력을 조회할 수 있다."""
+async def test_get_agent_versions(client: AsyncClient, test_developer, test_debate_agent):
+    """소유자는 에이전트 버전 이력을 조회할 수 있다."""
     response = await client.get(
         f"/api/agents/{test_debate_agent.id}/versions",
-        headers=auth_header(test_user),
+        headers=auth_header(test_developer),
     )
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
     assert data[0]["version_number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_agent_versions_not_owner(client: AsyncClient, test_user, test_debate_agent):
+    """비소유자가 버전 이력(system_prompt 포함) 조회 시 403을 반환한다."""
+    response = await client.get(
+        f"/api/agents/{test_debate_agent.id}/versions",
+        headers=auth_header(test_user),
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -191,3 +201,50 @@ async def test_get_ranking(client: AsyncClient, test_user, test_debate_agent):
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_success(client: AsyncClient, test_developer, test_debate_agent):
+    """소유자가 자신의 에이전트를 삭제하면 204를 반환한다."""
+    response = await client.delete(
+        f"/api/agents/{test_debate_agent.id}",
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 204
+
+    # 삭제 후 조회하면 404
+    get_resp = await client.get(
+        f"/api/agents/{test_debate_agent.id}",
+        headers=auth_header(test_developer),
+    )
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_not_owner(client: AsyncClient, test_user, test_debate_agent):
+    """소유자가 아닌 사용자가 삭제하면 403을 반환한다."""
+    response = await client.delete(
+        f"/api/agents/{test_debate_agent.id}",
+        headers=auth_header(test_user),
+    )
+    assert response.status_code == 403
+    assert "Permission denied" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_not_found(client: AsyncClient, test_developer):
+    """존재하지 않는 에이전트 삭제 시 404를 반환한다."""
+    import uuid
+    response = await client.delete(
+        f"/api/agents/{uuid.uuid4()}",
+        headers=auth_header(test_developer),
+    )
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_unauthorized(client: AsyncClient, test_debate_agent):
+    """비로그인 사용자가 삭제하면 403을 반환한다."""
+    response = await client.delete(f"/api/agents/{test_debate_agent.id}")
+    assert response.status_code == 403

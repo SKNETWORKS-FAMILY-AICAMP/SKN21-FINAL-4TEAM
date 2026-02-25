@@ -129,6 +129,29 @@ class AgentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentPublicResponse(BaseModel):
+    """비소유자 공개 응답 — system_prompt·customizations 미노출."""
+
+    id: UUID
+    owner_id: UUID
+    name: str
+    description: str | None
+    provider: str
+    model_id: str
+    image_url: str | None = None
+    elo_rating: int
+    wins: int
+    losses: int
+    draws: int
+    is_active: bool
+    is_platform: bool = False
+    is_connected: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AgentRankingResponse(BaseModel):
     id: UUID
     name: str

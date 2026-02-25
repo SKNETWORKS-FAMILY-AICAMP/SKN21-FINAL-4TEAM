@@ -37,6 +37,8 @@ export default function WaitingRoomPage() {
 
   const matchIdRef = useRef<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
+  const sseRetryCountRef = useRef(0);
+  const MAX_SSE_RETRIES = 10;
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -110,6 +112,14 @@ export default function WaitingRoomPage() {
 
     es.onerror = () => {
       es.close();
+      sseRetryCountRef.current += 1;
+
+      // 최대 재시도 횟수 초과 시 에러 표시
+      if (sseRetryCountRef.current > MAX_SSE_RETRIES) {
+        setError('연결이 불안정합니다. 페이지를 새로고침하거나 나중에 다시 시도해 주세요.');
+        return;
+      }
+
       // SSE 연결 오류 시 상태 재확인 (매칭됐거나 큐에서 빠진 경우 대응)
       api
         .get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
@@ -121,7 +131,7 @@ export default function WaitingRoomPage() {
           } else if (res.status === 'not_in_queue') {
             router.push(`/debate/topics/${topicId}`);
           } else {
-            // 여전히 큐에 있으면 2초 후 재연결
+            // 여전히 큐에 있으면 2초 후 재연결 (지수 백오프 없이 고정 간격)
             setTimeout(connectSSE, 2000);
           }
         })
@@ -172,6 +182,28 @@ export default function WaitingRoomPage() {
       router.push(`/debate/topics/${topicId}`);
     }
   }, [topicId, agentId, router]);
+
+  // SSE 안전망: 4초마다 매치 상태 폴링 (SSE가 이벤트를 놓치는 경우 대응)
+  // SSE가 정상 연결(OPEN) 상태이면 서버 부하 방지를 위해 폴링 스킵
+  const checkMatchStatus = useCallback(async () => {
+    if (!agentId || isMatched) return;
+    if (sseRef.current?.readyState === EventSource.OPEN) return;
+    try {
+      const res = await api.get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
+        `/topics/${topicId}/queue/status?agent_id=${agentId}`,
+      );
+      if (res.status === 'matched' && res.match_id) {
+        handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
+      }
+    } catch {
+      // 폴링 실패는 무시 (SSE가 주 채널)
+    }
+  }, [topicId, agentId, isMatched, handleMatched]);
+
+  useEffect(() => {
+    const interval = setInterval(checkMatchStatus, 4000);
+    return () => clearInterval(interval);
+  }, [checkMatchStatus]);
 
   // 언마운트 시 SSE 정리
   useEffect(() => {

@@ -6,6 +6,7 @@ vi.mock('@/lib/api', () => ({
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -149,6 +150,92 @@ describe('debateAgentStore', () => {
       provider: 'local',
       system_prompt: 'Local test prompt',
     });
+  });
+
+  it('deleteAgent should remove agent from state', async () => {
+    useDebateAgentStore.setState({
+      agents: [
+        {
+          id: 'a1',
+          owner_id: 'u1',
+          name: 'Agent To Delete',
+          description: null,
+          provider: 'openai',
+          model_id: 'gpt-4o',
+          elo_rating: 1500,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          image_url: null,
+          is_active: true,
+          is_connected: false,
+          template_id: null,
+          customizations: null,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+        },
+        {
+          id: 'a2',
+          owner_id: 'u1',
+          name: 'Agent To Keep',
+          description: null,
+          provider: 'openai',
+          model_id: 'gpt-4o',
+          elo_rating: 1500,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          image_url: null,
+          is_active: true,
+          is_connected: false,
+          template_id: null,
+          customizations: null,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+        },
+      ],
+    });
+
+    vi.mocked(api.delete).mockResolvedValueOnce(undefined);
+
+    await useDebateAgentStore.getState().deleteAgent('a1');
+
+    const state = useDebateAgentStore.getState();
+    expect(state.agents).toHaveLength(1);
+    expect(state.agents[0].id).toBe('a2');
+    expect(api.delete).toHaveBeenCalledWith('/agents/a1');
+  });
+
+  it('deleteAgent should throw on API error', async () => {
+    useDebateAgentStore.setState({
+      agents: [
+        {
+          id: 'a1',
+          owner_id: 'u1',
+          name: 'Agent',
+          description: null,
+          provider: 'openai',
+          model_id: 'gpt-4o',
+          elo_rating: 1500,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          image_url: null,
+          is_active: true,
+          is_connected: false,
+          template_id: null,
+          customizations: null,
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+        },
+      ],
+    });
+
+    vi.mocked(api.delete).mockRejectedValueOnce(new Error('Permission denied'));
+
+    await expect(useDebateAgentStore.getState().deleteAgent('a1')).rejects.toThrow();
+    // 실패 시 로컬 상태는 변경되지 않아야 함
+    expect(useDebateAgentStore.getState().agents).toHaveLength(1);
   });
 
   it('fetchVersions should return versions array', async () => {

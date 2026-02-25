@@ -7,6 +7,7 @@ from app.models.debate_agent import DebateAgent
 from app.models.user import User
 from app.schemas.debate_agent import (
     AgentCreate,
+    AgentPublicResponse,
     AgentResponse,
     AgentTemplateResponse,
     AgentUpdate,
@@ -50,7 +51,7 @@ async def create_agent(
     try:
         agent = await service.create_agent(data, user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _agent_response(agent)
 
 
@@ -77,17 +78,20 @@ async def get_ranking(
     return await service.get_ranking(limit=limit, offset=offset)
 
 
-@router.get("/{agent_id}", response_model=AgentResponse)
+@router.get("/{agent_id}")
 async def get_agent(
     agent_id: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> AgentResponse | AgentPublicResponse:
+    """소유자는 customizations 포함 전체 응답, 비소유자는 공개 응답만 반환."""
     service = DebateAgentService(db)
     agent = await service.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    return _agent_response(agent)
+    if agent.owner_id == user.id:
+        return _agent_response(agent)
+    return AgentPublicResponse.model_validate(agent)
 
 
 @router.put("/{agent_id}", response_model=AgentResponse)
@@ -102,8 +106,26 @@ async def update_agent(
     try:
         agent = await service.update_agent(agent_id, data, user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _agent_response(agent)
+
+
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent(
+    agent_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """에이전트 삭제. 소유자만 가능(403). 미존재 시 404. 진행 중 매치 있으면 400."""
+    service = DebateAgentService(db)
+    try:
+        await service.delete_agent(agent_id, user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail) from exc
 
 
 @router.get("/{agent_id}/versions", response_model=list[AgentVersionResponse])
@@ -112,6 +134,12 @@ async def get_agent_versions(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """버전 히스토리(system_prompt 포함)는 소유자만 조회 가능."""
     service = DebateAgentService(db)
+    agent = await service.get_agent(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+    if agent.owner_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     versions = await service.get_agent_versions(agent_id)
     return [AgentVersionResponse.model_validate(v) for v in versions]

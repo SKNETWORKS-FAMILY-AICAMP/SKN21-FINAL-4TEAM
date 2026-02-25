@@ -79,21 +79,14 @@ export default function MatchPage() {
   const isWinnerB = isCompleted && currentMatch.winner_id === currentMatch.agent_b.id;
 
   return (
-    <div className="max-w-[700px] mx-auto py-6 px-4">
-      <Link
-        href="/debate"
-        className="flex items-center gap-1 text-sm text-text-muted no-underline hover:text-text mb-4"
-      >
-        <ArrowLeft size={14} />
-        토론 목록
-      </Link>
-
-      {/* 배틀 헤더 — 대기화면과 동일한 다크 그라디언트 테마 (sticky: 스크롤해도 HP바 상시 노출) */}
+    // -m-4 md:-m-6: main의 padding을 상쇄해 sticky 헤더가 화면 최상단에 정확히 고정되도록 함
+    <div className="-m-4 md:-m-6">
+      {/* 배틀 헤더 — 항상 화면 상단 고정 (sticky top-0) */}
       <div
-        className="sticky top-0 z-10 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50
-          rounded-xl overflow-hidden mb-4"
+        className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900
+          border-b border-gray-700/50 shadow-lg shadow-black/40"
       >
-        <div className="px-5 pt-5 pb-5">
+        <div className="max-w-[700px] mx-auto px-5 pt-4 pb-4">
           {/* HP 게이지 영역 */}
           <div className="flex items-start gap-3">
             <FightingHPBar
@@ -135,7 +128,7 @@ export default function MatchPage() {
           </div>
 
           {/* 토론 주제 */}
-          <div className="mt-4 pt-3 border-t border-gray-700/50 text-center">
+          <div className="mt-3 pt-3 border-t border-gray-700/50 text-center">
             <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">토론 주제</p>
             <h1 className="text-sm font-bold text-white leading-snug">
               「{currentMatch.topic_title}」
@@ -144,23 +137,35 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* 토론 뷰어 */}
-      <div className="mb-4">
-        <DebateViewer match={currentMatch} />
-      </div>
+      {/* 스크롤 콘텐츠 영역 */}
+      <div className="max-w-[700px] mx-auto px-4 pt-4 pb-6">
+        {/* 뒤로가기 — 스크롤 시 사라지는 내비게이션 */}
+        <Link
+          href="/debate"
+          className="flex items-center gap-1 text-sm text-text-muted no-underline hover:text-text mb-4"
+        >
+          <ArrowLeft size={14} />
+          토론 목록
+        </Link>
 
-      {/* 스코어카드 (완료된 매치) */}
-      {currentMatch.status === 'completed' && (
-        <div ref={scorecardRef}>
-        <Scorecard
-          matchId={currentMatch.id}
-          agentA={currentMatch.agent_a}
-          agentB={currentMatch.agent_b}
-          penaltyA={currentMatch.penalty_a}
-          penaltyB={currentMatch.penalty_b}
-        />
+        {/* 토론 뷰어 */}
+        <div className="mb-4">
+          <DebateViewer match={currentMatch} />
         </div>
-      )}
+
+        {/* 스코어카드 (완료된 매치) */}
+        {currentMatch.status === 'completed' && (
+          <div ref={scorecardRef}>
+            <Scorecard
+              matchId={currentMatch.id}
+              agentA={currentMatch.agent_a}
+              agentB={currentMatch.agent_b}
+              penaltyA={currentMatch.penalty_a}
+              penaltyB={currentMatch.penalty_b}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,7 +5,12 @@ import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench } from 'luci
 import type { DebateTopic } from '@/stores/debateStore';
 import { getTimeAgo } from '@/lib/format';
 
-type Props = { topic: DebateTopic };
+type Props = {
+  topic: DebateTopic;
+  currentUserId?: string | null;
+  onEdit?: (topic: DebateTopic) => void;
+  onDelete?: (topicId: string) => void;
+};
 
 const STATUS_STYLES: Record<string, string> = {
   scheduled: 'bg-blue-500/10 text-blue-400',
@@ -47,7 +52,7 @@ function getEndCountdown(iso: string): string | null {
   return '곧 종료';
 }
 
-export function TopicCard({ topic }: Props) {
+export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
   const countdown = topic.scheduled_end_at ? getEndCountdown(topic.scheduled_end_at) : null;
 
   return (
@@ -64,17 +69,47 @@ export function TopicCard({ topic }: Props) {
           )}
           <h3 className="text-sm font-bold text-text truncate">{topic.title}</h3>
         </div>
-        <span
-          className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
-            STATUS_STYLES[topic.status] || STATUS_STYLES.closed
-          }`}
-        >
-          {STATUS_LABELS[topic.status] || topic.status}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {currentUserId && topic.created_by === currentUserId && (
+            <div className="flex gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onEdit?.(topic);
+                }}
+                className="text-xs text-gray-400 hover:text-primary px-2 py-1"
+              >
+                수정
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onDelete?.(topic.id);
+                }}
+                className="text-xs text-gray-400 hover:text-red-400 px-2 py-1"
+              >
+                삭제
+              </button>
+            </div>
+          )}
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+              STATUS_STYLES[topic.status] || STATUS_STYLES.closed
+            }`}
+          >
+            {STATUS_LABELS[topic.status] || topic.status}
+          </span>
+        </div>
       </div>
 
       {topic.description && (
-        <p className="text-xs text-text-secondary mb-3 line-clamp-2">{topic.description}</p>
+        <p className="text-xs text-text-secondary mb-1 line-clamp-2">{topic.description}</p>
+      )}
+
+      {topic.creator_nickname && (
+        <span className="text-xs text-text-muted block mb-2">by {topic.creator_nickname}</span>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">

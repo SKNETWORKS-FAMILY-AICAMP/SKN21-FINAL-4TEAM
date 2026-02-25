@@ -38,7 +38,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   // 선택된 템플릿 (null이면 BYOK/로컬 모드)
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
-  const [customizations, setCustomizations] = useState<Record<string, unknown>>({});
+  const [customizations, setCustomizations] = useState<Record<string, unknown>>(initialData?.customizations ?? {});
   const [enableFreeText, setEnableFreeText] = useState(false);
 
   // 기본 에이전트 폼 상태
@@ -67,6 +67,14 @@ export function AgentForm({ initialData, isEdit }: Props) {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  // templates가 로드된 후 편집 모드에서 초기 템플릿 설정
+  useEffect(() => {
+    if (isEdit && initialData?.template_id && templates.length > 0 && !selectedTemplate) {
+      const found = templates.find((t) => t.id === initialData.template_id);
+      if (found) setSelectedTemplate(found);
+    }
+  }, [isEdit, initialData?.template_id, templates, selectedTemplate]);
 
   // 템플릿 선택 시 해당 템플릿의 기본값으로 customizations 초기화
   const handleSelectTemplate = (template: AgentTemplate) => {

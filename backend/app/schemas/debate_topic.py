@@ -16,9 +16,8 @@ class TopicCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "TopicCreate":
-        if self.scheduled_end_at and self.scheduled_start_at:
-            if self.scheduled_end_at <= self.scheduled_start_at:
-                raise ValueError("종료 시각은 시작 시각보다 뒤여야 합니다.")
+        if self.scheduled_end_at and self.scheduled_start_at and self.scheduled_end_at <= self.scheduled_start_at:
+            raise ValueError("종료 시각은 시작 시각보다 뒤여야 합니다.")
         return self
 
 
@@ -49,6 +48,8 @@ class TopicResponse(BaseModel):
     match_count: int = 0
     created_at: datetime
     updated_at: datetime
+    created_by: UUID | None = None
+    creator_nickname: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -56,3 +57,10 @@ class TopicResponse(BaseModel):
 class TopicListResponse(BaseModel):
     items: list[TopicResponse]
     total: int
+
+
+class TopicUpdatePayload(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None

@@ -8,7 +8,7 @@ import { AgentCard } from '@/components/debate/AgentCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 export default function MyAgentsPage() {
-  const { agents, loading, fetchMyAgents } = useDebateAgentStore();
+  const { agents, loading, fetchMyAgents, deleteAgent } = useDebateAgentStore();
 
   useEffect(() => {
     fetchMyAgents();
@@ -44,7 +44,26 @@ export default function MyAgentsPage() {
             </Link>
           </div>
         ) : (
-          agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)
+          agents.map((agent) => (
+            <div key={agent.id} className="relative group">
+              <AgentCard agent={agent} />
+              <button
+                onClick={async () => {
+                  if (!confirm(`"${agent.name}" 에이전트를 삭제하시겠습니까?`)) return;
+                  try {
+                    await deleteAgent(agent.id);
+                  } catch (err: unknown) {
+                    alert(err instanceof Error ? err.message : '삭제 실패');
+                  }
+                }}
+                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity
+                  p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 text-xs"
+                title="에이전트 삭제"
+              >
+                삭제
+              </button>
+            </div>
+          ))
         )}
       </div>
     </div>

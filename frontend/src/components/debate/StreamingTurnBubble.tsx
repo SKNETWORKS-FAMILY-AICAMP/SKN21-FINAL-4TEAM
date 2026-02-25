@@ -1,6 +1,11 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { StreamingTurn } from '@/stores/debateStore';
+
+// 타이핑 속도: 6글자 / 30ms ≈ 200자/sec — 너무 빠르지 않게 읽기 편한 속도
+const CHARS_PER_TICK = 6;
+const TICK_MS = 30;
 
 type Props = {
   turn: StreamingTurn;
@@ -22,7 +27,31 @@ function extractPartialClaim(raw: string): string {
 export function StreamingTurnBubble({ turn, agentAName, agentBName }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
-  const partialClaim = extractPartialClaim(turn.raw);
+
+  // 전체 claim 텍스트 (SSE 수신 기준)
+  const fullClaim = extractPartialClaim(turn.raw);
+  // 타이핑 효과로 표시할 텍스트
+  const [displayedClaim, setDisplayedClaim] = useState('');
+  // 최신 fullClaim을 interval 내부에서 참조하기 위한 ref
+  const targetRef = useRef(fullClaim);
+  targetRef.current = fullClaim;
+
+  // 턴이 바뀌면 표시 텍스트 초기화
+  useEffect(() => {
+    setDisplayedClaim('');
+  }, [turn.turn_number, turn.speaker]);
+
+  // 고정 interval로 타이핑 효과 구현
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDisplayedClaim((prev) => {
+        const target = targetRef.current;
+        if (prev.length >= target.length) return prev;
+        return target.slice(0, prev.length + CHARS_PER_TICK);
+      });
+    }, TICK_MS);
+    return () => clearInterval(interval);
+  }, []); // 컴포넌트 생애주기 동안 한 번만 등록
 
   return (
     <div className={`flex ${isAgentA ? 'justify-start' : 'justify-end'}`}>
@@ -42,10 +71,10 @@ export function StreamingTurnBubble({ turn, agentAName, agentBName }: Props) {
           <span className="text-[10px] text-text-muted">Turn {turn.turn_number}</span>
         </div>
 
-        {/* 스트리밍 텍스트 또는 대기 점 */}
-        {partialClaim ? (
+        {/* 타이핑 효과 텍스트 또는 대기 점 */}
+        {displayedClaim ? (
           <p className="text-sm text-text whitespace-pre-wrap">
-            {partialClaim}
+            {displayedClaim}
             <span className="inline-block w-0.5 h-3.5 bg-primary animate-pulse ml-0.5 align-middle" />
           </p>
         ) : (

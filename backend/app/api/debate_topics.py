@@ -1,9 +1,10 @@
 import json
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,7 +14,7 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
-from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse
+from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse, TopicUpdatePayload
 from app.services.debate_engine import run_debate
 from app.services.debate_matching_service import DebateMatchingService
 from app.services.debate_queue_broadcast import publish_queue_event, subscribe_queue
@@ -30,8 +31,7 @@ async def create_topic(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """토론 주제 생성. 관리자는 스케줄 설정 가능, 일반 유저는 즉시 open."""
-    # 일반 유저가 스케줄 필드를 보내도 서비스에서 무시함
+    """토론 주제 생성. 모든 사용자가 스케줄 설정 가능, 관리자 여부는 is_admin_topic 플래그로만 구분."""
     service = DebateTopicService(db)
     topic = await service.create_topic(data, user)
     return _topic_response(topic)
@@ -39,15 +39,53 @@ async def create_topic(
 
 @router.get("", response_model=TopicListResponse)
 async def list_topics(
-    status_filter: str | None = Query(None, alias="status"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    status_filter: str | None = Query(None, alias="status", pattern="^(scheduled|open|in_progress|closed)$"),
+    sort: str = Query("recent", pattern="^(recent|popular_week)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = DebateTopicService(db)
-    items, total = await service.list_topics(status=status_filter, skip=skip, limit=limit)
+    items, total = await service.list_topics(status=status_filter, sort=sort, page=page, page_size=page_size)
     return {"items": items, "total": total}
+
+
+@router.patch("/{topic_id}", response_model=TopicResponse)
+async def update_topic(
+    topic_id: UUID,
+    payload: TopicUpdatePayload,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """주제 작성자가 자신의 주제를 수정."""
+    service = DebateTopicService(db)
+    try:
+        topic = await service.update_topic_by_user(topic_id, user.id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _topic_response(topic)
+
+
+@router.delete("/{topic_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_topic(
+    topic_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """주제 작성자가 자신의 주제를 삭제. 진행 중 매치가 있으면 409 반환."""
+    service = DebateTopicService(db)
+    try:
+        await service.delete_topic_by_user(topic_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
 
 @router.get("/{topic_id}", response_model=TopicResponse)
@@ -60,7 +98,9 @@ async def get_topic(
     topic = await service.get_topic(topic_id)
     if topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
-    return _topic_response(topic)
+    queue_count = await service._count_queue(topic.id)
+    match_count = await service._count_matches(topic.id)
+    return _topic_response(topic, queue_count=queue_count, match_count=match_count)
 
 
 async def _run_debate_safe(match_id: str) -> None:
@@ -182,14 +222,14 @@ async def queue_status(
     )
     entry = queue_result.scalar_one_or_none()
     if entry is not None:
-        # 큐 내 대기 위치 계산
+        # DB에서 직접 COUNT로 대기 위치 계산 (전체 로드 방지)
         pos_result = await db.execute(
-            select(DebateMatchQueue)
-            .where(DebateMatchQueue.topic_id == topic_id)
-            .order_by(DebateMatchQueue.joined_at)
+            select(func.count(DebateMatchQueue.id)).where(
+                DebateMatchQueue.topic_id == topic_id,
+                DebateMatchQueue.joined_at <= entry.joined_at,
+            )
         )
-        all_entries = list(pos_result.scalars().all())
-        position = next((i + 1 for i, e in enumerate(all_entries) if str(e.agent_id) == agent_id), 1)
+        position = pos_result.scalar() or 1
         return {"status": "queued", "position": position, "joined_at": entry.joined_at.isoformat()}
 
     # 이미 매칭됐는지 확인 (최근 매치)
@@ -239,7 +279,7 @@ async def leave_queue(
     return {"status": "left"}
 
 
-def _topic_response(topic) -> dict:
+def _topic_response(topic, queue_count: int = 0, match_count: int = 0) -> dict:
     return {
         "id": topic.id,
         "title": topic.title,
@@ -252,8 +292,10 @@ def _topic_response(topic) -> dict:
         "scheduled_end_at": topic.scheduled_end_at,
         "is_admin_topic": topic.is_admin_topic,
         "tools_enabled": topic.tools_enabled,
-        "queue_count": 0,
-        "match_count": 0,
+        "queue_count": queue_count,
+        "match_count": match_count,
         "created_at": topic.created_at,
         "updated_at": topic.updated_at,
+        "created_by": str(topic.created_by) if topic.created_by else None,
+        "creator_nickname": topic.creator_nickname if hasattr(topic, "creator_nickname") else None,
     }

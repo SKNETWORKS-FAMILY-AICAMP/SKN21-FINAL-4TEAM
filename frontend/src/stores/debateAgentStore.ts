@@ -103,6 +103,7 @@ type DebateAgentState = {
   fetchTemplates: () => Promise<void>;
   createAgent: (data: CreateAgentPayload) => Promise<DebateAgent>;
   updateAgent: (id: string, data: UpdateAgentPayload) => Promise<DebateAgent>;
+  deleteAgent: (id: string) => Promise<void>;
   fetchVersions: (agentId: string) => Promise<AgentVersion[]>;
 };
 
@@ -138,6 +139,10 @@ export const useDebateAgentStore = create<DebateAgentState>((set) => ({
     const agent = await api.put<DebateAgent>(`/agents/${id}`, data);
     set((s) => ({ agents: s.agents.map((a) => (a.id === id ? agent : a)) }));
     return agent;
+  },
+  deleteAgent: async (id) => {
+    await api.delete(`/agents/${id}`);
+    set((s) => ({ agents: s.agents.filter((a) => a.id !== id) }));
   },
   fetchVersions: async (agentId) => {
     return api.get<AgentVersion[]>(`/agents/${agentId}/versions`);

@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,17 +9,21 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
-from app.schemas.debate_topic import TopicCreate, TopicUpdate
+from app.schemas.debate_topic import TopicCreate, TopicUpdate, TopicUpdatePayload
 
 logger = logging.getLogger(__name__)
 
 
 class DebateTopicService:
+    # 스케줄 상태 동기화 속도 제한 — 60초 이내 재호출 시 스킵
+    _last_sync_at: datetime | None = None
+    _SYNC_INTERVAL_SECS: int = 60
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def create_topic(self, data: TopicCreate, user: User) -> DebateTopic:
-        """토론 주제 생성. 관리자는 스케줄 설정 가능, 일반 유저는 즉시 open."""
+        """토론 주제 생성. 스케줄 필드는 모든 사용자가 설정 가능, 관리자 여부는 is_admin_topic 플래그로만 구분."""
         is_admin = user.role in ("admin", "superadmin")
         now = datetime.now(UTC)
 
@@ -32,8 +37,8 @@ class DebateTopicService:
             max_turns=data.max_turns,
             turn_token_limit=data.turn_token_limit,
             tools_enabled=data.tools_enabled,
-            scheduled_start_at=data.scheduled_start_at if is_admin else None,
-            scheduled_end_at=data.scheduled_end_at if is_admin else None,
+            scheduled_start_at=data.scheduled_start_at,
+            scheduled_end_at=data.scheduled_end_at,
             is_admin_topic=is_admin,
             status=initial_status,
             created_by=user.id,
@@ -50,12 +55,41 @@ class DebateTopicService:
         return result.scalar_one_or_none()
 
     async def list_topics(
-        self, status: str | None = None, skip: int = 0, limit: int = 20
+        self,
+        status: str | None = None,
+        sort: str = "recent",
+        page: int = 1,
+        page_size: int = 20,
     ) -> tuple[list[dict], int]:
-        """토픽 목록 조회. 조회 전 스케줄 상태 자동 동기화."""
+        """토픽 목록 조회. 집계 서브쿼리로 N+1 방지.
+
+        sort: 'recent' (최신순) | 'popular_week' (이번 주 매치 수 기준 인기순)
+        """
         await self._sync_scheduled_topics()
 
-        query = select(DebateTopic)
+        # 집계 서브쿼리로 queue_count·match_count를 한 번의 JOIN으로 해결
+        queue_subq = (
+            select(DebateMatchQueue.topic_id, func.count(DebateMatchQueue.id).label("q_cnt"))
+            .group_by(DebateMatchQueue.topic_id)
+            .subquery()
+        )
+        match_subq = (
+            select(DebateMatch.topic_id, func.count(DebateMatch.id).label("m_cnt"))
+            .group_by(DebateMatch.topic_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                DebateTopic,
+                User.nickname.label("creator_nickname"),
+                func.coalesce(queue_subq.c.q_cnt, 0).label("queue_count"),
+                func.coalesce(match_subq.c.m_cnt, 0).label("match_count"),
+            )
+            .outerjoin(User, DebateTopic.created_by == User.id)
+            .outerjoin(queue_subq, DebateTopic.id == queue_subq.c.topic_id)
+            .outerjoin(match_subq, DebateTopic.id == match_subq.c.topic_id)
+        )
         count_query = select(func.count(DebateTopic.id))
 
         if status:
@@ -65,15 +99,32 @@ class DebateTopicService:
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        result = await self.db.execute(
-            query.order_by(DebateTopic.created_at.desc()).offset(skip).limit(limit)
-        )
-        topics = list(result.scalars().all())
+        if sort == "popular_week":
+            from datetime import timedelta
+
+            week_ago = datetime.now(UTC) - timedelta(days=7)
+            popular_subq = (
+                select(DebateMatch.topic_id, func.count(DebateMatch.id).label("weekly_cnt"))
+                .where(DebateMatch.created_at >= week_ago)
+                .group_by(DebateMatch.topic_id)
+                .subquery()
+            )
+            query = (
+                query.outerjoin(popular_subq, DebateTopic.id == popular_subq.c.topic_id)
+                .order_by(func.coalesce(popular_subq.c.weekly_cnt, 0).desc(), DebateTopic.created_at.desc())
+            )
+        else:
+            query = query.order_by(DebateTopic.created_at.desc())
+
+        result = await self.db.execute(query.offset((page - 1) * page_size).limit(page_size))
+        rows = result.all()
 
         items = []
-        for topic in topics:
-            queue_count = await self._count_queue(topic.id)
-            match_count = await self._count_matches(topic.id)
+        for row in rows:
+            topic = row[0]
+            creator_nickname = row[1]
+            queue_count = row[2]
+            match_count = row[3]
             items.append({
                 "id": str(topic.id),
                 "title": topic.title,
@@ -90,6 +141,8 @@ class DebateTopicService:
                 "match_count": match_count,
                 "created_at": topic.created_at,
                 "updated_at": topic.updated_at,
+                "created_by": topic.created_by,
+                "creator_nickname": creator_nickname,
             })
 
         return items, total
@@ -103,6 +156,23 @@ class DebateTopicService:
             raise ValueError("Topic not found")
 
         for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(topic, field, value)
+
+        await self.db.commit()
+        await self.db.refresh(topic)
+        return topic
+
+    async def update_topic_by_user(
+        self, topic_id: UUID, user_id: UUID, payload: TopicUpdatePayload
+    ) -> DebateTopic:
+        """주제 작성자가 자신의 주제를 수정. 미존재 시 ValueError, 권한 없으면 PermissionError."""
+        topic = await self.db.get(DebateTopic, topic_id)
+        if not topic:
+            raise ValueError("Topic not found")
+        if topic.created_by != user_id:
+            raise PermissionError("Not the topic creator")
+
+        for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(topic, field, value)
 
         await self.db.commit()
@@ -134,9 +204,40 @@ class DebateTopicService:
         await self.db.delete(topic)
         await self.db.commit()
 
+    async def delete_topic_by_user(self, topic_id: UUID, user_id: UUID) -> None:
+        """주제 작성자가 자신의 주제를 삭제. 진행 중 매치가 있으면 ValueError(409용)."""
+        from sqlalchemy import delete as sa_delete
+
+        topic = await self.db.get(DebateTopic, topic_id)
+        if not topic:
+            raise ValueError("Topic not found")
+        if topic.created_by != user_id:
+            raise PermissionError("Not the topic creator")
+
+        active_count_result = await self.db.execute(
+            select(func.count(DebateMatch.id)).where(
+                DebateMatch.topic_id == topic_id,
+                DebateMatch.status == "in_progress",
+            )
+        )
+        active_matches = active_count_result.scalar() or 0
+        if active_matches > 0:
+            raise ValueError(f"진행 중인 매치가 {active_matches}개 있어 삭제할 수 없습니다.")
+
+        await self.db.execute(
+            sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic_id)
+        )
+        await self.db.delete(topic)
+        await self.db.commit()
+
     async def _sync_scheduled_topics(self) -> None:
-        """scheduled_start_at/end_at 기준으로 status 자동 갱신."""
+        """scheduled_start_at/end_at 기준으로 status 자동 갱신. 60초 이내 재호출 시 스킵."""
         now = datetime.now(UTC)
+        last = DebateTopicService._last_sync_at
+        if last is not None and (now - last).total_seconds() < DebateTopicService._SYNC_INTERVAL_SECS:
+            return
+
+        DebateTopicService._last_sync_at = now
 
         # scheduled → open (시작 시각 도달)
         await self.db.execute(
