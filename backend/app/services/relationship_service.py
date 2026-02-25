@@ -101,17 +101,25 @@ class RelationshipService:
     @staticmethod
     def _calculate_affection_delta(emotion_signal: dict | None) -> int:
         if not emotion_signal:
-            return 2  # Default small positive for any interaction
+            return 1  # Default minimal positive for any interaction
 
         dominant = emotion_signal.get("label", "")
-        positive_emotions = {"기쁨", "사랑", "감동", "설렘", "감사", "행복", "흥미", "즐거움"}
-        negative_emotions = {"분노", "슬픔", "혐오", "공포", "실망", "짜증"}
+        # 긍정 감정: 강도에 따라 차등 (강한 긍정 > 일반 긍정)
+        strong_positive = {"사랑", "설렘", "감동", "행복"}
+        mild_positive = {"기쁨", "감사", "흥미", "즐거움"}
+        # 부정 감정: 강도에 따라 차등 (강한 부정은 더 크게 감소)
+        strong_negative = {"분노", "혐오", "공포"}
+        mild_negative = {"슬픔", "실망", "짜증"}
 
-        if dominant in positive_emotions:
-            return 4
-        elif dominant in negative_emotions:
-            return -2
-        return 2
+        if dominant in strong_positive:
+            return 5
+        elif dominant in mild_positive:
+            return 3
+        elif dominant in strong_negative:
+            return -5
+        elif dominant in mild_negative:
+            return -3
+        return 1
 
     @staticmethod
     def _determine_stage(affection_level: int) -> str:

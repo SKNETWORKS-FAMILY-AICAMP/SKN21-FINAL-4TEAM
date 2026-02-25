@@ -167,7 +167,15 @@
       "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/ -v --tb=short 2>&1)",
       "Bash(/c/Users/ParkHue/AppData/Local/Programs/Python/Python310/python:*)",
       "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/unit/services/test_debate_ws_manager.py -v --tb=short 2>&1)",
-      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/unit/services/test_debate_ws_manager.py backend/tests/unit/services/test_debate_engine.py backend/tests/integration/api/test_debate_agents.py backend/tests/integration/api/test_debate_ws.py -v --tb=short 2>&1)"
+      "Bash(cd /c/Project_New && backend/.venv/Scripts/python -m pytest backend/tests/unit/services/test_debate_ws_manager.py backend/tests/unit/services/test_debate_engine.py backend/tests/integration/api/test_debate_agents.py backend/tests/integration/api/test_debate_ws.py -v --tb=short 2>&1)",
+      "Bash(scp:*)",
+      "Bash(cd /c/Project_New/backend && python -m ruff check app/services/debate_orchestrator.py app/api/debate_topics.py 2>&1)",
+      "Bash(cd C:/Project_New/backend && python -m ruff check app/services/debate_topic_service.py app/api/admin/debate.py app/services/relationship_service.py app/api/relationships.py app/schemas/relationship.py app/services/chat_service.py app/prompt/compiler.py 2>&1)",
+      "Bash(tail:*)",
+      "Bash(cd /c/Project_New/backend && python -m ruff check app/services/debate_topic_service.py app/api/admin/debate.py app/services/relationship_service.py app/api/relationships.py app/schemas/relationship.py app/services/chat_service.py app/prompt/compiler.py 2>&1)",
+      "Bash(cd /c/Project_New/backend && python -m ruff check app/api/chat.py 2>&1)",
+      "Bash(/c/Project_New/backend/.venv/Scripts/python:*)",
+      "Bash(wait:*)"
     ]
   }
 }

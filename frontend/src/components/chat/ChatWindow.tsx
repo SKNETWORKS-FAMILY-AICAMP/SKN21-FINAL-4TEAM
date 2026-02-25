@@ -7,11 +7,12 @@ import { MessageActions } from './MessageActions';
 
 type Props = {
   sessionId: string;
+  personaName?: string;
   onRegenerate?: (messageId: number) => void;
   onEdit?: (messageId: number, content: string) => void;
 };
 
-export const ChatWindow = memo(function ChatWindow({ sessionId, onRegenerate, onEdit }: Props) {
+export const ChatWindow = memo(function ChatWindow({ sessionId, personaName, onRegenerate, onEdit }: Props) {
   const { messages, isStreaming } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -57,7 +58,7 @@ export const ChatWindow = memo(function ChatWindow({ sessionId, onRegenerate, on
           }`}
         >
           <div className="text-[11px] font-semibold mb-1 opacity-70">
-            {msg.role === 'user' ? '나' : '캐릭터'}
+            {msg.role === 'user' ? '나' : (personaName || '캐릭터')}
             {msg.isEdited && <span className="ml-1 text-text-muted">(수정됨)</span>}
           </div>
           {editingId === msg.id ? (

@@ -32,6 +32,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
+    // 401 → 세션 만료. 로그인 페이지가 아닌 경우에만 이동 (무한 루프 방지)
+    if (response.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.location.href = '/';
+    }
     const body = await response.json().catch(() => ({}));
     throw new ApiError(
       response.status,

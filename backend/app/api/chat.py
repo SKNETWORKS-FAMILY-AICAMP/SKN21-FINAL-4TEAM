@@ -98,6 +98,8 @@ async def get_session_detail(
 
     return {
         **SessionResponse.model_validate(session).model_dump(),
+        "persona_name": persona.display_name if persona else None,
+        "persona_greeting": persona.greeting_message if persona else None,
         "live2d_model_path": live2d_model.model_path if live2d_model else None,
         "live2d_emotion_mappings": live2d_model.emotion_mappings if live2d_model else None,
     }

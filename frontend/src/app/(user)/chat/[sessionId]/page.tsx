@@ -247,7 +247,7 @@ export default function ChatPage() {
       </div>
 
       <div className="relative z-[1] flex flex-col h-full bg-[linear-gradient(transparent_0%,rgba(26,26,46,0.85)_40%)]">
-        <ChatWindow sessionId={sessionId} onRegenerate={handleRegenerate} onEdit={handleEdit} />
+        <ChatWindow sessionId={sessionId} personaName={personaName} onRegenerate={handleRegenerate} onEdit={handleEdit} />
         <MessageInput
           onSend={handleSend}
           disabled={isStreaming}

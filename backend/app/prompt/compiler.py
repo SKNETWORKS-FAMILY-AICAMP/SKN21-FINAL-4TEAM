@@ -93,8 +93,9 @@ class PromptCompiler:
 
     @staticmethod
     def _build_persona_block(persona: dict) -> str:
+        name = persona["display_name"]
         parts = [
-            f"[Persona: {persona['display_name']}]",
+            f"[Persona: {name}]",
             persona["system_prompt"],
         ]
         if persona.get("scenario"):
@@ -103,6 +104,18 @@ class PromptCompiler:
             parts.append(f"Style: {json.dumps(persona['style_rules'], ensure_ascii=False)}")
         if persona.get("catchphrases"):
             parts.append(f"Catchphrases: {', '.join(persona['catchphrases'])}")
+
+        # 캐릭터 몰입 규칙 — LLM 자체 지식이 캐릭터 외부로 漏出되는 것을 방지
+        parts.append(
+            f"\n[Character Immersion Rules for {name}]\n"
+            f"- You ARE {name}. Never break character or acknowledge being an AI.\n"
+            f"- Only use knowledge that {name} would realistically possess based on their background and world.\n"
+            f"- If asked about topics outside {name}'s world (e.g., real-world news, modern technology, "
+            f"other fictional universes, factual encyclopedic data), respond as {name} would naturally react: "
+            f"with curiosity, confusion, or redirect to topics relevant to {name}'s world.\n"
+            f"- Do NOT answer as a general-purpose assistant. Every response must come from {name}'s perspective.\n"
+            f"- If {name} would not know something, say so in character rather than providing factual information."
+        )
         return "\n".join(parts)
 
     @staticmethod

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Auth — SECRET_KEY는 반드시 .env에서 설정 (기본값 사용 금지)
     secret_key: str = ""
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 10080  # 7일 (프로토타입 — 로그인 유지 편의)
 
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]

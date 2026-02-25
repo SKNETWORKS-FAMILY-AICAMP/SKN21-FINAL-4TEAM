@@ -34,8 +34,14 @@ export const useUserStore = create<UserState>((set, get) => ({
   token: null,
   initialized: false,
   setUser: (user) => set({ user }),
-  // 쿠키 기반으로 전환 — token 필드는 하위 호환성만 유지
-  setToken: (_token) => set({ token: _token }),
+  // SSE Authorization 헤더 전송을 위해 localStorage에도 저장 (쿠키는 POST SSE에서 불안정)
+  setToken: (token) => {
+    if (typeof window !== 'undefined') {
+      if (token) localStorage.setItem('token', token);
+      else localStorage.removeItem('token');
+    }
+    set({ token });
+  },
   isAdultVerified: () => get().user?.adultVerifiedAt != null,
   isAdmin: () => ['admin', 'superadmin'].includes(get().user?.role ?? ''),
   isSuperAdmin: () => get().user?.role === 'superadmin',
@@ -46,6 +52,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch {
       // 네트워크 오류 등 무시 — 클라이언트 상태는 항상 초기화
     }
+    if (typeof window !== 'undefined') localStorage.removeItem('token');
     set({ user: null, token: null });
   },
   initialize: (() => {

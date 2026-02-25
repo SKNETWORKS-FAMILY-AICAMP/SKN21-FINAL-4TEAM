@@ -32,6 +32,7 @@ class MemoryResponse(BaseModel):
 
 
 @router.get("")
+@router.get("/")
 async def list_memories(
     namespace: str | None = None,
     skip: int = Query(0, ge=0),

@@ -20,6 +20,8 @@ export function connectSSE(
     try {
       const response = await fetch(url, {
         method: 'POST',
+        // 쿠키 기반 인증 — credentials 없으면 HttpOnly 쿠키가 전송되지 않아 401 발생
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
