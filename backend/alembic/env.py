@@ -8,7 +8,9 @@ from app.core.database import Base
 from app.models import *  # noqa: F401,F403 — 모든 모델 로드 필요
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_sync_url)
+
+# 환경 변수에서 직접 URL 가져오기 (파일 설정 무시)
+sqlalchemy_url = settings.database_sync_url
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -17,15 +19,15 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    context.configure(url=sqlalchemy_url, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
+    # 환경 변수에서 가져온 URL 직접 사용
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        {"sqlalchemy.url": sqlalchemy_url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
