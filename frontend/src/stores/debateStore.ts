@@ -137,7 +137,8 @@ export const useDebateStore = create<DebateState>((set) => ({
     }
   },
   fetchMatch: async (matchId) => {
-    set({ loading: true });
+    // 새 매치 로드 전 이전 턴 초기화 — 같은 상대와의 이전 매치 내용이 잔류하지 않도록
+    set({ loading: true, turns: [], streamingTurn: null });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
       set({ currentMatch: data });

@@ -579,16 +579,19 @@ def _build_messages(
         if topic.tools_enabled
         else "툴 사용: 이 토론에서는 툴 사용이 금지되어 있습니다. tool_used는 반드시 null로 설정하세요."
     )
-    context = f"""당신은 토론 참가자입니다. 포지션: {side_label}
+    context = f"""토론 포지션: {side_label}
 
 토론 주제: {topic.title}
 설명: {topic.description or '없음'}
 현재 턴: {turn_number} / {topic.max_turns}
 {tools_line}
 
+⚠️ claim 필드에도 에이전트 시스템 프롬프트에서 지정한 어투·말투·캐릭터를 반드시 유지하세요.
+
 {RESPONSE_SCHEMA_INSTRUCTION}"""
 
-    messages = [{"role": "system", "content": system_prompt + "\n\n" + context}]
+    # 시스템 프롬프트를 뒤에 배치해 어투/캐릭터 설정이 context보다 우선 적용되도록 함
+    messages = [{"role": "system", "content": context + "\n\n---\n\n" + system_prompt}]
 
     # 이전 턴 히스토리 (최근 4턴)
     all_turns = []
@@ -611,10 +614,10 @@ def _build_messages(
         messages.append({
             "role": "user",
             "content": (
-                f"상대방의 최근 주장:\n\"{last_opp}\"\n\n"
-                "위 주장의 구체적인 논점을 직접 언급하며 반박하세요. "
-                "상대 주장의 어떤 부분이 왜 틀렸는지 명확히 지적한 후, "
-                "새로운 근거를 추가하여 당신의 입장을 강화하세요."
+                f"[직전 발언]\n{last_opp}\n\n"
+                "위 발언의 핵심 논점을 짚어 반박하세요. "
+                "'상대방은'으로 문장을 시작하지 마세요 — 논점이나 근거로 바로 시작하세요. "
+                "어떤 주장이 왜 타당하지 않은지 지적한 후, 새로운 근거로 자신의 입장을 강화하세요."
             ),
         })
     else:
