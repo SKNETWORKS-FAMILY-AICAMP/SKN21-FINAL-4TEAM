@@ -32,6 +32,7 @@ frontend/next-env.d.ts
 
 # Environment
 .env
+.env.dev
 .env.local
 .env.*.local
 
