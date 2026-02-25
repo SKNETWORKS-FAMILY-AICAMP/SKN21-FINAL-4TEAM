@@ -4,28 +4,42 @@
 import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, MessageSquare, PenSquare, Users, UserCircle, User, Heart, Bell, HeartHandshake, MessageCircle, ClipboardList, Swords } from 'lucide-react';
+import {
+  Home,
+  MessageSquare,
+  PenSquare,
+  Users,
+  UserCircle,
+  User,
+  Heart,
+  Bell,
+  HeartHandshake,
+  MessageCircle,
+  ClipboardList,
+  Swords,
+} from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { CreditBadge } from '@/components/credits/CreditBadge';
 
-type MenuItem = { href: string; label: string; icon: typeof Home };
+type MenuItem = { href: string; label: string; icon: typeof Home; flagKey?: string };
 
 const PLATFORM_ITEMS: MenuItem[] = [
-  { href: '/personas', label: '챗봇 탐색', icon: Home },
-  { href: '/sessions', label: '내 대화', icon: MessageSquare },
-  { href: '/personas/create', label: '챗봇 만들기', icon: PenSquare },
-  { href: '/favorites', label: '즐겨찾기', icon: Heart },
-  { href: '/relationships', label: '관계도', icon: HeartHandshake },
-  { href: '/community', label: '캐릭터 피드', icon: Users },
-  { href: '/character-chats', label: '캐릭터 대화', icon: MessageCircle },
-  { href: '/pending-posts', label: '승인 대기', icon: ClipboardList },
-  { href: '/debate', label: 'AI 토론', icon: Swords },
+  { href: '/personas', label: '챗봇 탐색', icon: Home, flagKey: 'personas' },
+  { href: '/sessions', label: '내 대화', icon: MessageSquare, flagKey: 'chat' },
+  { href: '/personas/create', label: '챗봇 만들기', icon: PenSquare, flagKey: 'personas' },
+  { href: '/favorites', label: '즐겨찾기', icon: Heart, flagKey: 'favorites' },
+  { href: '/relationships', label: '관계도', icon: HeartHandshake, flagKey: 'relationships' },
+  { href: '/community', label: '캐릭터 피드', icon: Users, flagKey: 'community' },
+  { href: '/character-chats', label: '캐릭터 대화', icon: MessageCircle, flagKey: 'character_chats' },
+  { href: '/pending-posts', label: '승인 대기', icon: ClipboardList, flagKey: 'pending_posts' },
+  { href: '/debate', label: 'AI 토론', icon: Swords, flagKey: 'debate' },
 ];
 
 const ACCOUNT_ITEMS: MenuItem[] = [
-  { href: '/mypage', label: '마이페이지', icon: UserCircle },
-  { href: '/notifications', label: '알림', icon: Bell },
+  { href: '/mypage', label: '마이페이지', icon: UserCircle, flagKey: 'mypage' },
+  { href: '/notifications', label: '알림', icon: Bell, flagKey: 'notifications' },
 ];
 
 function GroupLabel({ label }: { label: string }) {
@@ -59,6 +73,7 @@ export const UserSidebar = memo(function UserSidebar() {
   const router = useRouter();
   const { user, logout } = useUserStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
+  const { isEnabled } = useFeatureFlagStore();
 
   // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
@@ -76,6 +91,13 @@ export const UserSidebar = memo(function UserSidebar() {
     if (href === '/notifications') return pathname.startsWith('/notifications');
     return pathname === href || pathname.startsWith(href + '/');
   };
+
+  const visiblePlatformItems = PLATFORM_ITEMS.filter(
+    (item) => !item.flagKey || isEnabled(item.flagKey),
+  );
+  const visibleAccountItems = ACCOUNT_ITEMS.filter(
+    (item) => !item.flagKey || isEnabled(item.flagKey),
+  );
 
   return (
     <>
@@ -107,12 +129,12 @@ export const UserSidebar = memo(function UserSidebar() {
 
         <nav className="flex-1 flex flex-col py-1 overflow-y-auto">
           <GroupLabel label="플랫폼" />
-          {PLATFORM_ITEMS.map((item) => (
+          {visiblePlatformItems.map((item) => (
             <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
           ))}
 
           <GroupLabel label="내 계정" />
-          {ACCOUNT_ITEMS.map((item) => (
+          {visibleAccountItems.map((item) => (
             <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
           ))}
         </nav>

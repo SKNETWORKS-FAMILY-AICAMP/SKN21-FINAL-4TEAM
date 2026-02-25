@@ -16,6 +16,7 @@ from app.api import (
     chat,
     credits,
     favorites,
+    features,
     health,
     image_gen,
     lorebook,
@@ -36,15 +37,16 @@ from app.api import (
     world_events,
 )
 from app.api.admin import agents as admin_agents
-from app.api.admin import debate as admin_debate
 from app.api.admin import board as admin_board
-from app.api.admin import reports as admin_reports
 from app.api.admin import content as admin_content
 from app.api.admin import credits as admin_credits
+from app.api.admin import debate as admin_debate
+from app.api.admin import features as admin_features
 from app.api.admin import llm_models as admin_llm_models
 from app.api.admin import monitoring as admin_monitoring
 from app.api.admin import personas as admin_personas
 from app.api.admin import policy as admin_policy
+from app.api.admin import reports as admin_reports
 from app.api.admin import subscriptions as admin_subscriptions
 from app.api.admin import system as admin_system
 from app.api.admin import usage as admin_usage
@@ -146,6 +148,7 @@ app.add_middleware(RateLimitMiddleware)
 
 # User-facing routes
 app.include_router(health.router, tags=["health"])
+app.include_router(features.router, prefix="/api/features", tags=["features"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(personas.router, prefix="/api/personas", tags=["personas"])
@@ -197,6 +200,7 @@ app.include_router(admin_reports.router, prefix="/api/admin/reports", tags=["adm
 app.include_router(admin_agents.router, prefix="/api/admin/agents", tags=["admin-agents"])
 app.include_router(admin_video_gen.router, prefix="/api/admin/video-gen", tags=["admin-video-gen"])
 app.include_router(admin_world_events.router, prefix="/api/admin/world-events", tags=["admin-world-events"])
+app.include_router(admin_features.router, prefix="/api/admin/features", tags=["admin-features"])
 if settings.debate_enabled:
     app.include_router(admin_debate.router, prefix="/api/admin/debate", tags=["admin-debate"])
 

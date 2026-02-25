@@ -19,6 +19,7 @@ import {
   User,
   LogOut,
   Swords,
+  ToggleLeft,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/stores/userStore';
@@ -38,6 +39,7 @@ const MENU_ITEMS = [
   { href: '/admin/video-gen', label: '영상 생성', icon: Video },
   { href: '/admin/world-events', label: '세계관 이벤트', icon: Globe },
   { href: '/admin/debate', label: 'AI 토론 관리', icon: Swords },
+  { href: '/admin/features', label: '화면 관리', icon: ToggleLeft },
 ];
 
 export const Sidebar = memo(function Sidebar() {
