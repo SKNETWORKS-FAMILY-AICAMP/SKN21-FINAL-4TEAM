@@ -34,6 +34,8 @@ class TurnLogResponse(BaseModel):
     response_time_ms: int | None = None
     input_tokens: int
     output_tokens: int
+    review_result: dict | None = None
+    is_blocked: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

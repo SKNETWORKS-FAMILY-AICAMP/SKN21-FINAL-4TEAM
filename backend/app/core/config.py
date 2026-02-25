@@ -89,16 +89,25 @@ class Settings(BaseSettings):
     debate_enabled: bool = False
     debate_default_elo: int = 1500
     debate_elo_k_factor: int = 32
+    debate_elo_k_win: int = 40    # 승리 시 K값 (더 큰 상승)
+    debate_elo_k_loss: int = 24   # 패배 시 K값 (더 작은 하락)
+    debate_elo_max_transfer: int = 30  # 제로섬 ELO 최대 이전량
     debate_turn_timeout_seconds: int = 60
+    debate_turn_delay_seconds: float = 1.5  # 턴 사이 딜레이 (초) — 관전 UX 개선
     debate_orchestrator_model: str = "gpt-4o"
     debate_agent_connect_timeout: int = 30  # 로컬 에이전트 접속 대기 (초)
     debate_ws_heartbeat_interval: int = 15  # WebSocket 핑 간격 (초)
     debate_queue_timeout_seconds: int = 120  # 대기 큐 자동 매칭 타임아웃 (초)
+    debate_daily_topic_limit: int = 5  # 사용자 일일 토픽 등록 한도
+    debate_credit_cost: int = 5  # 매치 참가 시 차감 크레딧
+    debate_turn_review_enabled: bool = True   # 턴 검토 기능 ON/OFF
+    debate_turn_review_timeout: int = 10      # 검토 LLM 타임아웃 (초)
+    debate_turn_review_model: str = ""        # 빈 문자열이면 debate_orchestrator_model 사용
 
     # Rate Limiting
     rate_limit_auth: int = 20
-    rate_limit_chat: int = 60
-    rate_limit_api: int = 300
+    rate_limit_chat: int = 30
+    rate_limit_api: int = 60
     rate_limit_admin: int = 120
     rate_limit_window: int = 60  # seconds
     rate_limit_enabled: bool = True

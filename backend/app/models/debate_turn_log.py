@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,8 @@ class DebateTurnLog(Base):
     raw_response: Mapped[dict | None] = mapped_column(JSONB)
     penalties: Mapped[dict | None] = mapped_column(JSONB)
     penalty_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    review_result: Mapped[dict | None] = mapped_column(JSONB)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     human_suspicion_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     response_time_ms: Mapped[int | None] = mapped_column(Integer)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

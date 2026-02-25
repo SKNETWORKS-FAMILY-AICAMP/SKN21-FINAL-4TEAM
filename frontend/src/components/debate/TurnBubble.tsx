@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight } from 'lucide-react';
-import type { TurnLog } from '@/stores/debateStore';
+import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight, Ban } from 'lucide-react';
+import type { TurnLog, TurnReview } from '@/stores/debateStore';
 
 type Props = {
   turn: TurnLog;
   agentAName: string;
   agentBName: string;
+  review?: { logic_score: number; violations: { type: string; severity: string; detail: string }[]; feedback: string; blocked: boolean } | TurnReview | null;
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -28,13 +29,18 @@ const ACTION_LABELS: Record<string, string> = {
 
 /** 벌점 키 → 한국어 레이블 + 설명 */
 const PENALTY_INFO: Record<string, { label: string; desc: string }> = {
-  schema_violation:    { label: 'JSON 형식 위반',   desc: '응답이 요구된 JSON 스키마를 따르지 않음' },
-  repetition:         { label: '주장 반복',          desc: '이전 턴과 지나치게 유사한 주장을 반복함' },
-  prompt_injection:   { label: '프롬프트 인젝션',    desc: '시스템 지시를 무력화하려는 패턴이 감지됨' },
-  timeout:            { label: '응답 시간 초과',     desc: '제한 시간 내에 응답하지 못함' },
-  false_source:       { label: '허위 출처 인용',     desc: '존재하지 않는 데이터·인용을 사용함' },
-  ad_hominem:         { label: '인신공격',           desc: '논거 대신 상대방을 직접 비하하는 표현 사용' },
-  human_suspicion:    { label: '인간 개입 의심',     desc: '응답 패턴이 AI가 아닌 인간의 개입을 암시함' },
+  schema_violation:        { label: 'JSON 형식 위반',     desc: '응답이 요구된 JSON 스키마를 따르지 않음' },
+  repetition:              { label: '주장 반복',            desc: '이전 턴과 지나치게 유사한 주장을 반복함' },
+  prompt_injection:        { label: '프롬프트 인젝션',      desc: '시스템 지시를 무력화하려는 패턴이 감지됨' },
+  timeout:                 { label: '응답 시간 초과',       desc: '제한 시간 내에 응답하지 못함' },
+  false_source:            { label: '허위 출처 인용',       desc: '존재하지 않는 데이터·인용을 사용함' },
+  ad_hominem:              { label: '인신공격',             desc: '논거 대신 상대방을 직접 비하하는 표현 사용' },
+  human_suspicion:         { label: '인간 개입 의심',       desc: '응답 패턴이 AI가 아닌 인간의 개입을 암시함' },
+  // LLM 검토 기반 벌점 (llm_ 접두사)
+  llm_prompt_injection:    { label: '[LLM] 프롬프트 인젝션', desc: 'LLM 검토: 시스템 지시를 무력화하려는 시도 감지' },
+  llm_ad_hominem:          { label: '[LLM] 인신공격',        desc: 'LLM 검토: 논거 대신 상대방을 직접 비하하는 표현' },
+  llm_off_topic:           { label: '[LLM] 주제 이탈',       desc: 'LLM 검토: 토론 주제와 무관한 내용이 포함됨' },
+  llm_false_claim:         { label: '[LLM] 허위 주장',       desc: 'LLM 검토: 사실 확인이 불가능하거나 허위인 주장' },
 };
 
 /** 툴 이름 → 한국어 */
@@ -45,7 +51,20 @@ const TOOL_LABELS: Record<string, string> = {
   turn_info:        '턴 정보',
 };
 
-export function TurnBubble({ turn, agentAName, agentBName }: Props) {
+function LogicScoreBar({ score }: { score: number }) {
+  const pct = (score / 10) * 100;
+  const color = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-yellow-500' : 'bg-red-500';
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-bg rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] font-semibold text-text-muted w-6 text-right">{score}/10</span>
+    </div>
+  );
+}
+
+export function TurnBubble({ turn, agentAName, agentBName, review }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const [toolExpanded, setToolExpanded] = useState(false);
@@ -152,6 +171,25 @@ export function TurnBubble({ turn, agentAName, agentBName }: Props) {
             <span className="text-text-muted text-[10px]">
               (점수: {turn.human_suspicion_score})
             </span>
+          </div>
+        )}
+
+        {/* LLM 검토 결과 */}
+        {review && (
+          <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>
+              {review.blocked && (
+                <div className="flex items-center gap-1 text-[10px] font-bold text-red-500">
+                  <Ban size={10} />
+                  <span>차단됨</span>
+                </div>
+              )}
+            </div>
+            <LogicScoreBar score={review.logic_score} />
+            {review.feedback && (
+              <p className="text-[11px] text-text-secondary italic">{review.feedback}</p>
+            )}
           </div>
         )}
 

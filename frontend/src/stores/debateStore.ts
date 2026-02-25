@@ -63,7 +63,23 @@ type TurnLog = {
   response_time_ms: number | null;
   input_tokens: number;
   output_tokens: number;
+  review_result: {
+    logic_score: number;
+    violations: { type: string; severity: string; detail: string }[];
+    feedback: string;
+    blocked: boolean;
+  } | null;
+  is_blocked: boolean;
   created_at: string;
+};
+
+type TurnReview = {
+  turn_number: number;
+  speaker: string;
+  logic_score: number;
+  violations: { type: string; severity: string; detail: string }[];
+  feedback: string;
+  blocked: boolean;
 };
 
 type StreamingTurn = {
@@ -103,10 +119,11 @@ type DebateState = {
   currentMatch: DebateMatch | null;
   turns: TurnLog[];
   streamingTurn: StreamingTurn | null;
+  turnReviews: TurnReview[];
   ranking: RankingEntry[];
   loading: boolean;
   streaming: boolean;
-  fetchTopics: (params?: { status?: string; page?: number; pageSize?: number }) => Promise<void>;
+  fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
@@ -120,6 +137,7 @@ type DebateState = {
   appendChunk: (turn_number: number, speaker: string, chunk: string) => void;
   clearStreamingTurn: () => void;
   setStreaming: (v: boolean) => void;
+  addTurnReview: (review: TurnReview) => void;
 };
 
 export const useDebateStore = create<DebateState>((set) => ({
@@ -130,15 +148,17 @@ export const useDebateStore = create<DebateState>((set) => ({
   currentMatch: null,
   turns: [],
   streamingTurn: null,
+  turnReviews: [],
   ranking: [],
   loading: false,
   streaming: false,
-  fetchTopics: async (params?: { status?: string; page?: number; pageSize?: number }) => {
+  fetchTopics: async (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => {
     set({ loading: true });
     try {
-      const { status, page = 1, pageSize = 20 } = params ?? {};
+      const { status, sort, page = 1, pageSize = 20 } = params ?? {};
       const queryParams = new URLSearchParams();
       if (status) queryParams.set('status', status);
+      if (sort) queryParams.set('sort', sort);
       queryParams.set('page', String(page));
       queryParams.set('page_size', String(pageSize));
       const data = await api.get<{ items: DebateTopic[]; total: number }>(`/topics?${queryParams}`);
@@ -164,7 +184,7 @@ export const useDebateStore = create<DebateState>((set) => ({
   },
   fetchMatch: async (matchId) => {
     // 새 매치 로드 전 이전 턴 초기화 — 같은 상대와의 이전 매치 내용이 잔류하지 않도록
-    set({ loading: true, turns: [], streamingTurn: null });
+    set({ loading: true, turns: [], streamingTurn: null, turnReviews: [] });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
       set({ currentMatch: data });
@@ -226,6 +246,9 @@ export const useDebateStore = create<DebateState>((set) => ({
   addTurnFromSSE: (turn) => {
     set((s) => ({ turns: [...s.turns, turn], streamingTurn: null }));
   },
+  addTurnReview: (review) => {
+    set((s) => ({ turnReviews: [...s.turnReviews, review] }));
+  },
   appendChunk: (turn_number, speaker, chunk) => {
     set((s) => {
       if (s.streamingTurn && s.streamingTurn.turn_number === turn_number && s.streamingTurn.speaker === speaker) {
@@ -238,4 +261,4 @@ export const useDebateStore = create<DebateState>((set) => ({
   setStreaming: (v) => set({ streaming: v }),
 }));
 
-export type { DebateTopic, DebateMatch, TurnLog, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };
+export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };

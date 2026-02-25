@@ -12,11 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.encryption import decrypt_api_key
+from app.models.credit_ledger import CreditLedger
 from app.models.debate_agent import DebateAgent
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
+from app.models.user import User
 from app.schemas.debate_ws import WSMatchReady, WSTurnRequest
 from app.services.debate_agent_service import DebateAgentService
 from app.services.debate_broadcast import publish_event
@@ -215,12 +217,13 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     forfeit_winner_id = agent_b.id if side == "agent_a" else agent_a.id
                     match.winner_id = forfeit_winner_id
                     await db.commit()
-                    # ELO 벌점 (몰수패는 0점 패배 취급)
+                    # ELO 갱신 (몰수패는 최대 이전량 적용)
                     agent_service = DebateAgentService(db)
                     new_loser_elo, new_winner_elo = calculate_elo(
                         agent.elo_rating,
                         (agent_b if side == "agent_a" else agent_a).elo_rating,
                         "b_win" if side == "agent_a" else "a_win",
+                        score_diff=settings.debate_elo_max_transfer,
                     )
                     loser_result = "loss"
                     winner_result = "win"
@@ -246,6 +249,35 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     your_side=side,
                 ))
 
+    # 크레딧 차감 (debate_credit_cost > 0이고 크레딧 시스템이 활성화된 경우)
+    if settings.debate_credit_cost > 0 and settings.credit_system_enabled:
+        for agent in (agent_a, agent_b):
+            deduct_result = await db.execute(
+                update(User)
+                .where(User.id == agent.owner_id, User.credit_balance >= settings.debate_credit_cost)
+                .values(credit_balance=User.credit_balance - settings.debate_credit_cost)
+                .returning(User.credit_balance)
+            )
+            row = deduct_result.fetchone()
+            if row is None:
+                match.status = "error"
+                match.finished_at = datetime.now(UTC)
+                await db.commit()
+                await publish_event(str(match.id), "error", {
+                    "message": f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {settings.debate_credit_cost}석)",
+                })
+                return
+
+            db.add(CreditLedger(
+                user_id=agent.owner_id,
+                amount=-settings.debate_credit_cost,
+                balance_after=row.credit_balance,
+                tx_type="debate",
+                reference_id=str(match.id),
+                description=f"토론 매치 참가 (-{settings.debate_credit_cost}석)",
+            ))
+        await db.commit()
+
     # API 키 복호화 (local 에이전트는 스킵, BYOK 없으면 플랫폼 키 폴백)
     key_a = _resolve_api_key(agent_a)
     key_b = _resolve_api_key(agent_b)
@@ -258,6 +290,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     await publish_event(str(match.id), "started", {"match_id": str(match.id)})
 
     client = InferenceClient()
+    orchestrator = DebateOrchestrator()
     claims_a: list[str] = []
     claims_b: list[str] = []
     total_penalty_a = 0
@@ -279,7 +312,50 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             my_accumulated_penalty=total_penalty_a,
         )
         total_penalty_a += turn_a.penalty_total
-        claims_a.append(turn_a.claim)
+
+        # ★ LLM 검토 단계 (Agent A)
+        if settings.debate_turn_review_enabled:
+            review_start = time.monotonic()
+            review_a = await orchestrator.review_turn(
+                topic=topic.title,
+                speaker="agent_a",
+                turn_number=turn_num,
+                claim=turn_a.claim,
+                evidence=turn_a.evidence,
+                action=turn_a.action,
+                opponent_last_claim=claims_b[-1] if claims_b else None,
+            )
+            review_elapsed = time.monotonic() - review_start
+
+            # llm_ 접두사로 LLM 벌점 머지 (regex 벌점과 구분)
+            for vtype, vpenalty in review_a["penalties"].items():
+                llm_key = f"llm_{vtype}"
+                if turn_a.penalties is None:
+                    turn_a.penalties = {}
+                turn_a.penalties[llm_key] = vpenalty
+                turn_a.penalty_total += vpenalty
+                total_penalty_a += vpenalty
+
+            # 차단 시 주장 대체 + claims_a에 대체 텍스트 삽입
+            effective_claim_a = turn_a.claim
+            if review_a["block"]:
+                effective_claim_a = review_a["blocked_claim"]
+                turn_a.is_blocked = True
+                turn_a.claim = effective_claim_a
+            claims_a.append(effective_claim_a)
+
+            # DB에 검토 결과 저장
+            turn_a.review_result = {
+                "logic_score": review_a["logic_score"],
+                "violations": review_a["violations"],
+                "feedback": review_a["feedback"],
+                "blocked": review_a["block"],
+            }
+        else:
+            review_elapsed = 0.0
+            review_a = None
+            claims_a.append(turn_a.claim)
+
         if turn_a.response_time_ms is not None:
             elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
             length_history_a.append(len(turn_a.claim))
@@ -294,7 +370,25 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "penalty_total": turn_a.penalty_total,
             "human_suspicion_score": turn_a.human_suspicion_score,
             "response_time_ms": turn_a.response_time_ms,
+            "is_blocked": turn_a.is_blocked,
+            "review_result": turn_a.review_result,
         })
+
+        # 검토 결과 SSE 이벤트 (관전자 피드백)
+        if review_a is not None:
+            await publish_event(str(match.id), "turn_review", {
+                "turn_number": turn_num,
+                "speaker": "agent_a",
+                "logic_score": review_a["logic_score"],
+                "violations": review_a["violations"],
+                "feedback": review_a["feedback"],
+                "blocked": review_a["block"],
+            })
+
+        # 관전 UX: 딜레이에서 검토 소요시간 차감
+        remaining_delay = settings.debate_turn_delay_seconds - review_elapsed
+        if remaining_delay > 0:
+            await asyncio.sleep(remaining_delay)
 
         # Agent B 턴
         turn_b = await _execute_turn(
@@ -304,7 +398,47 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             my_accumulated_penalty=total_penalty_b,
         )
         total_penalty_b += turn_b.penalty_total
-        claims_b.append(turn_b.claim)
+
+        # ★ LLM 검토 단계 (Agent B)
+        if settings.debate_turn_review_enabled:
+            review_start = time.monotonic()
+            review_b = await orchestrator.review_turn(
+                topic=topic.title,
+                speaker="agent_b",
+                turn_number=turn_num,
+                claim=turn_b.claim,
+                evidence=turn_b.evidence,
+                action=turn_b.action,
+                opponent_last_claim=claims_a[-1] if claims_a else None,
+            )
+            review_elapsed = time.monotonic() - review_start
+
+            for vtype, vpenalty in review_b["penalties"].items():
+                llm_key = f"llm_{vtype}"
+                if turn_b.penalties is None:
+                    turn_b.penalties = {}
+                turn_b.penalties[llm_key] = vpenalty
+                turn_b.penalty_total += vpenalty
+                total_penalty_b += vpenalty
+
+            effective_claim_b = turn_b.claim
+            if review_b["block"]:
+                effective_claim_b = review_b["blocked_claim"]
+                turn_b.is_blocked = True
+                turn_b.claim = effective_claim_b
+            claims_b.append(effective_claim_b)
+
+            turn_b.review_result = {
+                "logic_score": review_b["logic_score"],
+                "violations": review_b["violations"],
+                "feedback": review_b["feedback"],
+                "blocked": review_b["block"],
+            }
+        else:
+            review_elapsed = 0.0
+            review_b = None
+            claims_b.append(turn_b.claim)
+
         if turn_b.response_time_ms is not None:
             elapsed_history_b.append(turn_b.response_time_ms / 1000.0)
             length_history_b.append(len(turn_b.claim))
@@ -319,7 +453,25 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "penalty_total": turn_b.penalty_total,
             "human_suspicion_score": turn_b.human_suspicion_score,
             "response_time_ms": turn_b.response_time_ms,
+            "is_blocked": turn_b.is_blocked,
+            "review_result": turn_b.review_result,
         })
+
+        if review_b is not None:
+            await publish_event(str(match.id), "turn_review", {
+                "turn_number": turn_num,
+                "speaker": "agent_b",
+                "logic_score": review_b["logic_score"],
+                "violations": review_b["violations"],
+                "feedback": review_b["feedback"],
+                "blocked": review_b["block"],
+            })
+
+        # 라운드 사이 딜레이 (마지막 라운드 제외, 검토 소요시간 차감)
+        if turn_num < topic.max_turns:
+            remaining_delay = settings.debate_turn_delay_seconds - review_elapsed
+            if remaining_delay > 0:
+                await asyncio.sleep(remaining_delay)
 
     # 벌점 집계
     match.penalty_a = total_penalty_a
@@ -328,7 +480,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
 
     # 판정
     turns = await _load_turns(db, match.id)
-    orchestrator = DebateOrchestrator()
     judgment = await orchestrator.judge(match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name)
 
     match.scorecard = judgment["scorecard"]
@@ -339,7 +490,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     match.finished_at = datetime.now(UTC)
     await db.commit()
 
-    # ELO 갱신
+    # ELO 갱신 (제로섬: 판정 점수차만큼 이전)
     if judgment["winner_id"] == match.agent_a_id:
         elo_result = "a_win"
     elif judgment["winner_id"] == match.agent_b_id:
@@ -347,7 +498,8 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     else:
         elo_result = "draw"
 
-    new_a, new_b = calculate_elo(agent_a.elo_rating, agent_b.elo_rating, elo_result)
+    score_diff = abs(judgment["score_a"] - judgment["score_b"])
+    new_a, new_b = calculate_elo(agent_a.elo_rating, agent_b.elo_rating, elo_result, score_diff=score_diff)
 
     agent_service = DebateAgentService(db)
     result_a = "win" if elo_result == "a_win" else ("loss" if elo_result == "b_win" else "draw")
@@ -611,15 +763,16 @@ def _build_messages(
         messages.append({"role": "user", "content": "먼저 시작하세요. 주제에 대한 첫 번째 주장을 한국어로 제시하세요."})
     elif opponent_claims:
         last_opp = opponent_claims[-1]
-        messages.append({
-            "role": "user",
-            "content": (
-                f"[직전 발언]\n{last_opp}\n\n"
-                "위 발언의 핵심 논점을 짚어 반박하세요. "
-                "'상대방은'으로 문장을 시작하지 마세요 — 논점이나 근거로 바로 시작하세요. "
-                "어떤 주장이 왜 타당하지 않은지 지적한 후, 새로운 근거로 자신의 입장을 강화하세요."
-            ),
-        })
+        base_content = (
+            f"[직전 발언]\n{last_opp}\n\n"
+            "위 발언의 핵심 논점을 짚어 반박하세요. "
+            "'상대방은'으로 문장을 시작하지 마세요 — 논점이나 근거로 바로 시작하세요. "
+            "어떤 주장이 왜 타당하지 않은지 지적한 후, 새로운 근거로 자신의 입장을 강화하세요."
+        )
+        # Agent B의 첫 발언: 주도적으로 논점을 선점하도록 격려 (A측 편향 보정)
+        if speaker == "agent_b" and not my_claims:
+            base_content += "\n\n(참고: 상대가 먼저 발언했지만, 당신도 새로운 논거로 주도적으로 쟁점을 선점할 수 있습니다.)"
+        messages.append({"role": "user", "content": base_content})
     else:
         messages.append({"role": "user", "content": "당신의 차례입니다. 주제에 대한 다음 주장을 한국어로 제시하세요."})
 
