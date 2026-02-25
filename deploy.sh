@@ -124,8 +124,10 @@ if [ "$MODE" = "update" ]; then
   # ── 코드 업데이트 배포 ──
   log "=== 업데이트 배포 시작 ==="
   check_env
-  log "이미지 빌드 중..."
-  docker compose -f "$COMPOSE_FILE" build --no-cache backend frontend
+  log "이미지 빌드 중 (레이어 캐시 활용)..."
+  # --no-cache 제거: requirements.txt/package.json 미변경 시 pip/npm 레이어 재사용
+  # DOCKER_BUILDKIT=1: --mount=type=cache 캐시 마운트 활성화
+  DOCKER_BUILDKIT=1 docker compose -f "$COMPOSE_FILE" build backend frontend
   log "서비스 재시작 중..."
   docker compose -f "$COMPOSE_FILE" up -d --no-deps backend frontend nginx
   run_migrations

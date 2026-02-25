@@ -1,15 +1,21 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# apt 캐시 마운트: 패키지 재다운로드 없이 재사용
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
+# pip 캐시 마운트: requirements.txt 미변경 시 레이어 캐시 히트, 변경 시에도 재다운로드 없이 로컬 캐시 사용
 # CPU-only torch 먼저 설치 (CUDA 패키지 ~3GB 절감). requirements.txt의 torch>=2.7.0 은 이미 충족되므로 재설치 안 됨.
-RUN pip install --no-cache-dir "torch>=2.7.0" --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "torch>=2.7.0" --index-url https://download.pytorch.org/whl/cpu && \
+    pip install -r requirements.txt
 
 COPY backend/ .
 
