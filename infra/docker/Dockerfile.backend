@@ -22,8 +22,19 @@ COPY backend/ .
 # 비-root 사용자 생성 (실제 프로세스 전환은 entrypoint에서 수행)
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-# entrypoint: 볼륨 권한 수정 후 appuser로 프로세스 전환
-COPY infra/docker/entrypoint.backend.sh /entrypoint.sh
+# entrypoint 스크립트를 Dockerfile에서 직접 생성
+RUN cat > /entrypoint.sh << 'ENTRYPOINT_EOF'
+#!/bin/sh
+set -e
+
+# Docker named volume은 기본적으로 root 소유로 마운트됨.
+# appuser 가 /app/uploads 에 쓸 수 있도록 권한을 수정한 뒤 권한 강등.
+mkdir -p /app/uploads
+chown -R appuser:appgroup /app/uploads
+
+exec gosu appuser uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+ENTRYPOINT_EOF
+
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
