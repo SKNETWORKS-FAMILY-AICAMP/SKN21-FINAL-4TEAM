@@ -6,12 +6,31 @@ import Link from 'next/link';
 import { ArrowLeft, Swords } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import { DebateViewer } from '@/components/debate/DebateViewer';
+import { FightingHPBar } from '@/components/debate/FightingHPBar';
 import { Scorecard } from '@/components/debate/Scorecard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: '대기',
+  in_progress: '진행 중',
+  completed: '종료',
+  error: '오류',
+  waiting_agent: '에이전트 대기',
+  forfeit: '몰수패',
+};
+
+const STATUS_CLASSES: Record<string, string> = {
+  pending: 'bg-gray-500/20 text-gray-400',
+  in_progress: 'bg-yellow-500/20 text-yellow-400',
+  completed: 'bg-green-500/20 text-green-400',
+  error: 'bg-red-500/20 text-red-400',
+  waiting_agent: 'bg-blue-500/20 text-blue-400',
+  forfeit: 'bg-red-500/20 text-red-400',
+};
+
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
-  const { currentMatch, fetchMatch } = useDebateStore();
+  const { currentMatch, turns, fetchMatch } = useDebateStore();
 
   useEffect(() => {
     fetchMatch(id);
@@ -26,6 +45,27 @@ export default function MatchPage() {
     );
   }
 
+  const isCompleted = currentMatch.status === 'completed';
+
+  // HP 계산: 진행 중엔 패널티+턴 진행도 기반, 완료 시엔 최종 점수 사용
+  const penaltiesA = turns
+    .filter((t) => t.speaker === 'agent_a')
+    .reduce((s, t) => s + t.penalty_total, 0);
+  const penaltiesB = turns
+    .filter((t) => t.speaker === 'agent_b')
+    .reduce((s, t) => s + t.penalty_total, 0);
+  const attrition = turns.length; // 완료된 턴당 1 HP 자연 감소 (긴장감 연출)
+
+  const hpA = isCompleted
+    ? currentMatch.score_a
+    : Math.max(20, 100 - attrition - penaltiesA);
+  const hpB = isCompleted
+    ? currentMatch.score_b
+    : Math.max(20, 100 - attrition - penaltiesB);
+
+  const isWinnerA = isCompleted && currentMatch.winner_id === currentMatch.agent_a.id;
+  const isWinnerB = isCompleted && currentMatch.winner_id === currentMatch.agent_b.id;
+
   return (
     <div className="max-w-[700px] mx-auto py-6 px-4">
       <Link
@@ -36,50 +76,58 @@ export default function MatchPage() {
         토론 목록
       </Link>
 
-      {/* 매치 헤더 */}
-      <div className="bg-bg-surface border border-border rounded-xl p-4 mb-4">
-        <h1 className="text-base font-bold text-text mb-1 flex items-center gap-2">
-          <Swords size={18} className="text-primary" />
-          {currentMatch.topic_title}
-        </h1>
-        <div className="flex items-center justify-between mt-3">
-          <div className="text-center flex-1">
-            <Link
-              href={`/debate/agents/${currentMatch.agent_a.id}`}
-              className="text-sm font-bold text-blue-500 no-underline hover:underline"
-            >
-              {currentMatch.agent_a.name}
-            </Link>
-            <div className="text-[11px] text-text-muted">
-              ELO {currentMatch.agent_a.elo_rating}
+      {/* 배틀 헤더 — 대기화면과 동일한 다크 그라디언트 테마 */}
+      <div
+        className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 border border-gray-700/50
+          rounded-xl overflow-hidden mb-4"
+      >
+        <div className="px-5 pt-5 pb-5">
+          {/* HP 게이지 영역 */}
+          <div className="flex items-start gap-3">
+            <FightingHPBar
+              agentId={currentMatch.agent_a.id}
+              agentName={currentMatch.agent_a.name}
+              provider={currentMatch.agent_a.provider}
+              hp={hpA}
+              side="left"
+              isWinner={isWinnerA}
+            />
+
+            {/* 중앙: 아이콘 + 상태 + 점수 */}
+            <div className="flex flex-col items-center gap-1.5 shrink-0 pt-1">
+              <Swords size={18} className="text-primary" />
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap
+                  ${STATUS_CLASSES[currentMatch.status] ?? 'bg-gray-500/20 text-gray-400'}`}
+              >
+                {STATUS_LABELS[currentMatch.status] ?? currentMatch.status}
+              </span>
+              {isCompleted && (
+                <span className="text-sm font-mono font-bold text-gray-100 mt-0.5">
+                  {hpA} <span className="text-gray-600 font-normal">:</span> {hpB}
+                </span>
+              )}
+              {!isCompleted && turns.length > 0 && (
+                <span className="text-[11px] font-mono text-gray-500">{turns.length}턴</span>
+              )}
             </div>
+
+            <FightingHPBar
+              agentId={currentMatch.agent_b.id}
+              agentName={currentMatch.agent_b.name}
+              provider={currentMatch.agent_b.provider}
+              hp={hpB}
+              side="right"
+              isWinner={isWinnerB}
+            />
           </div>
-          <div className="text-center px-4">
-            <div className="text-lg font-bold text-text">
-              {currentMatch.score_a} : {currentMatch.score_b}
-            </div>
-            <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
-                currentMatch.status === 'completed'
-                  ? 'bg-green-500/10 text-green-500'
-                  : currentMatch.status === 'in_progress'
-                    ? 'bg-yellow-500/10 text-yellow-500'
-                    : 'bg-text-muted/10 text-text-muted'
-              }`}
-            >
-              {currentMatch.status}
-            </span>
-          </div>
-          <div className="text-center flex-1">
-            <Link
-              href={`/debate/agents/${currentMatch.agent_b.id}`}
-              className="text-sm font-bold text-orange-500 no-underline hover:underline"
-            >
-              {currentMatch.agent_b.name}
-            </Link>
-            <div className="text-[11px] text-text-muted">
-              ELO {currentMatch.agent_b.elo_rating}
-            </div>
+
+          {/* 토론 주제 */}
+          <div className="mt-4 pt-3 border-t border-gray-700/50 text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">토론 주제</p>
+            <h1 className="text-sm font-bold text-white leading-snug">
+              「{currentMatch.topic_title}」
+            </h1>
           </div>
         </div>
       </div>
