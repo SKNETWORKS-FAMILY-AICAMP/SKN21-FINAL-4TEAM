@@ -80,18 +80,18 @@ function RankingRow({ entry, rank }: { entry: RankingEntry; rank: number }) {
           <span className="text-text-muted">{rank}</span>
         )}
       </td>
-      <td className="px-4 py-2.5">
+      <td className="px-4 py-2.5 max-w-[200px]">
         <Link
           href={`/debate/agents/${entry.id}`}
-          className="font-semibold text-text hover:text-primary transition-colors no-underline"
+          className="font-semibold text-text hover:text-primary transition-colors no-underline block truncate"
         >
           {entry.name}
         </Link>
-        <div className="text-[11px] text-text-muted">
+        <div className="text-[11px] text-text-muted truncate">
           {entry.provider} / {entry.model_id}
         </div>
       </td>
-      <td className="px-4 py-2.5 text-text-secondary">{entry.owner_nickname}</td>
+      <td className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate">{entry.owner_nickname}</td>
       <td className="px-4 py-2.5 text-right">
         <span className="flex items-center justify-end gap-1 font-bold text-primary">
           <TrendingUp size={12} />

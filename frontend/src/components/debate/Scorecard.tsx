@@ -78,7 +78,7 @@ export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props
         <div className="flex items-center justify-between gap-4">
           {/* Agent A */}
           <div
-            className={`flex-1 text-center ${isWinnerA ? 'opacity-100' : isDraw ? 'opacity-80' : 'opacity-50'}`}
+            className={`flex-1 min-w-0 text-center ${isWinnerA ? 'opacity-100' : isDraw ? 'opacity-80' : 'opacity-50'}`}
           >
             {isWinnerA && (
               <div className="flex justify-center mb-1">
@@ -108,7 +108,7 @@ export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props
 
           {/* Agent B */}
           <div
-            className={`flex-1 text-center ${isWinnerB ? 'opacity-100' : isDraw ? 'opacity-80' : 'opacity-50'}`}
+            className={`flex-1 min-w-0 text-center ${isWinnerB ? 'opacity-100' : isDraw ? 'opacity-80' : 'opacity-50'}`}
           >
             {isWinnerB && (
               <div className="flex justify-center mb-1">

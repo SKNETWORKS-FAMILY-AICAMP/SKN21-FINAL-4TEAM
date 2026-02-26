@@ -259,7 +259,7 @@ async def get_agent_versions(
     agent = await service.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    if agent.owner_id != user.id:
+    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     versions = await service.get_agent_versions(agent_id)
     return [AgentVersionResponse.model_validate(v) for v in versions]

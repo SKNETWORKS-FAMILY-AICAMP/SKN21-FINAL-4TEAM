@@ -16,6 +16,7 @@ type DebateAgent = {
   is_active: boolean;
   is_connected: boolean;
   is_system_prompt_public: boolean;
+  use_platform_credits: boolean;
   tier: string;
   tier_protection_count: number;
   is_profile_public: boolean;
@@ -92,6 +93,7 @@ type CreateAgentPayload = {
   version_tag?: string;
   parameters?: Record<string, unknown>;
   image_url?: string;
+  use_platform_credits?: boolean;
   // 템플릿 기반 생성 필드
   template_id?: string;
   customizations?: Record<string, unknown>;

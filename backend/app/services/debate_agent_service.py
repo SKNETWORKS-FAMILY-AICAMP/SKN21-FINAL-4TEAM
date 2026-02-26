@@ -48,12 +48,12 @@ class DebateAgentService:
         is_local = data.provider == "local"
         template_service = DebateTemplateService(self.db)
 
-        # API 키 처리
+        # API 키 처리 (platform credits 사용 시 BYOK 불필요)
         encrypted_key = None
         if not is_local and data.api_key:
             encrypted_key = encrypt_api_key(data.api_key)
-        elif not is_local and data.template_id is None:
-            # BYOK 경로: api_key 필수
+        elif not is_local and data.template_id is None and not data.use_platform_credits:
+            # BYOK 경로: api_key 필수 (platform credits 사용 시 예외)
             raise ValueError("API key is required for non-local providers")
 
         # 시스템 프롬프트 결정
@@ -91,6 +91,7 @@ class DebateAgentService:
             encrypted_api_key=encrypted_key,
             image_url=data.image_url,
             is_system_prompt_public=data.is_system_prompt_public,
+            use_platform_credits=data.use_platform_credits,
             template_id=template.id if template else None,
             customizations=validated,
         )
@@ -143,6 +144,8 @@ class DebateAgentService:
             agent.is_system_prompt_public = data.is_system_prompt_public
         if data.is_profile_public is not None:
             agent.is_profile_public = data.is_profile_public
+        if data.use_platform_credits is not None:
+            agent.use_platform_credits = data.use_platform_credits
 
         # 새 버전 생성이 필요한지 판단
         new_prompt: str | None = None

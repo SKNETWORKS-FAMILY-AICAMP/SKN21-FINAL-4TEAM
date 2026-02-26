@@ -55,7 +55,7 @@ export function WaitingRoomVS({
       {/* 토픽 제목 */}
       <div className="mb-8 text-center max-w-[600px]">
         <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">토론 주제</p>
-        <h1 className="text-lg font-bold text-white">「{topicTitle}」</h1>
+        <h1 className="text-lg font-bold text-white break-words">「{topicTitle}」</h1>
       </div>
 
       {/* VS 레이아웃 */}

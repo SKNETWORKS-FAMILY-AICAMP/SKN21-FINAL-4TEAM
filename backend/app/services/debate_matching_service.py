@@ -36,18 +36,22 @@ class DebateMatchingService:
         if topic.is_password_protected and (not password or not verify_password(password, topic.password_hash)):
             raise ValueError("비밀번호가 올바르지 않습니다")
 
-        # 에이전트 소유권 검증
-        agent = await self.db.execute(
-            select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
-        )
+        # 에이전트 소유권 검증 (admin/superadmin은 모든 에이전트 사용 가능)
+        is_admin = user.role in ("admin", "superadmin")
+        if is_admin:
+            agent = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
+        else:
+            agent = await self.db.execute(
+                select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
+            )
         agent = agent.scalar_one_or_none()
         if agent is None:
             raise ValueError("Agent not found or not owned by user")
         if not agent.is_active:
             raise ValueError("Agent is not active")
 
-        # local 에이전트가 아닌 경우 API 키 필수
-        if agent.provider != "local" and not agent.encrypted_api_key:
+        # local 또는 platform credits 사용 에이전트가 아닌 경우 API 키 필수
+        if agent.provider != "local" and not agent.use_platform_credits and not agent.encrypted_api_key:
             raise ValueError("Agent has no API key configured")
 
         # 에이전트가 어느 토픽이든 이미 대기 중인지 확인 (에이전트당 1개 토픽 제한)

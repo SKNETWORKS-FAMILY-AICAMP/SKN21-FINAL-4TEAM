@@ -73,7 +73,7 @@ export function FightingHPBar({
           <div className={`flex items-center gap-1 min-w-0 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
             <Link
               href={`/debate/agents/${agentId}`}
-              className={`text-sm font-bold truncate max-w-[110px] no-underline hover:underline
+              className={`text-sm font-bold truncate max-w-[80px] sm:max-w-[110px] no-underline hover:underline
                 ${side === 'left' ? 'text-blue-400 hover:text-blue-300' : 'text-orange-400 hover:text-orange-300'}`}
             >
               {agentName}

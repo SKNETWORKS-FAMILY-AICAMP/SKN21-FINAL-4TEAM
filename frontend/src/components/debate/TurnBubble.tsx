@@ -102,7 +102,7 @@ export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agent
         </div>
 
         {/* 주장 본문 */}
-        <p className="text-sm text-text whitespace-pre-wrap">{turn.claim}</p>
+        <p className="text-sm text-text whitespace-pre-wrap break-words">{turn.claim}</p>
 
         {/* 근거 */}
         {turn.evidence && (

@@ -44,6 +44,8 @@ class DebateAgent(Base):
     is_system_prompt_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # 플랫폼 크레딧으로 API 비용 지불 (BYOK API 키 불필요)
+    use_platform_credits: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     tier: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Iron")
     tier_protection_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
+import { Camera, CheckCircle2, Coins, Loader2, X, XCircle } from 'lucide-react';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import type { AgentTemplate, CreateAgentPayload } from '@/stores/debateAgentStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -17,6 +17,7 @@ type Props = {
     name_changed_at?: string | null;
     is_system_prompt_public?: boolean;
     is_profile_public?: boolean;
+    use_platform_credits?: boolean;
   };
   isEdit?: boolean;
 };
@@ -109,6 +110,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
     image_url: initialData?.image_url || '',
     is_system_prompt_public: initialData?.is_system_prompt_public ?? false,
     is_profile_public: initialData?.is_profile_public ?? true,
+    use_platform_credits: initialData?.use_platform_credits ?? false,
   });
 
   const isLocal = form.provider === 'local';
@@ -215,8 +217,8 @@ export function AgentForm({ initialData, isEdit }: Props) {
         addToast('error', 'Model ID를 입력해주세요.');
         return;
       }
-      if (!isEdit && !form.api_key) {
-        addToast('error', 'API Key를 입력해주세요.');
+      if (!isEdit && !form.api_key && !form.use_platform_credits) {
+        addToast('error', 'API Key를 입력하거나 플랫폼 크레딧을 사용해주세요.');
         return;
       }
     }
@@ -238,6 +240,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
         image_url: form.image_url || undefined,
         is_system_prompt_public: form.is_system_prompt_public,
         is_profile_public: form.is_profile_public,
+        use_platform_credits: form.use_platform_credits,
       };
 
       if (useTemplate && selectedTemplate) {
@@ -461,7 +464,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
           LLM 설정
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-semibold text-text block mb-1">Provider *</label>
             <select
@@ -531,6 +534,43 @@ export function AgentForm({ initialData, isEdit }: Props) {
         </div>
       </div>
 
+      {/* 플랫폼 크레딧 사용 토글 (non-local 에이전트 전용) */}
+      {!isLocal && (
+        <div className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
+          form.use_platform_credits
+            ? 'border-yellow-500/40 bg-yellow-500/5'
+            : 'border-border bg-bg'
+        }`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Coins size={16} className={form.use_platform_credits ? 'text-yellow-400 shrink-0' : 'text-text-muted shrink-0'} />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text">플랫폼 크레딧 사용</p>
+              <p className="text-[11px] text-text-muted">
+                내 API 키 없이 플랫폼 크레딧으로 API 비용 지불 — 토론 시 크레딧이 차감됩니다
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTestStatus('idle');
+              setTestError(null);
+              setTestErrorType(null);
+              setForm((f) => ({ ...f, use_platform_credits: !f.use_platform_credits }));
+            }}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ml-4 ${
+              form.use_platform_credits ? 'bg-yellow-500' : 'bg-gray-600'
+            }`}
+          >
+            <span
+              className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                form.use_platform_credits ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
       {isLocal ? (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
           <p className="text-sm font-semibold text-text">로컬 에이전트 안내</p>
@@ -551,6 +591,17 @@ export function AgentForm({ initialData, isEdit }: Props) {
             </li>
             <li>토론 토픽에서 이 에이전트를 선택하고 큐에 참가하면 자동으로 토론이 시작됩니다.</li>
           </ol>
+        </div>
+      ) : form.use_platform_credits ? (
+        <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 space-y-1">
+          <p className="text-sm font-semibold text-yellow-400 flex items-center gap-1.5">
+            <Coins size={14} />
+            플랫폼 크레딧으로 실행됩니다
+          </p>
+          <p className="text-[11px] text-text-muted">
+            API 키 없이 플랫폼의 LLM 인프라를 사용합니다. 토론 1회당 크레딧이 소모됩니다.
+            크레딧이 부족하면 토론에 참가할 수 없습니다.
+          </p>
         </div>
       ) : (
         <>

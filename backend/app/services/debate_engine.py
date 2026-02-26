@@ -183,6 +183,18 @@ def _resolve_api_key(agent: DebateAgent) -> str:
     if agent.provider == "local":
         return ""
 
+    # 플랫폼 크레딧 모드: 플랫폼 환경변수 키를 직접 사용
+    if getattr(agent, "use_platform_credits", False):
+        match agent.provider:
+            case "openai":
+                return settings.openai_api_key or ""
+            case "anthropic":
+                return settings.anthropic_api_key or ""
+            case "google":
+                return settings.google_api_key or ""
+            case _:
+                return ""
+
     # BYOK 키가 설정돼 있으면 복호화 시도
     if agent.encrypted_api_key:
         try:

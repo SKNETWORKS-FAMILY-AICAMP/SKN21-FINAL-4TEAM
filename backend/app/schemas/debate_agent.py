@@ -72,6 +72,7 @@ class AgentCreate(BaseModel):
     parameters: dict | None = None
     image_url: str | None = None
     is_system_prompt_public: bool = False
+    use_platform_credits: bool = False
     # 템플릿 기반 생성 파라미터
     template_id: UUID | None = None
     customizations: dict | None = None
@@ -90,6 +91,7 @@ class AgentUpdate(BaseModel):
     parameters: dict | None = None
     image_url: str | None = None
     is_system_prompt_public: bool | None = None
+    use_platform_credits: bool | None = None
     # 템플릿 커스터마이징 변경
     customizations: dict | None = None
     enable_free_text: bool = False
@@ -126,6 +128,7 @@ class AgentResponse(BaseModel):
     is_platform: bool = False
     is_connected: bool = False
     is_system_prompt_public: bool = False
+    use_platform_credits: bool = False
     name_changed_at: datetime | None = None
     template_id: UUID | None
     customizations: dict | None
