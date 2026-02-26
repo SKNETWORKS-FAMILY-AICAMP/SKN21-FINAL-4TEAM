@@ -8,6 +8,8 @@ type Props = {
   turn: TurnLog;
   agentAName: string;
   agentBName: string;
+  agentAImageUrl?: string | null;
+  agentBImageUrl?: string | null;
   review?: { logic_score: number; violations: { type: string; severity: string; detail: string }[]; feedback: string; blocked: boolean } | TurnReview | null;
 };
 
@@ -64,9 +66,10 @@ function LogicScoreBar({ score }: { score: number }) {
   );
 }
 
-export function TurnBubble({ turn, agentAName, agentBName, review }: Props) {
+export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
+  const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
   const [toolExpanded, setToolExpanded] = useState(false);
 
   return (
@@ -78,8 +81,15 @@ export function TurnBubble({ turn, agentAName, agentBName, review }: Props) {
             : 'bg-primary/5 border border-primary/20 rounded-tr-none'
         }`}
       >
-        {/* 헤더: 이름 + 액션 배지 + 턴 번호 */}
+        {/* 헤더: 아바타 + 이름 + 액션 배지 + 턴 번호 */}
         <div className="flex items-center gap-2 mb-1.5">
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt={name}
+              className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+            />
+          )}
           <span className="text-xs font-bold text-text">{name}</span>
           <span
             className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${

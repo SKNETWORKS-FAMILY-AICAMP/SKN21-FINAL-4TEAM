@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, X } from 'lucide-react';
+import { Camera, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import type { AgentTemplate, CreateAgentPayload } from '@/stores/debateAgentStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -28,6 +28,53 @@ const PROVIDERS = [
   { value: 'local', label: '로컬 에이전트' },
 ];
 
+const MODEL_OPTIONS: Record<string, { value: string; label: string; ctx: string }[]> = {
+  openai: [
+    // ── GPT-5 계열 (최신) ──────────────────────────
+    { value: 'gpt-5.2',      label: '★ GPT-5.2',          ctx: '400K' },
+    { value: 'gpt-5.2-pro',  label: '★ GPT-5.2 Pro',      ctx: '400K' },
+    { value: 'gpt-5.1',      label: 'GPT-5.1',             ctx: '200K' },
+    { value: 'gpt-5',        label: 'GPT-5',               ctx: '128K' },
+    { value: 'gpt-5-mini',   label: 'GPT-5 Mini',          ctx: '128K' },
+    // ── GPT-4.1 / 4o ──────────────────────────────
+    { value: 'gpt-4.1',      label: 'GPT-4.1',             ctx: '1M'   },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini',        ctx: '1M'   },
+    { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano',        ctx: '1M'   },
+    { value: 'gpt-4o',       label: 'GPT-4o',              ctx: '128K' },
+    { value: 'gpt-4o-mini',  label: 'GPT-4o Mini',         ctx: '128K' },
+    // ── 추론 모델 ─────────────────────────────────
+    { value: 'o3',           label: 'o3  (추론)',           ctx: '200K' },
+    { value: 'o3-pro',       label: 'o3 Pro  (추론)',       ctx: '200K' },
+    { value: 'o4-mini',      label: 'o4-mini  (추론)',      ctx: '200K' },
+  ],
+  anthropic: [
+    { value: 'claude-opus-4-6',           label: '★ Claude Opus 4.6',   ctx: '200K' },
+    { value: 'claude-sonnet-4-6',         label: '★ Claude Sonnet 4.6', ctx: '200K' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',    ctx: '200K' },
+    { value: 'claude-sonnet-4-5',         label: 'Claude Sonnet 4.5',   ctx: '200K' },
+    { value: 'claude-opus-4-5',           label: 'Claude Opus 4.5',     ctx: '200K' },
+  ],
+  google: [
+    // ── Gemini 3 계열 (최신, Preview) ─────────────
+    { value: 'gemini-3.1-pro-preview',  label: '★ Gemini 3.1 Pro Preview',  ctx: '1M' },
+    { value: 'gemini-3-pro-preview',    label: 'Gemini 3 Pro Preview',      ctx: '1M' },
+    { value: 'gemini-3-flash-preview',  label: 'Gemini 3 Flash Preview',    ctx: '1M' },
+    // ── Gemini 2.5 계열 (안정) ────────────────────
+    { value: 'gemini-2.5-pro',          label: 'Gemini 2.5 Pro',            ctx: '1M' },
+    { value: 'gemini-2.5-flash',        label: 'Gemini 2.5 Flash',          ctx: '1M' },
+    { value: 'gemini-2.5-flash-lite',   label: 'Gemini 2.5 Flash-Lite',     ctx: '1M' },
+  ],
+  runpod: [
+    { value: 'meta-llama/Meta-Llama-3.1-70B-Instruct', label: 'Llama 3.1 70B Instruct', ctx: '128K' },
+    { value: 'meta-llama/Llama-3.3-70B-Instruct',      label: 'Llama 3.3 70B Instruct', ctx: '128K' },
+    { value: 'mistralai/Mixtral-8x7B-Instruct-v0.1',   label: 'Mixtral 8x7B Instruct',  ctx: '32K'  },
+    { value: 'Qwen/Qwen2.5-72B-Instruct',              label: 'Qwen 2.5 72B Instruct',  ctx: '128K' },
+  ],
+  local: [],
+};
+
+const BYOK_PROVIDERS = ['openai', 'anthropic', 'google'];
+
 // 편집 모드에서의 단계
 type EditMode = 'byok' | 'local' | 'template';
 
@@ -40,6 +87,9 @@ export function AgentForm({ initialData, isEdit }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testErrorType, setTestErrorType] = useState<'api_key' | 'model' | 'other' | null>(null);
 
   // 선택된 템플릿 (null이면 BYOK/로컬 모드)
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
@@ -47,11 +97,12 @@ export function AgentForm({ initialData, isEdit }: Props) {
   const [enableFreeText, setEnableFreeText] = useState(false);
 
   // 기본 에이전트 폼 상태
+  const defaultProvider = initialData?.provider || 'openai';
   const [form, setForm] = useState({
     name: initialData?.name || '',
     description: initialData?.description || '',
-    provider: initialData?.provider || 'openai',
-    model_id: initialData?.model_id || '',
+    provider: defaultProvider,
+    model_id: initialData?.model_id || MODEL_OPTIONS[defaultProvider]?.[0]?.value || '',
     api_key: '',
     system_prompt: initialData?.system_prompt || '',
     version_tag: '',
@@ -119,6 +170,31 @@ export function AgentForm({ initialData, isEdit }: Props) {
     setStep(2);
   };
 
+  const handleTestConnection = async () => {
+    setTestStatus('testing');
+    setTestError(null);
+    setTestErrorType(null);
+    try {
+      const result = await api.post<{
+        ok: boolean;
+        error?: string;
+        error_type?: 'api_key' | 'model' | 'other';
+        model_response?: string;
+      }>('/agents/test', { provider: form.provider, model_id: form.model_id, api_key: form.api_key });
+      if (result.ok) {
+        setTestStatus('ok');
+      } else {
+        setTestStatus('fail');
+        setTestError(result.error ?? '알 수 없는 오류');
+        setTestErrorType(result.error_type ?? 'other');
+      }
+    } catch {
+      setTestStatus('fail');
+      setTestError('테스트 중 오류가 발생했습니다.');
+      setTestErrorType('other');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name) {
@@ -142,6 +218,12 @@ export function AgentForm({ initialData, isEdit }: Props) {
         addToast('error', 'API Key를 입력해주세요.');
         return;
       }
+    }
+
+    // BYOK 테스트 필수: api_key가 입력된 경우 테스트 통과 후에만 등록 가능
+    if (BYOK_PROVIDERS.includes(form.provider) && form.api_key && testStatus !== 'ok') {
+      addToast('error', 'API 키 테스트를 먼저 통과해야 합니다. 테스트 버튼을 눌러주세요.');
+      return;
     }
 
     setSubmitting(true);
@@ -384,10 +466,14 @@ export function AgentForm({ initialData, isEdit }: Props) {
               value={form.provider}
               onChange={(e) => {
                 const provider = e.target.value;
+                const firstModel = MODEL_OPTIONS[provider]?.[0]?.value ?? '';
+                setTestStatus('idle');
+                setTestError(null);
+                setTestErrorType(null);
                 setForm((f) => ({
                   ...f,
                   provider,
-                  model_id: provider === 'local' ? f.model_id || 'custom' : f.model_id,
+                  model_id: provider === 'local' ? 'custom' : firstModel,
                   api_key: provider === 'local' ? '' : f.api_key,
                 }));
               }}
@@ -402,16 +488,43 @@ export function AgentForm({ initialData, isEdit }: Props) {
           </div>
           <div>
             <label className="text-sm font-semibold text-text block mb-1">
-              Model ID {isLocal ? '' : '*'}
+              모델 {isLocal ? '' : '*'}
             </label>
-            <input
-              type="text"
-              value={form.model_id}
-              onChange={(e) => setForm((f) => ({ ...f, model_id: e.target.value }))}
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text"
-              placeholder={isLocal ? 'custom' : 'gpt-4o'}
-              required={!isLocal}
-            />
+            {isLocal ? (
+              <input
+                type="text"
+                value="custom"
+                disabled
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text-muted cursor-not-allowed"
+              />
+            ) : (
+              <select
+                value={form.model_id}
+                onChange={(e) => {
+                  setTestStatus('idle');
+                  setTestError(null);
+                  setTestErrorType(null);
+                  setForm((f) => ({ ...f, model_id: e.target.value }));
+                }}
+                className={`w-full px-3 py-2 bg-bg border rounded-lg text-sm text-text transition-colors ${
+                  testErrorType === 'model'
+                    ? 'border-red-500 ring-1 ring-red-500/30'
+                    : 'border-border'
+                }`}
+                required
+              >
+                {(MODEL_OPTIONS[form.provider] ?? []).map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}  ·  ctx {m.ctx}
+                  </option>
+                ))}
+                {/* 편집 모드: 기존 model_id가 목록에 없을 때 보존 */}
+                {form.model_id &&
+                  !(MODEL_OPTIONS[form.provider] ?? []).find((m) => m.value === form.model_id) && (
+                    <option value={form.model_id}>{form.model_id}</option>
+                  )}
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -443,14 +556,69 @@ export function AgentForm({ initialData, isEdit }: Props) {
             <label className="text-sm font-semibold text-text block mb-1">
               API Key {isEdit ? '(변경 시에만 입력)' : '*'}
             </label>
-            <input
-              type="password"
-              value={form.api_key}
-              onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text"
-              placeholder="sk-..."
-              required={!isEdit && !useTemplateForm}
-            />
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={form.api_key}
+                onChange={(e) => {
+                  setTestStatus('idle');
+                  setTestError(null);
+                  setTestErrorType(null);
+                  setForm((f) => ({ ...f, api_key: e.target.value }));
+                }}
+                className={`flex-1 px-3 py-2 bg-bg border rounded-lg text-sm text-text transition-colors ${
+                  testErrorType === 'api_key'
+                    ? 'border-red-500 ring-1 ring-red-500/30'
+                    : 'border-border'
+                }`}
+                placeholder="sk-..."
+                required={!isEdit && !useTemplateForm}
+              />
+              {BYOK_PROVIDERS.includes(form.provider) && form.api_key && (
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testStatus === 'testing'}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    ${testStatus === 'ok'
+                      ? 'bg-green-500/10 border-green-500/30 text-green-600'
+                      : testStatus === 'fail'
+                        ? 'bg-red-500/10 border-red-500/30 text-red-600'
+                        : 'border-border text-text hover:bg-border/20'
+                    }`}
+                >
+                  {testStatus === 'testing' ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : testStatus === 'ok' ? (
+                    <span className="flex items-center gap-1"><CheckCircle2 size={14} /> 성공</span>
+                  ) : testStatus === 'fail' ? (
+                    <span className="flex items-center gap-1"><XCircle size={14} /> 실패</span>
+                  ) : (
+                    '테스트'
+                  )}
+                </button>
+              )}
+            </div>
+            {testStatus === 'fail' && testError && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  testErrorType === 'api_key'
+                    ? 'bg-red-500/15 text-red-600'
+                    : testErrorType === 'model'
+                      ? 'bg-orange-500/15 text-orange-600'
+                      : 'bg-red-500/15 text-red-600'
+                }`}>
+                  {testErrorType === 'api_key' ? 'API 키 오류' : testErrorType === 'model' ? '모델 오류' : '오류'}
+                </span>
+                {testError}
+              </p>
+            )}
+            {testStatus === 'ok' && (
+              <p className="text-[11px] text-green-600 mt-1">
+                API 키와 모델이 정상적으로 확인되었습니다.
+              </p>
+            )}
             <p className="text-[11px] text-text-muted mt-1">
               API 키는 서버에 암호화되어 저장됩니다. 토론 시에만 복호화하여 사용합니다.
             </p>

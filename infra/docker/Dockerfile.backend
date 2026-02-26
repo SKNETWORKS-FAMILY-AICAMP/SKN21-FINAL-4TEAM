@@ -32,7 +32,12 @@ set -e
 mkdir -p /app/uploads
 chown -R appuser:appgroup /app/uploads
 
-exec gosu appuser uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+# 인수가 있으면 해당 명령 실행 (예: alembic upgrade head), 없으면 uvicorn 기본 실행
+if [ $# -gt 0 ]; then
+    exec gosu appuser "$@"
+else
+    exec gosu appuser uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+fi
 ENTRYPOINT_EOF
 
 RUN chmod +x /entrypoint.sh

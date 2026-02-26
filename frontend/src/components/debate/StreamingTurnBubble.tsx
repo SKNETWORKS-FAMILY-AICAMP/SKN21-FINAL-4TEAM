@@ -11,6 +11,8 @@ type Props = {
   turn: StreamingTurn;
   agentAName: string;
   agentBName: string;
+  agentAImageUrl?: string | null;
+  agentBImageUrl?: string | null;
 };
 
 /**
@@ -24,9 +26,10 @@ function extractPartialClaim(raw: string): string {
   return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 }
 
-export function StreamingTurnBubble({ turn, agentAName, agentBName }: Props) {
+export function StreamingTurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
+  const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
 
   // 전체 claim 텍스트 (SSE 수신 기준)
   const fullClaim = extractPartialClaim(turn.raw);
@@ -64,6 +67,13 @@ export function StreamingTurnBubble({ turn, agentAName, agentBName }: Props) {
       >
         {/* 헤더 */}
         <div className="flex items-center gap-2 mb-1.5">
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt={name}
+              className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+            />
+          )}
           <span className="text-xs font-bold text-text">{name}</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium animate-pulse">
             생성 중...

@@ -5,7 +5,9 @@ import json
 import logging
 import re
 import time
+import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -18,6 +20,8 @@ from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
+from app.models.llm_model import LLMModel
+from app.models.token_usage_log import TokenUsageLog
 from app.models.user import User
 from app.schemas.debate_ws import WSMatchReady, WSTurnRequest
 from app.services.debate_agent_service import DebateAgentService
@@ -30,6 +34,36 @@ from app.services.human_detection import TurnContext as HumanTurnContext
 from app.services.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
+
+
+async def _log_orchestrator_usage(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    model_str: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> None:
+    """오케스트레이터 LLM 호출 토큰을 token_usage_logs에 기록."""
+    if input_tokens == 0 and output_tokens == 0:
+        return
+    result = await db.execute(
+        select(LLMModel).where(LLMModel.model_id == model_str)
+    )
+    model = result.scalar_one_or_none()
+    if model is None:
+        logger.warning("_log_orchestrator_usage: model_id=%s not found in llm_models", model_str)
+        return
+    input_cost = Decimal(str(input_tokens)) * Decimal(str(model.input_cost_per_1m)) / Decimal("1000000")
+    output_cost = Decimal(str(output_tokens)) * Decimal(str(model.output_cost_per_1m)) / Decimal("1000000")
+    db.add(TokenUsageLog(
+        user_id=user_id,
+        session_id=None,
+        llm_model_id=model.id,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost=input_cost + output_cost,
+    ))
+
 
 # 응답 JSON 스키마
 RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변하세요. 영어 사용 금지.
@@ -344,6 +378,14 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 turn_a.claim = effective_claim_a
             claims_a.append(effective_claim_a)
 
+            # 오케스트레이터 토큰 사용량 기록
+            await _log_orchestrator_usage(
+                db, agent_a.owner_id,
+                settings.debate_turn_review_model or settings.debate_orchestrator_model,
+                review_a["input_tokens"],
+                review_a["output_tokens"],
+            )
+
             # DB에 검토 결과 저장
             turn_a.review_result = {
                 "logic_score": review_a["logic_score"],
@@ -428,6 +470,14 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 turn_b.claim = effective_claim_b
             claims_b.append(effective_claim_b)
 
+            # 오케스트레이터 토큰 사용량 기록
+            await _log_orchestrator_usage(
+                db, agent_b.owner_id,
+                settings.debate_turn_review_model or settings.debate_orchestrator_model,
+                review_b["input_tokens"],
+                review_b["output_tokens"],
+            )
+
             turn_b.review_result = {
                 "logic_score": review_b["logic_score"],
                 "violations": review_b["violations"],
@@ -481,6 +531,14 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     # 판정
     turns = await _load_turns(db, match.id)
     judgment = await orchestrator.judge(match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name)
+
+    # 판정 오케스트레이터 토큰 사용량 기록 (agent_a 소유자에게 귀속)
+    await _log_orchestrator_usage(
+        db, agent_a.owner_id,
+        settings.debate_orchestrator_model,
+        judgment["input_tokens"],
+        judgment["output_tokens"],
+    )
 
     match.scorecard = judgment["scorecard"]
     match.score_a = judgment["score_a"]

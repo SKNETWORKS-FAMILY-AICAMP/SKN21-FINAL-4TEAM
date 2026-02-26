@@ -98,13 +98,18 @@ run_migrations() {
 }
 
 cleanup_containers() {
-  # --rm 없이 실행된 일회성 컨테이너(run, exec 잔재 등)를 정리
+  # 1) 종료된 컨테이너 제거
   local stopped
   stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" 2>/dev/null)
-  if [ -n "$stopped" ]; then
-    log "중지된 컨테이너 정리 중..."
-    echo "$stopped" | xargs docker rm -f 2>/dev/null || true
-  fi
+  [ -n "$stopped" ] && echo "$stopped" | xargs docker rm -f 2>/dev/null || true
+
+  # 2) 실행 중인 docker compose run 잔재(-run- 패턴) 제거
+  #    `docker compose run`이 --rm 없이 실행되면 *-run-숫자 이름의 컨테이너가 남음
+  local run_containers
+  run_containers=$(docker ps -a --format "{{.ID}} {{.Names}}" 2>/dev/null \
+    | awk '/-run-/{print $1}')
+  [ -n "$run_containers" ] && echo "$run_containers" | xargs docker rm -f 2>/dev/null || true
+
   log "컨테이너 정리 완료"
 }
 
@@ -128,6 +133,7 @@ async def main():
         import uuid
         admin = User(
             id=uuid.uuid4(),
+            login_id='admin',
             nickname='admin',
             password_hash=get_password_hash(os.environ.get('ADMIN_INIT_PASSWORD', 'ChangeMe123!')),
             role='superadmin',
@@ -136,7 +142,7 @@ async def main():
         )
         db.add(admin)
         await db.commit()
-        print(f'슈퍼어드민 생성: nickname=admin')
+        print('슈퍼어드민 생성: login_id=admin')
 
 asyncio.run(main())
 " || true
@@ -151,7 +157,7 @@ if [ "$MODE" = "update" ]; then
   # ── 코드 업데이트 배포 ──
   log "=== 업데이트 배포 시작 (환경: $ENV) ==="
   check_env
-  cleanup_containers
+  cleanup_containers  # 빌드 전 좀비 컨테이너 선제 정리
   log "이미지 빌드 중 (레이어 캐시 활용)..."
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."

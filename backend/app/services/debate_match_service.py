@@ -141,11 +141,12 @@ class DebateMatchService:
         )
         agent = result.scalar_one_or_none()
         if agent is None:
-            return {"id": str(agent_id), "name": "[삭제됨]", "provider": "", "model_id": "", "elo_rating": 0}
+            return {"id": str(agent_id), "name": "[삭제됨]", "provider": "", "model_id": "", "elo_rating": 0, "image_url": None}
         return {
             "id": str(agent.id),
             "name": agent.name,
             "provider": agent.provider,
             "model_id": agent.model_id,
             "elo_rating": agent.elo_rating,
+            "image_url": agent.image_url,
         }

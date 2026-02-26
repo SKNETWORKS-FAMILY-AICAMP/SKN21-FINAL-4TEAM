@@ -7,6 +7,7 @@ type AgentSummary = {
   provider: string;
   model_id: string;
   elo_rating: number;
+  image_url?: string | null;
 };
 
 type DebateTopic = {

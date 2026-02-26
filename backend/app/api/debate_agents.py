@@ -1,4 +1,8 @@
+import asyncio
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,6 +24,60 @@ from app.services.debate_ws_manager import WSConnectionManager
 router = APIRouter()
 
 
+def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
+    """프로바이더 HTTP 에러를 (error_type, user_message)로 변환.
+
+    각 프로바이더 에러 포맷:
+      OpenAI    → body["error"]["code"]:   "invalid_api_key" | "model_not_found"
+      Anthropic → body["error"]["type"]:   "authentication_error" | "not_found_error"
+      Google    → body["error"]["status"]: "UNAUTHENTICATED" | "NOT_FOUND"
+    """
+    code = exc.response.status_code
+    try:
+        body = exc.response.json()
+    except Exception:
+        body = {}
+
+    err = body.get("error", {})
+    err_code = str(err.get("code", ""))        # OpenAI: "invalid_api_key" / "model_not_found"
+    err_type = err.get("type", "")             # Anthropic: "authentication_error" / "not_found_error"
+    err_status = err.get("status", "")         # Google: "UNAUTHENTICATED" / "NOT_FOUND"
+    err_msg = err.get("message", "")
+
+    # ── API 키 문제 ────────────────────────────────────────────────────────
+    api_key_signals = (
+        code == 401
+        or err_code == "invalid_api_key"
+        or err_type == "authentication_error"
+        or err_status == "UNAUTHENTICATED"
+    )
+    if api_key_signals:
+        return "api_key", "API 키가 올바르지 않습니다."
+
+    # ── 모델 문제 ──────────────────────────────────────────────────────────
+    model_signals = (
+        code == 404
+        or err_code == "model_not_found"
+        or err_type == "not_found_error"
+        or err_status == "NOT_FOUND"
+    )
+    if model_signals:
+        return "model", "모델을 찾을 수 없습니다. 모델 ID를 확인해주세요."
+
+    # ── 권한 거부 (403) — 키는 유효하나 모델 접근 권한 없음 ───────────────
+    if code == 403:
+        return "api_key", "접근이 거부되었습니다. API 키 권한을 확인해주세요."
+
+    # ── 400 Bad Request — 메시지로 세부 판별 ──────────────────────────────
+    if code == 400:
+        lower_msg = err_msg.lower()
+        if "model" in lower_msg or "not found" in lower_msg:
+            return "model", f"모델 오류: {err_msg[:150]}" if err_msg else "모델 ID를 확인해주세요."
+        return "api_key", f"잘못된 요청: {err_msg[:150]}" if err_msg else f"API 오류 ({code})"
+
+    return "other", f"API 오류 ({code})" + (f": {err_msg[:120]}" if err_msg else "")
+
+
 def _agent_response(agent: DebateAgent) -> AgentResponse:
     """AgentResponse에 is_connected 플래그를 추가하여 반환."""
     resp = AgentResponse.model_validate(agent)
@@ -38,6 +96,47 @@ async def list_templates(
     service = DebateTemplateService(db)
     templates = await service.list_active_templates()
     return [AgentTemplateResponse.model_validate(t) for t in templates]
+
+
+class AgentTestRequest(BaseModel):
+    provider: str
+    model_id: str
+    api_key: str = ""
+
+
+@router.post("/test")
+async def test_agent_connection(
+    data: AgentTestRequest,
+    user: User = Depends(get_current_user),
+):
+    """API 키·모델 ID 유효성 사전 테스트. DB 저장 없음."""
+    # local/runpod은 플랫폼 키 사용 — 사용자 측 테스트 불필요
+    if data.provider in ("local", "runpod"):
+        return {"ok": True}
+
+    if not data.api_key:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="API 키를 입력해주세요.")
+
+    from app.services.inference_client import InferenceClient
+
+    client = InferenceClient()
+    messages = [{"role": "user", "content": "Say ok"}]
+
+    try:
+        result = await asyncio.wait_for(
+            client.generate_byok(data.provider, data.model_id, data.api_key, messages, max_tokens=10),
+            timeout=15.0,
+        )
+        return {"ok": True, "model_response": result["content"]}
+    except asyncio.TimeoutError:
+        return {"ok": False, "error_type": "other", "error": "응답 시간이 초과되었습니다 (15초)"}
+    except httpx.HTTPStatusError as exc:
+        error_type, error_msg = _classify_provider_error(exc)
+        return {"ok": False, "error_type": error_type, "error": error_msg}
+    except ValueError as exc:
+        return {"ok": False, "error_type": "other", "error": str(exc)[:200]}
+    except Exception as exc:
+        return {"ok": False, "error_type": "other", "error": f"테스트 중 오류: {str(exc)[:200]}"}
 
 
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)

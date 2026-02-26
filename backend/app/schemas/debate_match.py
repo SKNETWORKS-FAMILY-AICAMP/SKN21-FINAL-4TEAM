@@ -14,6 +14,7 @@ class AgentSummary(BaseModel):
     provider: str
     model_id: str
     elo_rating: int
+    image_url: str | None = None
 
     model_config = {"from_attributes": True}
 

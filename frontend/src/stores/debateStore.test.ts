@@ -109,6 +109,8 @@ describe('debateStore', () => {
       output_tokens: 50,
       human_suspicion_score: 0,
       response_time_ms: null,
+      review_result: null,
+      is_blocked: false,
       created_at: '2026-01-01',
     };
 

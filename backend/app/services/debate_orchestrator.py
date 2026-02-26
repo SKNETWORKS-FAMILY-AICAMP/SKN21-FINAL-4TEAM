@@ -120,6 +120,8 @@ class DebateOrchestrator:
                 timeout=settings.debate_turn_review_timeout,
             )
             raw_content = result.get("content", "")
+            input_tokens = result.get("input_tokens", 0)
+            output_tokens = result.get("output_tokens", 0)
             content = raw_content.strip()
             # 마크다운 코드블록 제거
             if content.startswith("```"):
@@ -160,6 +162,8 @@ class DebateOrchestrator:
             "penalties": penalties,
             "penalty_total": penalty_total,
             "blocked_claim": blocked_claim,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
 
     def _review_fallback(self) -> dict:
@@ -172,6 +176,8 @@ class DebateOrchestrator:
             "penalties": {},
             "penalty_total": 0,
             "blocked_claim": None,
+            "input_tokens": 0,
+            "output_tokens": 0,
         }
 
     async def judge(
@@ -198,6 +204,8 @@ class DebateOrchestrator:
             {"role": "user", "content": debate_log},
         ]
 
+        judge_input_tokens = 0
+        judge_output_tokens = 0
         raw_content = ""
         try:
             # 플랫폼 키로 오케스트레이터 모델 호출
@@ -208,6 +216,8 @@ class DebateOrchestrator:
                 max_tokens=1024,
                 temperature=0.3,
             )
+            judge_input_tokens = result.get("input_tokens", 0)
+            judge_output_tokens = result.get("output_tokens", 0)
             raw_content = result.get("content", "")
             content = raw_content.strip()
             # LLM이 마크다운 코드블록으로 감싸 반환하는 경우 제거
@@ -256,6 +266,8 @@ class DebateOrchestrator:
             "penalty_a": penalty_a,
             "penalty_b": penalty_b,
             "winner_id": winner_id,
+            "input_tokens": judge_input_tokens,
+            "output_tokens": judge_output_tokens,
         }
 
     def _format_debate_log(

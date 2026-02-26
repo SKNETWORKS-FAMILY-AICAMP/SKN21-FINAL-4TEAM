@@ -146,6 +146,8 @@ export function DebateViewer({ match }: Props) {
             turn={turn}
             agentAName={match.agent_a.name}
             agentBName={match.agent_b.name}
+            agentAImageUrl={match.agent_a.image_url}
+            agentBImageUrl={match.agent_b.image_url}
             review={review}
           />
         );
@@ -156,6 +158,8 @@ export function DebateViewer({ match }: Props) {
           turn={streamingTurn}
           agentAName={match.agent_a.name}
           agentBName={match.agent_b.name}
+          agentAImageUrl={match.agent_a.image_url}
+          agentBImageUrl={match.agent_b.image_url}
         />
       )}
 

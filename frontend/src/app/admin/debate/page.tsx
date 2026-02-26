@@ -12,10 +12,15 @@ import {
   CalendarClock,
   StopCircle,
   Trash2,
+  FileSearch,
+  Ban,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DebateDebugModal, type DebugData } from '@/components/debate/DebateDebugModal';
 
 type DebateStats = {
   agents_count: number;
@@ -23,6 +28,57 @@ type DebateStats = {
   matches_total: number;
   matches_completed: number;
   matches_in_progress: number;
+};
+
+type AdminDebateMatch = {
+  id: string;
+  topic_title: string;
+  agent_a: { id: string; name: string; provider: string; model_id: string; elo_rating: number };
+  agent_b: { id: string; name: string; provider: string; model_id: string; elo_rating: number };
+  status: string;
+  winner_id: string | null;
+  score_a: number;
+  score_b: number;
+  penalty_a: number;
+  penalty_b: number;
+  blocked_turns_count?: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
+const MATCH_STATUS_LABELS: Record<string, string> = {
+  pending: '대기',
+  in_progress: '진행 중',
+  completed: '완료',
+  error: '오류',
+  waiting_agent: '에이전트 대기',
+  forfeit: '몰수패',
+};
+
+const MATCH_STATUS_COLORS: Record<string, string> = {
+  pending: 'text-text-muted',
+  in_progress: 'text-yellow-500',
+  completed: 'text-green-500',
+  error: 'text-danger',
+  waiting_agent: 'text-blue-400',
+  forfeit: 'text-red-400',
+};
+
+type AdminDebateAgent = {
+  id: string;
+  name: string;
+  provider: string;
+  model_id: string;
+  elo_rating: number;
+  image_url: string | null;
+  owner_id: string;
+  owner_nickname: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  is_active: boolean;
+  created_at: string;
 };
 
 type Topic = {
@@ -83,11 +139,24 @@ export default function AdminDebatePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // 중지/삭제 상태
+  // 토픽 중지/삭제 상태
   const [closingId, setClosingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Topic | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // 에이전트 관리 상태
+  const [agents, setAgents] = useState<AdminDebateAgent[]>([]);
+  const [agentsTotal, setAgentsTotal] = useState(0);
+  const [agentDeleteTarget, setAgentDeleteTarget] = useState<AdminDebateAgent | null>(null);
+  const [agentDeleting, setAgentDeleting] = useState(false);
+  const [agentActionError, setAgentActionError] = useState<string | null>(null);
+
+  // 매치 로그 & 디버그 상태
+  const [matches, setMatches] = useState<AdminDebateMatch[]>([]);
+  const [matchesTotal, setMatchesTotal] = useState(0);
+  const [debugData, setDebugData] = useState<DebugData | null>(null);
+  const [debugLoadingId, setDebugLoadingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -106,6 +175,32 @@ export default function AdminDebatePage() {
       .get<{ items: Topic[]; total: number }>('/topics?limit=50')
       .then((r) => setTopics(r.items))
       .catch(() => {});
+    api
+      .get<{ items: AdminDebateAgent[]; total: number }>('/admin/debate/agents?limit=100')
+      .then((r) => {
+        setAgents(r.items);
+        setAgentsTotal(r.total);
+      })
+      .catch(() => {});
+    api
+      .get<{ items: AdminDebateMatch[]; total: number }>('/admin/debate/matches?limit=30')
+      .then((r) => {
+        setMatches(r.items);
+        setMatchesTotal(r.total);
+      })
+      .catch(() => {});
+  };
+
+  const handleOpenDebug = async (matchId: string) => {
+    setDebugLoadingId(matchId);
+    try {
+      const data = await api.get<DebugData>(`/admin/debate/matches/${matchId}/debug`);
+      setDebugData(data);
+    } catch (err) {
+      console.error('debug fetch error', err);
+    } finally {
+      setDebugLoadingId(null);
+    }
   };
 
   useEffect(() => {
@@ -185,6 +280,22 @@ export default function AdminDebatePage() {
       setActionError(msg);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleAgentDeleteConfirm = async () => {
+    if (!agentDeleteTarget) return;
+    setAgentDeleting(true);
+    setAgentActionError(null);
+    try {
+      await api.delete(`/admin/debate/agents/${agentDeleteTarget.id}`);
+      setAgentDeleteTarget(null);
+      fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '삭제 실패';
+      setAgentActionError(msg);
+    } finally {
+      setAgentDeleting(false);
     }
   };
 
@@ -489,7 +600,209 @@ export default function AdminDebatePage() {
         )}
       </div>
 
-      {/* 삭제 확인 다이얼로그 */}
+      {/* 에이전트 관리 섹션 */}
+      <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
+        <h2 className="font-semibold text-text mb-4 flex items-center gap-2">
+          <Bot size={16} className="text-primary" />
+          토론 에이전트
+          <span className="text-xs text-text-muted font-normal">({agentsTotal}개)</span>
+        </h2>
+
+        {agentActionError && (
+          <div className="mb-3 text-sm text-danger bg-danger/10 rounded-lg px-3 py-2">
+            {agentActionError}
+          </div>
+        )}
+
+        {agents.length === 0 ? (
+          <p className="text-sm text-text-muted text-center py-6">등록된 에이전트가 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-text-muted text-left">
+                  <th className="pb-2 pr-4 font-medium">에이전트</th>
+                  <th className="pb-2 pr-4 font-medium">소유자</th>
+                  <th className="pb-2 pr-4 font-medium">모델</th>
+                  <th className="pb-2 pr-4 font-medium text-right">ELO</th>
+                  <th className="pb-2 pr-4 font-medium text-right">승/패/무</th>
+                  <th className="pb-2 font-medium text-right">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {agents.map((agent) => (
+                  <tr key={agent.id} className="hover:bg-bg transition-colors">
+                    <td className="py-2 pr-4">
+                      <div className="flex items-center gap-2">
+                        {agent.image_url ? (
+                          <img
+                            src={agent.image_url}
+                            alt={agent.name}
+                            className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-bg flex items-center justify-center flex-shrink-0">
+                            <Bot size={14} className="text-text-muted" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-text">{agent.name}</p>
+                          {!agent.is_active && (
+                            <span className="text-[10px] text-text-muted">비활성</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2 pr-4 text-text-muted">{agent.owner_nickname}</td>
+                    <td className="py-2 pr-4">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg text-text-muted border border-border">
+                        {agent.provider}
+                      </span>
+                      <span className="ml-1.5 text-xs text-text-muted">{agent.model_id}</span>
+                    </td>
+                    <td className="py-2 pr-4 text-right font-mono text-sm">{agent.elo_rating}</td>
+                    <td className="py-2 pr-4 text-right text-xs text-text-muted">
+                      <span className="text-green-500">{agent.wins}</span>
+                      {' / '}
+                      <span className="text-red-400">{agent.losses}</span>
+                      {' / '}
+                      <span>{agent.draws}</span>
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        onClick={() => {
+                          setAgentActionError(null);
+                          setAgentDeleteTarget(agent);
+                        }}
+                        title="에이전트 삭제"
+                        className="p-1.5 rounded hover:bg-danger/10 text-text-muted hover:text-danger transition-colors"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 매치 로그 섹션 */}
+      <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
+        <h2 className="font-semibold text-text mb-4 flex items-center gap-2">
+          <FileSearch size={16} className="text-primary" />
+          매치 로그
+          <span className="text-xs text-text-muted font-normal">
+            (최근 {matches.length}/{matchesTotal}건)
+          </span>
+        </h2>
+
+        {matches.length === 0 ? (
+          <p className="text-sm text-text-muted text-center py-6">매치 기록이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-text-muted text-left">
+                  <th className="pb-2 pr-4 font-medium">주제</th>
+                  <th className="pb-2 pr-4 font-medium">에이전트 A</th>
+                  <th className="pb-2 pr-4 font-medium">에이전트 B</th>
+                  <th className="pb-2 pr-4 font-medium">상태</th>
+                  <th className="pb-2 pr-4 font-medium text-right">점수</th>
+                  <th className="pb-2 pr-4 font-medium text-center">차단</th>
+                  <th className="pb-2 font-medium text-right">디버그</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {matches.map((m) => {
+                  const aIsWinner = m.winner_id === m.agent_a.id;
+                  const bIsWinner = m.winner_id === m.agent_b.id;
+                  return (
+                    <tr key={m.id} className="hover:bg-bg transition-colors">
+                      <td className="py-2 pr-4">
+                        <p className="font-medium text-text line-clamp-1 max-w-[180px]">
+                          {m.topic_title}
+                        </p>
+                        <p className="text-[10px] text-text-muted">
+                          {new Date(m.created_at).toLocaleDateString('ko-KR')}
+                        </p>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className={`text-xs font-medium ${aIsWinner ? 'text-blue-400' : 'text-text'}`}
+                        >
+                          {m.agent_a.name}
+                        </span>
+                        <p className="text-[10px] text-text-muted">{m.agent_a.model_id}</p>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className={`text-xs font-medium ${bIsWinner ? 'text-violet-400' : 'text-text'}`}
+                        >
+                          {m.agent_b.name}
+                        </span>
+                        <p className="text-[10px] text-text-muted">{m.agent_b.model_id}</p>
+                      </td>
+                      <td
+                        className={`py-2 pr-4 text-xs font-medium ${MATCH_STATUS_COLORS[m.status] ?? 'text-text-muted'}`}
+                      >
+                        {MATCH_STATUS_LABELS[m.status] ?? m.status}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-mono text-xs">
+                        <span className={aIsWinner ? 'text-blue-400 font-bold' : 'text-text'}>
+                          {m.score_a}
+                        </span>
+                        <span className="text-text-muted mx-1">:</span>
+                        <span className={bIsWinner ? 'text-violet-400 font-bold' : 'text-text'}>
+                          {m.score_b}
+                        </span>
+                        {(m.penalty_a > 0 || m.penalty_b > 0) && (
+                          <p className="text-[10px] text-orange-400">
+                            -({m.penalty_a}/{m.penalty_b})
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 text-center">
+                        {(m.blocked_turns_count ?? 0) > 0 ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+                            <Ban size={9} />
+                            {m.blocked_turns_count}
+                          </span>
+                        ) : (m.penalty_a > 0 || m.penalty_b > 0) ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                            <AlertTriangle size={9} />
+                            벌점
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-text-muted/40">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => handleOpenDebug(m.id)}
+                          disabled={debugLoadingId === m.id}
+                          title="디버그 로그 보기"
+                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded hover:bg-primary/10 text-text-muted hover:text-primary transition-colors disabled:opacity-50 ml-auto"
+                        >
+                          {debugLoadingId === m.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <FileSearch size={13} />
+                          )}
+                          디버그
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 토픽 삭제 확인 다이얼로그 */}
       <ConfirmDialog
         isOpen={deleteTarget !== null}
         title="토론 주제 삭제"
@@ -506,6 +819,29 @@ export default function AdminDebatePage() {
           setActionError(null);
         }}
       />
+
+      {/* 에이전트 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={agentDeleteTarget !== null}
+        title="에이전트 강제 삭제"
+        message={
+          agentDeleteTarget
+            ? `"${agentDeleteTarget.name}" (소유자: ${agentDeleteTarget.owner_nickname})을(를) 삭제합니다.\n진행 중인 매치가 없는 경우에만 삭제됩니다.`
+            : ''
+        }
+        confirmLabel={agentDeleting ? '삭제 중...' : '삭제'}
+        variant="danger"
+        onConfirm={handleAgentDeleteConfirm}
+        onCancel={() => {
+          setAgentDeleteTarget(null);
+          setAgentActionError(null);
+        }}
+      />
+
+      {/* 디버그 모달 */}
+      {debugData && (
+        <DebateDebugModal data={debugData} onClose={() => setDebugData(null)} />
+      )}
     </div>
   );
 }
