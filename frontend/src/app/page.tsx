@@ -211,7 +211,7 @@ export default function HomePage() {
           creditBalance: user.credit_balance ?? 0,
           subscriptionPlanKey: user.subscription_plan_key ?? null,
         });
-        router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/personas');
+        router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/debate');
       } else {
         const res = await register(loginId.trim(), nickname.trim(), password, email || undefined);
         // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
@@ -247,10 +247,10 @@ export default function HomePage() {
         subscriptionPlanKey: user.subscription_plan_key ?? null,
       });
       toast.success('가입이 완료되었습니다!');
-      router.push('/personas');
+      router.push('/debate');
     } catch {
       toast.error('설정 저장에 실패했습니다');
-      router.push('/personas');
+      router.push('/debate');
     } finally {
       setLoading(false);
     }
