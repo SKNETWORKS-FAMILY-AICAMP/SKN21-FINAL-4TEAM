@@ -244,6 +244,21 @@ class DebateOrchestrator:
         # 스왑했다면 scorecard를 역변환 — 원래 A/B 에이전트 점수 복원
         if swap and isinstance(scorecard.get("agent_a"), dict) and isinstance(scorecard.get("agent_b"), dict):
             scorecard["agent_a"], scorecard["agent_b"] = scorecard["agent_b"], scorecard["agent_a"]
+            # reasoning 텍스트의 에이전트 이름도 역변환.
+            # LLM은 뒤바뀐 이름(agent_a_name→실제 B, agent_b_name→실제 A)으로 작성했으므로
+            # 점수 역변환과 동일하게 이름 참조도 교체해야 코멘트와 점수가 일치한다.
+            reasoning = scorecard.get("reasoning", "")
+            if reasoning and agent_a_name and agent_b_name and agent_a_name != agent_b_name:
+                _pa = "\x00__AGENT_A__\x00"
+                _pb = "\x00__AGENT_B__\x00"
+                reasoning = (
+                    reasoning
+                    .replace(agent_a_name, _pa)
+                    .replace(agent_b_name, _pb)
+                    .replace(_pa, agent_b_name)
+                    .replace(_pb, agent_a_name)
+                )
+                scorecard["reasoning"] = reasoning
 
         # 기본 점수 합산
         score_a = sum(scorecard.get("agent_a", {}).values()) if isinstance(scorecard.get("agent_a"), dict) else 0
