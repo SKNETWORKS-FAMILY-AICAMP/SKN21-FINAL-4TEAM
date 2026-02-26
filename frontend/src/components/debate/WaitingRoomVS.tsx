@@ -12,6 +12,7 @@ type Agent = {
   wins: number;
   losses: number;
   draws: number;
+  image_url?: string | null;
 };
 
 type Props = {
@@ -22,6 +23,11 @@ type Props = {
   isMatched: boolean;
   isAutoMatched: boolean;
   isRevealing: boolean;
+  isReady: boolean;
+  opponentReady: boolean;
+  countdown: number | null;
+  onReady: () => void;
+  readying: boolean;
   onCancel: () => void;
   cancelling: boolean;
 };
@@ -34,9 +40,16 @@ export function WaitingRoomVS({
   isMatched,
   isAutoMatched,
   isRevealing,
+  isReady,
+  opponentReady,
+  countdown,
+  onReady,
+  readying,
   onCancel,
   cancelling,
 }: Props) {
+  const hasOpponent = opponent !== null;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center px-4 py-8">
       {/* 토픽 제목 */}
@@ -78,7 +91,9 @@ export function WaitingRoomVS({
                 VS
               </span>
               <CountUpTimer startedAt={startedAt} maxSeconds={120} />
-              <p className="text-xs text-gray-500">대기 중...</p>
+              {!hasOpponent && (
+                <p className="text-xs text-gray-500">상대를 찾는 중...</p>
+              )}
             </>
           )}
         </div>
@@ -89,12 +104,62 @@ export function WaitingRoomVS({
         </div>
       </div>
 
+      {/* 준비 완료 버튼 영역 */}
+      {!isMatched && hasOpponent && (
+        <div className="mt-10 flex flex-col items-center gap-3">
+          {/* 카운트다운 */}
+          {countdown !== null && (
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-xs text-gray-400">토론 시작까지</p>
+              <span
+                className={`text-6xl font-black tabular-nums drop-shadow-[0_0_16px_rgba(234,179,8,0.7)] transition-all ${
+                  countdown <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-400'
+                }`}
+              >
+                {countdown}
+              </span>
+            </div>
+          )}
+
+          {/* 준비 상태 표시 */}
+          <div className="flex items-center gap-4 text-xs text-gray-400">
+            <span className={isReady ? 'text-green-400 font-semibold' : ''}>
+              {isReady ? '✓ 나 준비 완료' : '나 대기 중'}
+            </span>
+            <span className="text-gray-600">|</span>
+            <span className={opponentReady ? 'text-green-400 font-semibold' : ''}>
+              {opponentReady ? '✓ 상대 준비 완료' : '상대 대기 중'}
+            </span>
+          </div>
+
+          {!isReady ? (
+            <button
+              onClick={onReady}
+              disabled={readying}
+              className="px-10 py-3 bg-primary text-white font-bold rounded-xl text-sm
+                hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed
+                transition-all shadow-lg shadow-primary/30 animate-pulse"
+            >
+              {readying ? '처리 중...' : '준비 완료'}
+            </button>
+          ) : (
+            <div className="px-10 py-3 border border-green-500/40 rounded-xl text-sm text-green-400 font-semibold bg-green-500/10">
+              {countdown !== null
+                ? '카운트다운 중 — 상대가 준비하면 즉시 시작...'
+                : opponentReady
+                  ? '양쪽 준비 완료 — 시작 중...'
+                  : '상대방 준비를 기다리는 중...'}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 취소 버튼 */}
       {!isMatched && (
         <button
           onClick={onCancel}
           disabled={cancelling}
-          className="mt-12 px-6 py-2 rounded-lg border border-gray-600 text-sm text-gray-400
+          className="mt-6 px-6 py-2 rounded-lg border border-gray-600 text-sm text-gray-400
             hover:border-red-500/50 hover:text-red-400 transition-colors disabled:opacity-50
             disabled:cursor-not-allowed"
         >

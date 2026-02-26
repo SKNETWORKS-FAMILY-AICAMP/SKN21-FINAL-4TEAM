@@ -1,15 +1,17 @@
+import asyncio
 import json
 import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.debate_agent import DebateAgent
+from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
 from app.models.user import User
@@ -117,24 +119,125 @@ async def _run_debate_safe(match_id: str) -> None:
         logger.exception("토론 엔진 오류 (match_id=%s)", match_id)
 
 
+async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> None:
+    """한 명 준비 완료 후 10초 카운트다운, 양쪽이 아직 큐에 있으면 자동 매치 생성."""
+    await asyncio.sleep(10)
+
+    from app.core.database import async_session
+
+    try:
+        async with async_session() as db:
+            # 양쪽 큐 엔트리 재확인 (이미 매칭됐으면 스킵)
+            res_a = await db.execute(
+                select(DebateMatchQueue)
+                .where(
+                    DebateMatchQueue.topic_id == topic_id,
+                    DebateMatchQueue.agent_id == agent_a_id,
+                )
+                .with_for_update()
+            )
+            entry_a = res_a.scalar_one_or_none()
+
+            res_b = await db.execute(
+                select(DebateMatchQueue)
+                .where(
+                    DebateMatchQueue.topic_id == topic_id,
+                    DebateMatchQueue.agent_id == agent_b_id,
+                )
+                .with_for_update()
+            )
+            entry_b = res_b.scalar_one_or_none()
+
+            if entry_a is None or entry_b is None:
+                # 이미 매칭됐거나 한쪽이 탈퇴
+                return
+
+            ver_a_res = await db.execute(
+                select(DebateAgentVersion)
+                .where(DebateAgentVersion.agent_id == entry_a.agent_id)
+                .order_by(DebateAgentVersion.version_number.desc())
+                .limit(1)
+            )
+            ver_a = ver_a_res.scalar_one_or_none()
+
+            ver_b_res = await db.execute(
+                select(DebateAgentVersion)
+                .where(DebateAgentVersion.agent_id == entry_b.agent_id)
+                .order_by(DebateAgentVersion.version_number.desc())
+                .limit(1)
+            )
+            ver_b = ver_b_res.scalar_one_or_none()
+
+            match = DebateMatch(
+                topic_id=topic_id,
+                agent_a_id=entry_a.agent_id,
+                agent_b_id=entry_b.agent_id,
+                agent_a_version_id=ver_a.id if ver_a else None,
+                agent_b_version_id=ver_b.id if ver_b else None,
+                status="pending",
+            )
+            db.add(match)
+            await db.delete(entry_a)
+            await db.delete(entry_b)
+            await db.commit()
+            await db.refresh(match)
+
+            logger.info("카운트다운 자동 매치 생성: %s (topic=%s)", match.id, topic_id)
+
+            await publish_queue_event(topic_id, agent_a_id, "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": agent_b_id,
+                "auto_matched": False,
+            })
+            await publish_queue_event(topic_id, agent_b_id, "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": agent_a_id,
+                "auto_matched": False,
+            })
+
+            await _run_debate_safe(str(match.id))
+    except Exception:
+        logger.exception("카운트다운 자동 매치 오류 (topic=%s)", topic_id)
+
+
 @router.post("/{topic_id}/join")
 async def join_topic_queue(
+    topic_id: str,
+    data: JoinQueueRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """토픽 큐 참가. 상대가 있으면 opponent_joined 이벤트 발행."""
+    service = DebateMatchingService(db)
+    try:
+        result = await service.join_queue(user, topic_id, data.agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return result
+
+
+@router.post("/{topic_id}/queue/ready")
+async def ready_up_queue(
     topic_id: str,
     data: JoinQueueRequest,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """토픽 큐 참가. 2명 도달 시 자동 매치 생성."""
+    """준비 완료 버튼. 양쪽 모두 준비되면 매치 생성 후 토론 시작."""
     service = DebateMatchingService(db)
     try:
-        result = await service.join_queue(user, topic_id, data.agent_id)
+        result = await service.ready_up(user, topic_id, data.agent_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    # 매치가 생성되었으면 BackgroundTasks로 토론 엔진 시작 (참조 유지 + 예외 로깅)
     if result.get("status") == "matched" and result.get("match_id"):
         background_tasks.add_task(_run_debate_safe, result["match_id"])
+    elif result.get("countdown_started") and result.get("opponent_agent_id"):
+        # 한 명이 먼저 준비 완료 → 10초 후 자동 매치
+        background_tasks.add_task(
+            _auto_match_safe, topic_id, str(data.agent_id), result["opponent_agent_id"]
+        )
 
     return result
 
@@ -228,15 +331,22 @@ async def queue_status(
     )
     entry = queue_result.scalar_one_or_none()
     if entry is not None:
-        # DB에서 직접 COUNT로 대기 위치 계산 (전체 로드 방지)
-        pos_result = await db.execute(
-            select(func.count(DebateMatchQueue.id)).where(
+        # 상대방 큐 엔트리 확인
+        opp_result = await db.execute(
+            select(DebateMatchQueue).where(
                 DebateMatchQueue.topic_id == topic_id,
-                DebateMatchQueue.joined_at <= entry.joined_at,
-            )
+                DebateMatchQueue.agent_id != agent_id,
+            ).order_by(DebateMatchQueue.joined_at).limit(1)
         )
-        position = pos_result.scalar() or 1
-        return {"status": "queued", "position": position, "joined_at": entry.joined_at.isoformat()}
+        opp_entry = opp_result.scalar_one_or_none()
+        return {
+            "status": "queued",
+            "position": 1,
+            "joined_at": entry.joined_at.isoformat(),
+            "is_ready": entry.is_ready,
+            "opponent_agent_id": str(opp_entry.agent_id) if opp_entry else None,
+            "opponent_is_ready": opp_entry.is_ready if opp_entry else False,
+        }
 
     # 이미 매칭됐는지 확인 (최근 매치)
     match_result = await db.execute(

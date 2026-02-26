@@ -14,6 +14,27 @@ logger = logging.getLogger(__name__)
 # RunPod Serverless SGLang은 OpenAI-compatible API를 제공
 _RUNPOD_BASE_URL = "https://api.runpod.ai/v2/{endpoint_id}/openai/v1"
 
+# max_tokens 대신 max_completion_tokens를 사용해야 하는 OpenAI 모델 접두사
+# o-series 추론 모델(o1/o3/o4)과 gpt-4.1+/gpt-5+ 계열은 max_completion_tokens 필수
+_OPENAI_COMPLETION_TOKENS_PREFIXES = ("o1", "o3", "o4", "gpt-4.1", "gpt-5")
+
+# temperature 파라미터를 지원하지 않는 모델 접두사 (o-series 추론 모델만 해당)
+_OPENAI_NO_TEMPERATURE_PREFIXES = ("o1", "o3", "o4")
+
+
+def _openai_max_tokens_key(model_id: str) -> str:
+    """모델에 따라 max_tokens 또는 max_completion_tokens 파라미터 키를 반환."""
+    model = model_id.lower()
+    if any(model.startswith(p) for p in _OPENAI_COMPLETION_TOKENS_PREFIXES):
+        return "max_completion_tokens"
+    return "max_tokens"
+
+
+def _openai_supports_temperature(model_id: str) -> bool:
+    """모델이 temperature 파라미터를 지원하는지 반환. o-series 추론 모델만 미지원."""
+    model = model_id.lower()
+    return not any(model.startswith(p) for p in _OPENAI_NO_TEMPERATURE_PREFIXES)
+
 
 class InferenceClient:
     """LLM 모델 라우터. provider별 분기 처리."""
@@ -134,16 +155,20 @@ class InferenceClient:
     async def _call_openai_byok(
         self, model_id: str, api_key: str, messages: list[dict], **kwargs
     ) -> dict:
+        max_key = _openai_max_tokens_key(model_id)
+        body: dict = {
+            "model": model_id,
+            "messages": messages,
+            max_key: kwargs.get("max_tokens", 1024),
+        }
+        # o-series 추론 모델만 temperature 미지원, gpt-4.1/gpt-5 등은 temperature 지원
+        if _openai_supports_temperature(model_id):
+            body["temperature"] = kwargs.get("temperature", 0.7)
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model_id,
-                    "messages": messages,
-                    "max_tokens": kwargs.get("max_tokens", 1024),
-                    "temperature": kwargs.get("temperature", 0.7),
-                },
+                json=body,
             )
             response.raise_for_status()
             data = response.json()
@@ -164,20 +189,23 @@ class InferenceClient:
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """OpenAI BYOK 스트리밍."""
+        max_key = _openai_max_tokens_key(model_id)
+        stream_body: dict = {
+            "model": model_id,
+            "messages": messages,
+            max_key: kwargs.get("max_tokens", 1024),
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if _openai_supports_temperature(model_id):
+            stream_body["temperature"] = kwargs.get("temperature", 0.7)
         async with (
             httpx.AsyncClient(timeout=120.0) as client,
             client.stream(
                 "POST",
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model_id,
-                    "messages": messages,
-                    "max_tokens": kwargs.get("max_tokens", 1024),
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "stream": True,
-                    "stream_options": {"include_usage": True},
-                },
+                json=stream_body,
             ) as response,
         ):
             response.raise_for_status()

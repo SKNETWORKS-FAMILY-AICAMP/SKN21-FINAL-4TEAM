@@ -16,6 +16,7 @@ type Agent = {
   wins: number;
   losses: number;
   draws: number;
+  image_url?: string | null;
 };
 
 export default function WaitingRoomPage() {
@@ -32,13 +33,38 @@ export default function WaitingRoomPage() {
   const [isMatched, setIsMatched] = useState(false);
   const [isAutoMatched, setIsAutoMatched] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [opponentReady, setOpponentReady] = useState(false);
+  const [readying, setReadying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const matchIdRef = useRef<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
   const sseRetryCountRef = useRef(0);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const MAX_SSE_RETRIES = 10;
+
+  // 상대 에이전트 정보 로드 헬퍼
+  const loadOpponent = useCallback(async (opponentAgentId: string) => {
+    try {
+      const opp = await api.get<Agent>(`/agents/${opponentAgentId}`);
+      setOpponent(opp);
+    } catch {
+      setOpponent({
+        id: opponentAgentId,
+        name: '상대 에이전트',
+        provider: 'unknown',
+        model_id: '',
+        elo_rating: 1500,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+      });
+    }
+  }, []);
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -58,23 +84,31 @@ export default function WaitingRoomPage() {
       .catch(() => setError('데이터를 불러오지 못했습니다.'));
   }, [topicId, agentId, router]);
 
-  // 이미 매칭됐는지 확인 후 SSE 연결
+  // 이미 매칭됐는지 / 상대가 있는지 확인 후 SSE 연결
   useEffect(() => {
     if (!myAgent) return;
 
     api
-      .get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
-        `/topics/${topicId}/queue/status?agent_id=${agentId}`,
-      )
-      .then((res) => {
+      .get<{
+        status: string;
+        match_id?: string;
+        opponent_agent_id?: string;
+        opponent_is_ready?: boolean;
+        is_ready?: boolean;
+      }>(`/topics/${topicId}/queue/status?agent_id=${agentId}`)
+      .then(async (res) => {
         if (res.status === 'matched' && res.match_id) {
-          // 이미 매칭 완료 상태 — VS 화면 표시 후 이동 (바로 push 대신)
           handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
         } else if (res.status === 'not_in_queue') {
-          // 큐에서 빠져나간 경우 토픽으로 복귀
           router.push(`/debate/topics/${topicId}`);
         } else {
-          // queued — SSE 연결 시작
+          // 이미 준비 상태 복원
+          if (res.is_ready) setIsReady(true);
+          if (res.opponent_is_ready) setOpponentReady(true);
+          // 이미 상대가 있으면 로드
+          if (res.opponent_agent_id) {
+            await loadOpponent(res.opponent_agent_id);
+          }
           connectSSE();
         }
       })
@@ -83,7 +117,6 @@ export default function WaitingRoomPage() {
   }, [myAgent]);
 
   const connectSSE = useCallback(() => {
-    // 기존 연결 정리
     if (sseRef.current) {
       sseRef.current.close();
     }
@@ -99,6 +132,16 @@ export default function WaitingRoomPage() {
 
         if (event === 'matched') {
           handleMatched(data.match_id, data.opponent_agent_id, data.auto_matched ?? false);
+        } else if (event === 'opponent_joined') {
+          loadOpponent(data.opponent_agent_id);
+        } else if (event === 'opponent_ready') {
+          setOpponentReady(true);
+        } else if (event === 'countdown_started') {
+          // 상대방이 준비 완료했을 때만 opponentReady 표시
+          if (data.ready_agent_id && data.ready_agent_id !== agentId) {
+            setOpponentReady(true);
+          }
+          startCountdown(data.countdown_seconds ?? 10);
         } else if (event === 'timeout') {
           setError('플랫폼 에이전트가 없어 자동 매칭에 실패했습니다. 나중에 다시 시도해 주세요.');
           es.close();
@@ -114,24 +157,21 @@ export default function WaitingRoomPage() {
       es.close();
       sseRetryCountRef.current += 1;
 
-      // 최대 재시도 횟수 초과 시 에러 표시
       if (sseRetryCountRef.current > MAX_SSE_RETRIES) {
         setError('연결이 불안정합니다. 페이지를 새로고침하거나 나중에 다시 시도해 주세요.');
         return;
       }
 
-      // SSE 연결 오류 시 상태 재확인 (매칭됐거나 큐에서 빠진 경우 대응)
       api
-        .get<{ status: string; match_id?: string; opponent_agent_id?: string }>(
-          `/topics/${topicId}/queue/status?agent_id=${agentId}`,
-        )
+        .get<{ status: string; match_id?: string; opponent_agent_id?: string; opponent_is_ready?: boolean }>
+          (`/topics/${topicId}/queue/status?agent_id=${agentId}`)
         .then((res) => {
           if (res.status === 'matched' && res.match_id) {
             handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
           } else if (res.status === 'not_in_queue') {
             router.push(`/debate/topics/${topicId}`);
           } else {
-            // 여전히 큐에 있으면 2초 후 재연결 (지수 백오프 없이 고정 간격)
+            if (res.opponent_is_ready) setOpponentReady(true);
             setTimeout(connectSSE, 2000);
           }
         })
@@ -140,37 +180,60 @@ export default function WaitingRoomPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId, agentId]);
 
+  const startCountdown = useCallback((seconds: number) => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    setCountdown(seconds);
+    countdownTimerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
   const handleMatched = useCallback(
     async (matchId: string, opponentAgentId: string, autoMatched: boolean) => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      setCountdown(null);
       matchIdRef.current = matchId;
       setIsAutoMatched(autoMatched);
 
-      // 상대 에이전트 정보 조회
-      try {
-        const opp = await api.get<Agent>(`/agents/${opponentAgentId}`);
-        setOpponent(opp);
-      } catch {
-        setOpponent({
-          id: opponentAgentId,
-          name: '상대 에이전트',
-          provider: 'unknown',
-          model_id: '',
-          elo_rating: 1500,
-          wins: 0,
-          losses: 0,
-          draws: 0,
-        });
+      if (opponentAgentId) {
+        await loadOpponent(opponentAgentId);
       }
 
-      // 슬라이드인 → 매치 상태 전환 → 3초 후 이동
       setIsRevealing(true);
       setTimeout(() => setIsMatched(true), 300);
       setTimeout(() => {
         router.push(`/debate/matches/${matchId}`);
       }, 3000);
     },
-    [router],
+    [router, loadOpponent],
   );
+
+  const handleReady = useCallback(async () => {
+    setReadying(true);
+    try {
+      const result = await api.post<{ status: string; match_id?: string }>(
+        `/topics/${topicId}/queue/ready`,
+        { agent_id: agentId },
+      );
+      setIsReady(true);
+      if (result.status === 'matched' && result.match_id) {
+        handleMatched(result.match_id, opponent?.id ?? '', false);
+      }
+    } catch {
+      setError('준비 완료 처리에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      setReadying(false);
+    }
+  }, [topicId, agentId, opponent, handleMatched]);
 
   const handleCancel = useCallback(async () => {
     setCancelling(true);
@@ -183,8 +246,7 @@ export default function WaitingRoomPage() {
     }
   }, [topicId, agentId, router]);
 
-  // SSE 안전망: 4초마다 매치 상태 폴링 (SSE가 이벤트를 놓치는 경우 대응)
-  // SSE가 정상 연결(OPEN) 상태이면 서버 부하 방지를 위해 폴링 스킵
+  // SSE 안전망: 4초마다 매치 상태 폴링
   const checkMatchStatus = useCallback(async () => {
     if (!agentId || isMatched) return;
     if (sseRef.current?.readyState === EventSource.OPEN) return;
@@ -196,7 +258,7 @@ export default function WaitingRoomPage() {
         handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
       }
     } catch {
-      // 폴링 실패는 무시 (SSE가 주 채널)
+      // 폴링 실패는 무시
     }
   }, [topicId, agentId, isMatched, handleMatched]);
 
@@ -205,10 +267,10 @@ export default function WaitingRoomPage() {
     return () => clearInterval(interval);
   }, [checkMatchStatus]);
 
-  // 언마운트 시 SSE 정리
   useEffect(() => {
     return () => {
       sseRef.current?.close();
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, []);
 
@@ -238,6 +300,11 @@ export default function WaitingRoomPage() {
       isMatched={isMatched}
       isAutoMatched={isAutoMatched}
       isRevealing={isRevealing}
+      isReady={isReady}
+      opponentReady={opponentReady}
+      countdown={countdown}
+      onReady={handleReady}
+      readying={readying}
       onCancel={handleCancel}
       cancelling={cancelling}
     />
