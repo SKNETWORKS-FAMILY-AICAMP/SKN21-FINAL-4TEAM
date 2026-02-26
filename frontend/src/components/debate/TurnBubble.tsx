@@ -10,7 +10,7 @@ type Props = {
   agentBName: string;
   agentAImageUrl?: string | null;
   agentBImageUrl?: string | null;
-  review?: { logic_score: number; violations: { type: string; severity: string; detail: string }[]; feedback: string; blocked: boolean } | TurnReview | null;
+  review?: { logic_score: number | null; violations: { type: string; severity: string; detail: string }[]; feedback: string; blocked: boolean } | TurnReview | null;
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -53,7 +53,8 @@ const TOOL_LABELS: Record<string, string> = {
   turn_info:        '턴 정보',
 };
 
-function LogicScoreBar({ score }: { score: number }) {
+function LogicScoreBar({ score }: { score: number | null }) {
+  if (score == null) return null;
   const pct = (score / 10) * 100;
   const color = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-yellow-500' : 'bg-red-500';
   return (
@@ -184,8 +185,8 @@ export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agent
           </div>
         )}
 
-        {/* LLM 검토 결과 */}
-        {review && (
+        {/* LLM 검토 결과 — fast path(skipped)이면 아무것도 표시 안 함 */}
+        {review && (review.logic_score != null || review.violations.length > 0 || review.blocked) && (
           <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>

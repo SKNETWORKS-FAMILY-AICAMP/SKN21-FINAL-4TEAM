@@ -460,9 +460,9 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
     def _fast_path_result(self, claim: str) -> dict:
         """패스트패스: LLM 호출 없이 안전한 발언으로 즉시 통과."""
         return {
-            "logic_score": 7,  # 패스트패스는 기본 7점 (위반 없음)
+            "logic_score": None,  # LLM 평가 없음 — UI에서 점수 미표시
             "violations": [],
-            "feedback": "패스트패스: 규칙 위반 없음",
+            "feedback": "",
             "block": False,
             "penalties": {},
             "penalty_total": 0,

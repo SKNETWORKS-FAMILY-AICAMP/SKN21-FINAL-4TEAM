@@ -82,7 +82,7 @@ type TurnLog = {
 type TurnReview = {
   turn_number: number;
   speaker: string;
-  logic_score: number;
+  logic_score: number | null;
   violations: { type: string; severity: string; detail: string }[];
   feedback: string;
   blocked: boolean;
