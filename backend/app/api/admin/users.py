@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.deps import require_admin, require_superadmin
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
+from app.models.debate_agent import DebateAgent
 from app.models.persona import Persona
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
@@ -40,10 +41,15 @@ async def list_users(
     search: str | None = Query(None, max_length=50),
     role: str | None = Query(None),
     age_group: str | None = Query(None),
+    sort_by: str | None = Query(None, description="정렬 기준: created_at(기본) | credit_balance | nickname"),
+    has_agents: bool | None = Query(None, description="토론 에이전트 보유 여부 필터"),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """사용자 목록 (서버사이드 검색/필터 + 통계)."""
+    """사용자 목록 (서버사이드 검색/필터 + 통계).
+
+    sort_by: created_at(기본)|credit_balance|nickname, has_agents: 에이전트 보유 여부 필터.
+    """
     # 필터 조건 빌드
     query = select(User)
     count_query = select(func.count()).select_from(User)
@@ -58,9 +64,26 @@ async def list_users(
     if age_group:
         query = query.where(User.age_group == age_group)
         count_query = count_query.where(User.age_group == age_group)
+    if has_agents is not None:
+        # 에이전트를 보유한 사용자: debate_agents 서브쿼리로 필터
+        agent_subquery = select(DebateAgent.owner_id).distinct().subquery()
+        if has_agents:
+            query = query.where(User.id.in_(select(agent_subquery.c.owner_id)))
+            count_query = count_query.where(User.id.in_(select(agent_subquery.c.owner_id)))
+        else:
+            query = query.where(User.id.not_in(select(agent_subquery.c.owner_id)))
+            count_query = count_query.where(User.id.not_in(select(agent_subquery.c.owner_id)))
+
+    # 정렬
+    if sort_by == "credit_balance":
+        order_col = User.credit_balance.desc()
+    elif sort_by == "nickname":
+        order_col = User.nickname.asc()
+    else:
+        order_col = User.created_at.desc()
 
     total = (await db.execute(count_query)).scalar()
-    result = await db.execute(query.order_by(User.created_at.desc()).offset(skip).limit(limit))
+    result = await db.execute(query.order_by(order_col).offset(skip).limit(limit))
     items = result.scalars().all()
 
     # 전체 통계 (필터 무관, 항상 전역 수치)

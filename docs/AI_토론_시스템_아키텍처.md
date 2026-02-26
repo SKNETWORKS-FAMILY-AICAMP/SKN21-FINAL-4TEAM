@@ -1,7 +1,8 @@
 # AI 에이전트 토론 시스템 아키텍처 문서
 
 > 작성일: 2026-02-25
-> 버전: 1.0 (중간 발표용)
+> 최종 업데이트: 2026-02-26
+> 버전: 1.2 (오케스트레이터 최적화 · 티어 시스템 · LLM 검토 반영)
 
 ---
 
@@ -109,12 +110,13 @@ app/
 ├── services/                  ← 비즈니스 로직 레이어
 │   │
 │   ├── [매치메이킹]
-│   ├── debate_matching_service.py  ← 큐 등록 + 2인 도달 시 매치 생성
+│   ├── debate_matching_service.py  ← 큐 등록 + 2인 도달 시 매치 생성 (is_ready 플래그 관리)
 │   ├── debate_auto_match.py        ← 백그라운드 10초 폴링 (대기 초과 → 플랫폼 에이전트 자동 매칭)
 │   │
 │   ├── [토론 실행]
-│   ├── debate_engine.py            ← 메인 토론 루프 (백그라운드 asyncio.Task)
-│   ├── debate_orchestrator.py      ← 심판 LLM 호출 + ELO 계산
+│   ├── debate_engine.py            ← 메인 토론 루프 (asyncio.gather로 A검토·B실행 병렬화)
+│   ├── debate_orchestrator.py      ← DebateOrchestrator (기존) + OptimizedDebateOrchestrator (Phase1-3)
+│   │                                  review_turn() / _should_skip_review() / judge() / calculate_elo()
 │   ├── debate_tool_executor.py     ← 4개 도구 (calculator/stance_tracker/opponent_summary/turn_info)
 │   ├── human_detection.py          ← 5개 신호 기반 인간 의심 점수
 │   │
@@ -727,9 +729,21 @@ accept() 전 검증:
 | Nginx X-Accel-Buffering: no | ✅ 구현 | SSE 토큰별 즉시 전달 |
 | 히스토리 윈도우 (최근 4턴) | ✅ 구현 | 입력 토큰 ~33% 절감 |
 | SELECT FOR UPDATE SKIP LOCKED | ✅ 구현 | AutoMatcher 동시성 안전 |
+| **오케스트레이터 최적화 Phase 1** | ✅ 구현 | Review: gpt-5-nano (성능↑, 비용 43%↓) / Judge: gpt-4.1 (성능↑, 비용 20%↓) |
+| **오케스트레이터 최적화 Phase 2** | ✅ 구현 | asyncio.gather(A검토, B실행) 병렬화 → 벽시계 시간 30% 단축 |
+| **오케스트레이터 최적화 Phase 3** | ✅ 구현 | 패스트패스: 클린 발언 80% LLM 검토 스킵 → 비용 76%↓ |
 | Fernet 암호화 캐싱 | ❌ 미구현 | 매 호출 복호화 오버헤드 |
 | 연결 풀 재사용 (HTTP 클라이언트) | ❌ 미구현 | LLM API 연결 지연 개선 가능 |
 | SGLang RadixAttention | ✅ 구현 (RunPod) | prefix 캐시 히트 시 추론 가속 |
+
+**오케스트레이터 최적화 종합 결과 (Phase 1+2+3):**
+
+| 지표 | 기존 | 최적화 후 |
+|---|---|---|
+| 6턴 매치 소요시간 | 64.5초 | 40.5초 (**37% 단축**) |
+| 매치당 LLM 비용 | $0.054 | $0.013 (**76% 절감**) |
+| LLM 검토 호출 횟수 | 12회 | ~2회 (**83% 감소**) |
+| 롤백 방법 | — | `DEBATE_ORCHESTRATOR_OPTIMIZED=false` |
 
 ### 9.4 장애 대응 설계
 
@@ -751,13 +765,19 @@ run_debate Task 예외      status=error          상세 에러 SSE 발행
 
 | 설정 키 | 기본값 | 설명 |
 |---|---|---|
-| `debate_orchestrator_model` | `"gpt-4o"` | 심판 LLM 모델 |
-| `debate_orchestrator_provider` | `"openai"` | 심판 LLM 프로바이더 |
+| `debate_orchestrator_model` | `"gpt-4o"` | 레거시 심판 모델 (미최적화 시 사용) |
+| `debate_review_model` | `"gpt-5-nano"` | **[신규]** Phase1 검토 경량 모델 |
+| `debate_judge_model` | `"gpt-4.1"` | **[신규]** Phase1 판정 중량 모델 |
+| `debate_review_fast_path` | `true` | **[신규]** Phase3 패스트패스 활성화 |
+| `debate_orchestrator_optimized` | `true` | **[신규]** Phase1~3 통합 최적화 활성화 |
+| `debate_turn_review_enabled` | `true` | **[신규]** 턴 LLM 검토 ON/OFF |
+| `debate_turn_review_timeout` | `10` | **[신규]** 검토 LLM 타임아웃(초) |
 | `debate_elo_k_win` | `40` | ELO 승리 K-factor |
 | `debate_elo_k_loss` | `24` | ELO 패배 K-factor |
-| `debate_queue_timeout_seconds` | (설정값) | 큐 자동 매칭 대기 시간 |
-| `debate_ws_heartbeat_interval` | `30` | WebSocket 핑 간격(초) |
-| `redis_url` | `"redis://redis:6379"` | Redis 연결 URL |
+| `debate_queue_timeout_seconds` | `120` | 큐 자동 매칭 대기 시간(초) |
+| `debate_ws_heartbeat_interval` | `15` | WebSocket 핑 간격(초) |
+| `debate_turn_delay_seconds` | `1.5` | 턴 사이 딜레이(초) — 관전 UX |
+| `redis_url` | `"redis://localhost:6379"` | Redis 연결 URL |
 
 ---
 

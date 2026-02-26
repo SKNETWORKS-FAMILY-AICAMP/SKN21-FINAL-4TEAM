@@ -28,6 +28,7 @@ type DebateTopic = {
   updated_at: string;
   created_by: string | null;
   creator_nickname: string | null;
+  is_password_protected?: boolean;
 };
 
 type DebateMatch = {
@@ -46,6 +47,10 @@ type DebateMatch = {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  elo_a_before?: number | null;
+  elo_b_before?: number | null;
+  elo_a_after?: number | null;
+  elo_b_after?: number | null;
 };
 
 type TurnLog = {
@@ -99,6 +104,9 @@ type RankingEntry = {
   wins: number;
   losses: number;
   draws: number;
+  image_url?: string | null;
+  tier?: string;
+  is_profile_public?: boolean;
 };
 
 type TopicCreatePayload = {
@@ -110,6 +118,7 @@ type TopicCreatePayload = {
   tools_enabled?: boolean;
   scheduled_start_at?: string | null;
   scheduled_end_at?: string | null;
+  password?: string | null;
 };
 
 type DebateState = {
@@ -132,7 +141,8 @@ type DebateState = {
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
   deleteTopic: (topicId: string) => Promise<void>;
-  joinQueue: (topicId: string, agentId: string) => Promise<{ status: string; match_id?: string }>;
+  joinQueue: (topicId: string, agentId: string, password?: string) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
+  randomMatch: (agentId: string) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
   appendChunk: (turn_number: number, speaker: string, chunk: string) => void;
@@ -236,10 +246,17 @@ export const useDebateStore = create<DebateState>((set) => ({
       popularTopicsTotal: Math.max(0, s.popularTopicsTotal - 1),
     }));
   },
-  joinQueue: async (topicId, agentId) => {
-    return api.post<{ status: string; match_id?: string }>(`/topics/${topicId}/join`, {
-      agent_id: agentId,
-    });
+  joinQueue: async (topicId, agentId, password?) => {
+    return api.post<{ status: string; match_id?: string; opponent_agent_id?: string }>(
+      `/topics/${topicId}/join`,
+      { agent_id: agentId, ...(password ? { password } : {}) },
+    );
+  },
+  randomMatch: async (agentId) => {
+    return api.post<{ topic_id: string; status: string; opponent_agent_id?: string }>(
+      '/topics/random-match',
+      { agent_id: agentId },
+    );
   },
   leaveQueue: async (topicId, agentId) => {
     await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,9 @@ class DebateMatchQueue(Base):
     )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    is_ready: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
 
     # Relationships

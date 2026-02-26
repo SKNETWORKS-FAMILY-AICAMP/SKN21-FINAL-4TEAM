@@ -16,6 +16,7 @@ type Props = {
     image_url?: string;
     name_changed_at?: string | null;
     is_system_prompt_public?: boolean;
+    is_profile_public?: boolean;
   };
   isEdit?: boolean;
 };
@@ -57,7 +58,6 @@ const MODEL_OPTIONS: Record<string, { value: string; label: string; ctx: string 
   google: [
     // ── Gemini 3 계열 (최신, Preview) ─────────────
     { value: 'gemini-3.1-pro-preview',  label: '★ Gemini 3.1 Pro Preview',  ctx: '1M' },
-    { value: 'gemini-3-pro-preview',    label: 'Gemini 3 Pro Preview',      ctx: '1M' },
     { value: 'gemini-3-flash-preview',  label: 'Gemini 3 Flash Preview',    ctx: '1M' },
     // ── Gemini 2.5 계열 (안정) ────────────────────
     { value: 'gemini-2.5-pro',          label: 'Gemini 2.5 Pro',            ctx: '1M' },
@@ -108,6 +108,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
     version_tag: '',
     image_url: initialData?.image_url || '',
     is_system_prompt_public: initialData?.is_system_prompt_public ?? false,
+    is_profile_public: initialData?.is_profile_public ?? true,
   });
 
   const isLocal = form.provider === 'local';
@@ -236,6 +237,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
         version_tag: form.version_tag || undefined,
         image_url: form.image_url || undefined,
         is_system_prompt_public: form.is_system_prompt_public,
+        is_profile_public: form.is_profile_public,
       };
 
       if (useTemplate && selectedTemplate) {
@@ -664,6 +666,29 @@ export function AgentForm({ initialData, isEdit }: Props) {
           </div>
         </>
       )}
+
+      {/* 프로필 공개 여부 */}
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-sm font-semibold text-text">프로필 공개</p>
+          <p className="text-[11px] text-text-muted">
+            랭킹에서 이 에이전트의 프로필 페이지를 공개합니다
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setForm((f) => ({ ...f, is_profile_public: !f.is_profile_public }))}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+            form.is_profile_public ? 'bg-primary' : 'bg-gray-600'
+          }`}
+        >
+          <span
+            className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              form.is_profile_public ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
 
       <div>
         <label className="text-sm font-semibold text-text block mb-1">버전 태그</label>

@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import get_password_hash
 from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
 from app.models.debate_topic import DebateTopic
@@ -47,6 +48,12 @@ class DebateTopicService:
         # 시작 시각이 미래이면 scheduled, 아니면 open
         initial_status = "scheduled" if data.scheduled_start_at and data.scheduled_start_at > now else "open"
 
+        hashed_password = None
+        is_password_protected = False
+        if data.password:
+            hashed_password = get_password_hash(data.password)
+            is_password_protected = True
+
         topic = DebateTopic(
             title=data.title,
             description=data.description,
@@ -59,6 +66,8 @@ class DebateTopicService:
             is_admin_topic=is_admin,
             status=initial_status,
             created_by=user.id,
+            is_password_protected=is_password_protected,
+            password_hash=hashed_password,
         )
         self.db.add(topic)
         await self.db.commit()
@@ -160,6 +169,7 @@ class DebateTopicService:
                 "scheduled_start_at": topic.scheduled_start_at,
                 "scheduled_end_at": topic.scheduled_end_at,
                 "is_admin_topic": topic.is_admin_topic,
+                "is_password_protected": topic.is_password_protected,
                 "tools_enabled": topic.tools_enabled,
                 "queue_count": queue_count,
                 "match_count": match_count,

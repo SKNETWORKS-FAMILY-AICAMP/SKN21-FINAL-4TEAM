@@ -6,7 +6,6 @@ import { ShieldCheck, Bot, Gem } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/userStore';
 import { AdultVerifyModal } from '@/components/auth/AdultVerifyModal';
-import { toast } from '@/stores/toastStore';
 
 type LLMModel = {
   id: string;
@@ -26,7 +25,6 @@ export function SettingsTab() {
   const [models, setModels] = useState<LLMModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get<LLMModel[]>('/models').then(setModels).catch(() => {});
@@ -34,22 +32,6 @@ export function SettingsTab() {
       setSelectedModel(user.preferredLlmModelId);
     }
   }, [user]);
-
-  const handleModelSelect = async (modelId: string) => {
-    setSaving(true);
-    try {
-      await api.put('/models/preferred', { model_id: modelId });
-      setSelectedModel(modelId);
-      if (user) {
-        setUser({ ...user, preferredLlmModelId: modelId });
-      }
-      toast.success('모델이 변경되었습니다');
-    } catch {
-      toast.error('모델 변경에 실패했습니다');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleVerified = () => {
     if (user) {
@@ -91,10 +73,10 @@ export function SettingsTab() {
       <section className="card p-6">
         <h2 className="section-title flex items-center gap-2">
           <Bot size={20} className="text-primary" />
-          LLM 모델 선택
+          LLM 모델 정보
         </h2>
         <p className="text-text-secondary text-sm mb-4">
-          대화에 사용할 AI 모델을 선택하세요. 모델에 따라 비용이 다릅니다.
+          현재 플랫폼에서 지원하는 AI 모델 목록입니다.
         </p>
         <div className="flex flex-col gap-3">
           {models
@@ -105,12 +87,11 @@ export function SettingsTab() {
               return (
                 <div
                   key={model.id}
-                  onClick={() => !locked && handleModelSelect(model.id)}
-                  className={`p-4 rounded-xl border-2 transition-colors duration-200 relative ${
+                  className={`p-4 rounded-xl border-2 transition-colors duration-200 relative cursor-default ${
                     isSelected
                       ? 'border-primary bg-primary/10'
                       : 'border-border bg-bg-surface'
-                  } ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  } ${locked ? 'opacity-50' : ''}`}
                 >
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[15px] font-semibold">{model.display_name}</span>

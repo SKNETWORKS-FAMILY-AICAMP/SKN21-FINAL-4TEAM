@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { TierBadge } from './TierBadge';
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: 'text-green-400',
@@ -17,6 +18,9 @@ type Props = {
   hp: number; // 0-100
   side: 'left' | 'right';
   isWinner?: boolean;
+  isCompleted?: boolean;
+  agentImageUrl?: string | null;
+  tier?: string;
 };
 
 function hpBarColor(hp: number, side: 'left' | 'right'): string {
@@ -25,22 +29,45 @@ function hpBarColor(hp: number, side: 'left' | 'right'): string {
   return side === 'left' ? 'bg-blue-500' : 'bg-orange-500';
 }
 
-export function FightingHPBar({ agentId, agentName, provider, hp, side, isWinner = false }: Props) {
+export function FightingHPBar({
+  agentId,
+  agentName,
+  provider,
+  hp,
+  side,
+  isWinner = false,
+  isCompleted = false,
+  agentImageUrl,
+  tier,
+}: Props) {
   const clamped = Math.max(0, Math.min(100, Math.round(hp)));
   const color = hpBarColor(clamped, side);
   const isCritical = clamped <= 20;
   const providerColor = PROVIDER_COLORS[provider] ?? 'text-gray-400';
 
+  const isLoser = isCompleted && isWinner === false;
+  const isWinnerCompleted = isCompleted && isWinner;
+
   return (
-    <div className={`flex-1 min-w-0 flex flex-col gap-1.5 ${side === 'right' ? 'items-end' : 'items-start'}`}>
+    <div
+      className={`flex-1 min-w-0 flex flex-col gap-1.5 ${side === 'right' ? 'items-end' : 'items-start'}
+        ${isLoser ? 'opacity-50 grayscale' : ''}
+        ${isWinnerCompleted ? 'ring-2 ring-yellow-400/60 rounded-xl p-1' : ''}`}
+    >
       {/* 에이전트 정보 */}
       <div className={`flex items-center gap-2 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
         <div
-          className={`w-10 h-10 rounded-xl bg-gray-800 border-2 shrink-0
-            flex items-center justify-center text-xl
-            ${side === 'left' ? 'border-blue-500/40' : 'border-orange-500/40'}`}
+          className={`w-14 h-14 rounded-xl bg-gray-800 border-2 shrink-0
+            overflow-hidden flex items-center justify-center text-2xl
+            ${isWinnerCompleted
+              ? 'border-yellow-400 ring-2 ring-yellow-400/60'
+              : side === 'left' ? 'border-blue-500/40' : 'border-orange-500/40'}`}
         >
-          🤖
+          {agentImageUrl ? (
+            <img src={agentImageUrl} alt={agentName} className="w-full h-full object-cover" />
+          ) : (
+            '🤖'
+          )}
         </div>
         <div className={`min-w-0 ${side === 'right' ? 'text-right' : ''}`}>
           <div className={`flex items-center gap-1 min-w-0 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
@@ -52,6 +79,7 @@ export function FightingHPBar({ agentId, agentName, provider, hp, side, isWinner
               {agentName}
             </Link>
             {isWinner && <span className="text-base shrink-0 leading-none">👑</span>}
+            {tier && <TierBadge tier={tier} />}
           </div>
           <p className={`text-[11px] ${providerColor}`}>{provider}</p>
         </div>

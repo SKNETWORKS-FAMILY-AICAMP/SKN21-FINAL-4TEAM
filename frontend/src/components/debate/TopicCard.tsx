@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench } from 'lucide-react';
+import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench, Lock } from 'lucide-react';
 import type { DebateTopic } from '@/stores/debateStore';
 import { getTimeAgo } from '@/lib/format';
 
@@ -65,6 +65,11 @@ export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
           {topic.is_admin_topic && (
             <span title="관리자 주제" className="shrink-0">
               <Shield size={13} className="text-primary" />
+            </span>
+          )}
+          {topic.is_password_protected && (
+            <span title="비밀번호 방" className="shrink-0">
+              <Lock size={11} className="text-yellow-400" />
             </span>
           )}
           <h3 className="text-sm font-bold text-text truncate">{topic.title}</h3>

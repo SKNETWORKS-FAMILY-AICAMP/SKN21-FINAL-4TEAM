@@ -76,6 +76,7 @@ class AgentCreate(BaseModel):
     template_id: UUID | None = None
     customizations: dict | None = None
     enable_free_text: bool = False
+    is_profile_public: bool = True
 
 
 class AgentUpdate(BaseModel):
@@ -92,6 +93,7 @@ class AgentUpdate(BaseModel):
     # 템플릿 커스터마이징 변경
     customizations: dict | None = None
     enable_free_text: bool = False
+    is_profile_public: bool | None = None
 
 
 class AgentVersionResponse(BaseModel):
@@ -127,6 +129,9 @@ class AgentResponse(BaseModel):
     name_changed_at: datetime | None = None
     template_id: UUID | None
     customizations: dict | None
+    tier: str = "Iron"
+    tier_protection_count: int = 0
+    is_profile_public: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -152,6 +157,8 @@ class AgentPublicResponse(BaseModel):
     is_connected: bool = False
     is_system_prompt_public: bool = False
     system_prompt: str | None = None  # is_system_prompt_public=True일 때만 채워짐
+    tier: str = "Iron"
+    is_profile_public: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -168,5 +175,8 @@ class AgentRankingResponse(BaseModel):
     wins: int
     losses: int
     draws: int
+    image_url: str | None = None
+    tier: str = "Iron"
+    is_profile_public: bool = True
 
     model_config = {"from_attributes": True}

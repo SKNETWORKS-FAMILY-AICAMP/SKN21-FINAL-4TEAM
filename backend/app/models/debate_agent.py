@@ -44,6 +44,9 @@ class DebateAgent(Base):
     is_system_prompt_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    tier: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Iron")
+    tier_protection_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    is_profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

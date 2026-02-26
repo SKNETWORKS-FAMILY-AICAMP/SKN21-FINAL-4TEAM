@@ -104,6 +104,16 @@ class Settings(BaseSettings):
     debate_turn_review_timeout: int = 10      # 검토 LLM 타임아웃 (초)
     debate_turn_review_model: str = ""        # 빈 문자열이면 debate_orchestrator_model 사용
 
+    # Orchestrator Optimization (Phase 1–3)
+    # 2026-02 GPT 전 모델 벤치마크 결과 반영:
+    #   Review 2위 gpt-5-nano: 성능 8.907점 (현행 gpt-4o-mini 8.602점), 비용 43% 절감
+    #   Judge  5위 gpt-4.1:    성능 8.936점 (현행 gpt-4o 8.501점), 비용 20% 절감
+    #   전체 매치 비용: $0.01329 vs 현행 $0.01739 (23.6% 절감)
+    debate_review_model: str = "gpt-5-nano"   # Phase1: 경량 검토 모델 (벤치마크 최적: 성능↑ 비용↓)
+    debate_judge_model: str = "gpt-4.1"       # Phase1: 중량 판정 모델 (벤치마크 최적: 성능↑ 비용↓)
+    debate_review_fast_path: bool = True       # Phase3: 정규식 무위반 턴은 LLM 검토 스킵
+    debate_orchestrator_optimized: bool = True # 최적화 오케스트레이터 활성화 (Phase 1-3 통합)
+
     # Rate Limiting
     rate_limit_auth: int = 20
     rate_limit_chat: int = 30

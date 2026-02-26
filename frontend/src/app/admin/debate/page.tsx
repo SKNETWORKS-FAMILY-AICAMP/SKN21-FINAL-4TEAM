@@ -16,11 +16,16 @@ import {
   Ban,
   AlertTriangle,
   Loader2,
+  Search,
+  Zap,
+  ExternalLink,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { StatCard } from '@/components/admin/StatCard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DebateDebugModal, type DebugData } from '@/components/debate/DebateDebugModal';
+import { AgentDetailModal } from '@/components/admin/AgentDetailModal';
 
 type DebateStats = {
   agents_count: number;
@@ -132,6 +137,8 @@ function toLocalDatetime(iso: string | null): string {
 }
 
 export default function AdminDebatePage() {
+  const router = useRouter();
+
   const [stats, setStats] = useState<DebateStats | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -151,12 +158,24 @@ export default function AdminDebatePage() {
   const [agentDeleteTarget, setAgentDeleteTarget] = useState<AdminDebateAgent | null>(null);
   const [agentDeleting, setAgentDeleting] = useState(false);
   const [agentActionError, setAgentActionError] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentProvider, setAgentProvider] = useState('');
 
   // 매치 로그 & 디버그 상태
   const [matches, setMatches] = useState<AdminDebateMatch[]>([]);
   const [matchesTotal, setMatchesTotal] = useState(0);
   const [debugData, setDebugData] = useState<DebugData | null>(null);
   const [debugLoadingId, setDebugLoadingId] = useState<string | null>(null);
+  const [matchSearch, setMatchSearch] = useState('');
+  const [matchStatusFilter, setMatchStatusFilter] = useState('');
+
+  // 강제 매치 모달 상태
+  const [forceMatchTopic, setForceMatchTopic] = useState<Topic | null>(null);
+  const [forceAgentA, setForceAgentA] = useState('');
+  const [forceAgentB, setForceAgentB] = useState('');
+  const [forceMatching, setForceMatching] = useState(false);
+  const [forceMatchError, setForceMatchError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -175,15 +194,23 @@ export default function AdminDebatePage() {
       .get<{ items: Topic[]; total: number }>('/topics?limit=50')
       .then((r) => setTopics(r.items))
       .catch(() => {});
+
+    const agentParams = new URLSearchParams({ limit: '100' });
+    if (agentSearch) agentParams.set('search', agentSearch);
+    if (agentProvider) agentParams.set('provider', agentProvider);
     api
-      .get<{ items: AdminDebateAgent[]; total: number }>('/admin/debate/agents?limit=100')
+      .get<{ items: AdminDebateAgent[]; total: number }>(`/admin/debate/agents?${agentParams}`)
       .then((r) => {
         setAgents(r.items);
         setAgentsTotal(r.total);
       })
       .catch(() => {});
+
+    const matchParams = new URLSearchParams({ limit: '30' });
+    if (matchSearch) matchParams.set('search', matchSearch);
+    if (matchStatusFilter) matchParams.set('status', matchStatusFilter);
     api
-      .get<{ items: AdminDebateMatch[]; total: number }>('/admin/debate/matches?limit=30')
+      .get<{ items: AdminDebateMatch[]; total: number }>(`/admin/debate/matches?${matchParams}`)
       .then((r) => {
         setMatches(r.items);
         setMatchesTotal(r.total);
@@ -206,6 +233,13 @@ export default function AdminDebatePage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [agentSearch, agentProvider, matchSearch, matchStatusFilter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -296,6 +330,27 @@ export default function AdminDebatePage() {
       setAgentActionError(msg);
     } finally {
       setAgentDeleting(false);
+    }
+  };
+
+  const handleForceMatch = async () => {
+    if (!forceMatchTopic || !forceAgentA || !forceAgentB) return;
+    setForceMatchError(null);
+    setForceMatching(true);
+    try {
+      const result = await api.post<{ match_id: string }>(
+        `/admin/debate/topics/${forceMatchTopic.id}/force-match`,
+        { agent_a_id: forceAgentA, agent_b_id: forceAgentB },
+      );
+      setForceMatchTopic(null);
+      setForceAgentA('');
+      setForceAgentB('');
+      fetchData();
+      router.push(`/debate/matches/${result.match_id}`);
+    } catch (err: unknown) {
+      setForceMatchError(err instanceof Error ? err.message : '매치 생성 실패');
+    } finally {
+      setForceMatching(false);
     }
   };
 
@@ -566,6 +621,22 @@ export default function AdminDebatePage() {
                     {/* 관리 버튼 */}
                     <td className="py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {/* 테스트 매치 생성 */}
+                        {(t.status === 'open' || t.status === 'in_progress') && (
+                          <button
+                            onClick={() => {
+                              setForceMatchError(null);
+                              setForceAgentA('');
+                              setForceAgentB('');
+                              setForceMatchTopic(t);
+                            }}
+                            title="테스트 매치 생성"
+                            className="p-1.5 rounded hover:bg-primary/10 text-text-muted
+                              hover:text-primary transition-colors"
+                          >
+                            <Zap size={15} />
+                          </button>
+                        )}
                         {/* 중지 — closed가 아닌 경우에만 표시 */}
                         {t.status !== 'closed' && (
                           <button
@@ -614,6 +685,31 @@ export default function AdminDebatePage() {
           </div>
         )}
 
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              placeholder="에이전트명/소유자 검색..."
+              value={agentSearch}
+              onChange={(e) => setAgentSearch(e.target.value)}
+              className="w-full bg-bg border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text placeholder-text-muted focus:outline-none focus:border-primary"
+            />
+          </div>
+          <select
+            value={agentProvider}
+            onChange={(e) => setAgentProvider(e.target.value)}
+            className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+          >
+            <option value="">전체 Provider</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google</option>
+            <option value="runpod">RunPod</option>
+            <option value="local">Local</option>
+          </select>
+        </div>
+
         {agents.length === 0 ? (
           <p className="text-sm text-text-muted text-center py-6">등록된 에이전트가 없습니다.</p>
         ) : (
@@ -631,7 +727,11 @@ export default function AdminDebatePage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {agents.map((agent) => (
-                  <tr key={agent.id} className="hover:bg-bg transition-colors">
+                  <tr
+                    key={agent.id}
+                    className="hover:bg-bg transition-colors cursor-pointer"
+                    onClick={() => setSelectedAgentId(agent.id)}
+                  >
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         {agent.image_url ? (
@@ -670,7 +770,8 @@ export default function AdminDebatePage() {
                     </td>
                     <td className="py-2 text-right">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setAgentActionError(null);
                           setAgentDeleteTarget(agent);
                         }}
@@ -697,6 +798,31 @@ export default function AdminDebatePage() {
             (최근 {matches.length}/{matchesTotal}건)
           </span>
         </h2>
+
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              placeholder="에이전트명 검색..."
+              value={matchSearch}
+              onChange={(e) => setMatchSearch(e.target.value)}
+              className="w-full bg-bg border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text placeholder-text-muted focus:outline-none focus:border-primary"
+            />
+          </div>
+          <select
+            value={matchStatusFilter}
+            onChange={(e) => setMatchStatusFilter(e.target.value)}
+            className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+          >
+            <option value="">전체 상태</option>
+            <option value="pending">대기</option>
+            <option value="in_progress">진행 중</option>
+            <option value="completed">완료</option>
+            <option value="error">오류</option>
+            <option value="forfeit">몰수패</option>
+          </select>
+        </div>
 
         {matches.length === 0 ? (
           <p className="text-sm text-text-muted text-center py-6">매치 기록이 없습니다.</p>
@@ -802,6 +928,101 @@ export default function AdminDebatePage() {
         )}
       </div>
 
+      {/* 테스트 매치 생성 모달 */}
+      {forceMatchTopic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-sm shadow-xl p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-text flex items-center gap-2">
+                <Zap size={16} className="text-primary" />
+                테스트 매치 생성
+              </h2>
+              <button
+                onClick={() => {
+                  setForceMatchTopic(null);
+                  setForceMatchError(null);
+                }}
+                className="text-text-muted hover:text-text transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-text-muted mb-4 line-clamp-1">
+              주제: <span className="text-text font-medium">{forceMatchTopic.title}</span>
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-text-muted mb-1">에이전트 A (파란색)</label>
+                <select
+                  value={forceAgentA}
+                  onChange={(e) => setForceAgentA(e.target.value)}
+                  className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                >
+                  <option value="">에이전트 선택...</option>
+                  {agents
+                    .filter((a) => a.id !== forceAgentB)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.provider} · ELO {a.elo_rating})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-text-muted mb-1">에이전트 B (주황색)</label>
+                <select
+                  value={forceAgentB}
+                  onChange={(e) => setForceAgentB(e.target.value)}
+                  className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                >
+                  <option value="">에이전트 선택...</option>
+                  {agents
+                    .filter((a) => a.id !== forceAgentA)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.provider} · ELO {a.elo_rating})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            {forceMatchError && (
+              <p className="text-xs text-red-400 mt-3">{forceMatchError}</p>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setForceMatchTopic(null);
+                  setForceMatchError(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-text-muted hover:text-text transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleForceMatch}
+                disabled={!forceAgentA || !forceAgentB || forceMatching}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold
+                  hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+              >
+                {forceMatching ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Zap size={14} />
+                )}
+                {forceMatching ? '매칭 중...' : '매치 시작'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 토픽 삭제 확인 다이얼로그 */}
       <ConfirmDialog
         isOpen={deleteTarget !== null}
@@ -842,6 +1063,12 @@ export default function AdminDebatePage() {
       {debugData && (
         <DebateDebugModal data={debugData} onClose={() => setDebugData(null)} />
       )}
+
+      {/* 에이전트 상세 모달 */}
+      <AgentDetailModal
+        agentId={selectedAgentId}
+        onClose={() => setSelectedAgentId(null)}
+      />
     </div>
   );
 }

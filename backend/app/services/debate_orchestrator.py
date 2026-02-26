@@ -73,6 +73,40 @@ REVIEW_SYSTEM_PROMPT = (
 )
 
 
+# 패스트패스 스킵 기준: 한국어 텍스트 내 복잡도 임계값
+_FAST_PATH_MIN_LEN = 10   # 최소 길이 미달 → 비어있거나 회피성 답변
+_FAST_PATH_MAX_LEN = 800  # 초장문 발언은 허위 주장 리스크 있어 검토 필요
+
+
+def _should_skip_review(claim: str, evidence: str | None) -> bool:
+    """정규식 위반 없는 짧은 한국어 발언은 LLM 검토를 스킵해 비용·지연 절약.
+
+    True 반환 → LLM 검토 스킵 (빠른 경로)
+    False 반환 → LLM 검토 실행 (정밀 경로)
+    """
+    from app.services.debate_engine import detect_ad_hominem, detect_prompt_injection
+
+    text = f"{claim} {evidence or ''}"
+    # 기존 regex 패턴이 이미 위반 감지 → LLM도 검토
+    if detect_prompt_injection(text):
+        return False
+    if detect_ad_hominem(text):
+        return False
+    # 비어있거나 너무 짧은 발언 (에러/타임아웃 응답)
+    if len(claim.strip()) < _FAST_PATH_MIN_LEN:
+        return False
+    # 초장문 발언 — 허위 주장 삽입 리스크
+    if len(claim) > _FAST_PATH_MAX_LEN:
+        return False
+    # 영어 키워드가 많으면 프롬프트 인젝션 가능성 (한국어 토론에서 영어 비율 높음)
+    words = text.split()
+    if words:
+        ascii_ratio = sum(1 for w in words if w.isascii() and len(w) > 3) / len(words)
+        if ascii_ratio > 0.4:
+            return False
+    return True
+
+
 class DebateOrchestrator:
     def __init__(self):
         self.client = InferenceClient()
@@ -107,7 +141,14 @@ class DebateOrchestrator:
             {"role": "user", "content": user_content},
         ]
 
+        # API 키 없으면 검토 불가 — 즉시 폴백
+        if not settings.openai_api_key:
+            logger.debug("review_turn skipped: openai_api_key not configured")
+            return self._review_fallback()
+
         raw_content = ""
+        input_tokens = 0
+        output_tokens = 0
         try:
             result = await asyncio.wait_for(
                 self.client._call_openai_byok(
@@ -124,9 +165,10 @@ class DebateOrchestrator:
             output_tokens = result.get("output_tokens", 0)
             content = raw_content.strip()
             # 마크다운 코드블록 제거
-            if content.startswith("```"):
-                content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.MULTILINE)
-                content = re.sub(r"\s*```\s*$", "", content.strip())
+            if "```" in content:
+                content = re.sub(r"```(?:json)?\s*", "", content)
+                content = re.sub(r"```", "", content).strip()
+            # JSON 객체 추출 (앞뒤 텍스트 제거)
             json_match = re.search(r"\{[\s\S]*\}", content)
             if json_match:
                 content = json_match.group(0)
@@ -308,6 +350,217 @@ class DebateOrchestrator:
                 lines.append(f"벌점: -{turn.penalty_total} ({json.dumps(turn.penalties, ensure_ascii=False)})")
             lines.append("")
         return "\n".join(lines)
+
+
+class OptimizedDebateOrchestrator(DebateOrchestrator):
+    """Phase 1-3 최적화 오케스트레이터.
+
+    Phase 1: 경량 review 모델(gpt-4o-mini)과 중량 judge 모델(gpt-4o) 분리
+    Phase 2: A검토 + B실행을 asyncio.gather()로 병렬 수행
+    Phase 3: 정규식 무위반 한국어 발언은 LLM 검토 스킵 (패스트패스)
+    """
+
+    async def review_turn_fast(
+        self,
+        topic: str,
+        speaker: str,
+        turn_number: int,
+        claim: str,
+        evidence: str | None,
+        action: str,
+        opponent_last_claim: str | None = None,
+    ) -> dict:
+        """Phase 1+3 통합 검토.
+
+        - Phase 3 패스트패스: 정규식 무위반 발언은 LLM 호출 없이 즉시 폴백 반환
+        - Phase 1 모델 분리: 검토는 debate_review_model (gpt-4o-mini) 사용
+        """
+        # Phase 3: 패스트패스 스킵
+        if settings.debate_review_fast_path and _should_skip_review(claim, evidence):
+            return self._fast_path_result(claim)
+
+        # Phase 1: 경량 검토 모델로 검토 실행
+        review_model = settings.debate_review_model or settings.debate_orchestrator_model
+        user_content = (
+            f"토론 주제: {topic}\n"
+            f"발언자: {speaker} | 턴: {turn_number} | 액션: {action}\n"
+            f"주장: {claim}\n"
+        )
+        if evidence:
+            user_content += f"근거: {evidence}\n"
+        if opponent_last_claim:
+            user_content += f"직전 상대 발언: {opponent_last_claim}\n"
+
+        messages = [
+            {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+
+        if not settings.openai_api_key:
+            logger.debug("review_turn_fast skipped: openai_api_key not configured")
+            return self._review_fallback()
+
+        raw_content = ""
+        input_tokens = 0
+        output_tokens = 0
+        try:
+            result = await asyncio.wait_for(
+                self.client._call_openai_byok(
+                    model_id=review_model,
+                    api_key=settings.openai_api_key,
+                    messages=messages,
+                    max_tokens=256,
+                    temperature=0.1,
+                ),
+                timeout=settings.debate_turn_review_timeout,
+            )
+            raw_content = result.get("content", "")
+            input_tokens = result.get("input_tokens", 0)
+            output_tokens = result.get("output_tokens", 0)
+            content = raw_content.strip()
+            if "```" in content:
+                content = re.sub(r"```(?:json)?\s*", "", content)
+                content = re.sub(r"```", "", content).strip()
+            json_match = re.search(r"\{[\s\S]*\}", content)
+            if json_match:
+                content = json_match.group(0)
+            review = json.loads(content)
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.warning("review_turn_fast timeout for turn %d speaker=%s", turn_number, speaker)
+            return self._review_fallback()
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.warning("review_turn_fast parse error: %s | raw: %.300s", exc, raw_content)
+            return self._review_fallback()
+        except Exception as exc:
+            logger.error("review_turn_fast unexpected error: %s", exc)
+            return self._review_fallback()
+
+        penalties: dict[str, int] = {}
+        for v in review.get("violations", []):
+            v_type = v.get("type", "")
+            if v_type in LLM_VIOLATION_PENALTIES:
+                penalties[v_type] = LLM_VIOLATION_PENALTIES[v_type]
+        penalty_total = sum(penalties.values())
+        block = bool(review.get("block", False))
+        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if block else None
+
+        return {
+            "logic_score": int(review.get("logic_score", 5)),
+            "violations": review.get("violations", []),
+            "feedback": review.get("feedback", ""),
+            "block": block,
+            "penalties": penalties,
+            "penalty_total": penalty_total,
+            "blocked_claim": blocked_claim,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "skipped": False,
+        }
+
+    def _fast_path_result(self, claim: str) -> dict:
+        """패스트패스: LLM 호출 없이 안전한 발언으로 즉시 통과."""
+        return {
+            "logic_score": 7,  # 패스트패스는 기본 7점 (위반 없음)
+            "violations": [],
+            "feedback": "패스트패스: 규칙 위반 없음",
+            "block": False,
+            "penalties": {},
+            "penalty_total": 0,
+            "blocked_claim": None,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "skipped": True,   # 벤치마크 추적용 플래그
+        }
+
+    async def judge(
+        self,
+        match,
+        turns: list,
+        topic,
+        agent_a_name: str = "에이전트 A",
+        agent_b_name: str = "에이전트 B",
+    ) -> dict:
+        """Phase 1: 중량 judge 모델(debate_judge_model)로 최종 판정."""
+        # 부모 judge()를 그대로 호출하되, debate_judge_model을 임시로 반영
+        # debate_orchestrator_model을 debate_judge_model로 교체하여 판정 실행
+        original_model = settings.debate_orchestrator_model
+        # pydantic-settings는 직접 수정이 불가해 client 호출을 직접 제어
+        judge_model = settings.debate_judge_model or original_model
+
+        # 50% 스왑으로 편향 제거 (부모와 동일)
+        swap = random.random() < 0.5
+        debate_log = self._format_debate_log(
+            turns, topic, agent_a_name, agent_b_name, swap_sides=swap
+        )
+        messages = [
+            {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+            {"role": "user", "content": debate_log},
+        ]
+
+        judge_input_tokens = 0
+        judge_output_tokens = 0
+        raw_content = ""
+        try:
+            result = await self.client._call_openai_byok(
+                model_id=judge_model,
+                api_key=settings.openai_api_key,
+                messages=messages,
+                max_tokens=1024,
+                temperature=0.3,
+            )
+            judge_input_tokens = result.get("input_tokens", 0)
+            judge_output_tokens = result.get("output_tokens", 0)
+            raw_content = result.get("content", "")
+            content = raw_content.strip()
+            if content.startswith("```"):
+                content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.MULTILINE)
+                content = re.sub(r"\s*```\s*$", "", content.strip())
+            json_match = re.search(r"\{[\s\S]*\}", content)
+            if json_match:
+                content = json_match.group(0)
+            scorecard = json.loads(content)
+            if not isinstance(scorecard.get("agent_a"), dict) or not isinstance(scorecard.get("agent_b"), dict):
+                raise ValueError("Invalid scorecard structure")
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            logger.error("OptimizedOrchestrator judge parse error: %s | raw: %.500s", exc, raw_content)
+            scorecard = {
+                "agent_a": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
+                "agent_b": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
+                "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
+            }
+            swap = False
+
+        if swap and isinstance(scorecard.get("agent_a"), dict) and isinstance(scorecard.get("agent_b"), dict):
+            scorecard["agent_a"], scorecard["agent_b"] = scorecard["agent_b"], scorecard["agent_a"]
+            reasoning = scorecard.get("reasoning", "")
+            if reasoning and agent_a_name and agent_b_name and agent_a_name != agent_b_name:
+                _pa = "\x00__AGENT_A__\x00"
+                _pb = "\x00__AGENT_B__\x00"
+                reasoning = (
+                    reasoning.replace(agent_a_name, _pa).replace(agent_b_name, _pb)
+                    .replace(_pa, agent_b_name).replace(_pb, agent_a_name)
+                )
+                scorecard["reasoning"] = reasoning
+
+        score_a = sum(scorecard.get("agent_a", {}).values()) if isinstance(scorecard.get("agent_a"), dict) else 0
+        score_b = sum(scorecard.get("agent_b", {}).values()) if isinstance(scorecard.get("agent_b"), dict) else 0
+        penalty_a = match.penalty_a
+        penalty_b = match.penalty_b
+        final_a = max(0, score_a - penalty_a)
+        final_b = max(0, score_b - penalty_b)
+        diff = abs(final_a - final_b)
+        winner_id = (match.agent_a_id if final_a > final_b else match.agent_b_id) if diff >= 5 else None
+
+        return {
+            "scorecard": scorecard,
+            "score_a": final_a,
+            "score_b": final_b,
+            "penalty_a": penalty_a,
+            "penalty_b": penalty_b,
+            "winner_id": winner_id,
+            "input_tokens": judge_input_tokens,
+            "output_tokens": judge_output_tokens,
+        }
 
 
 def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0) -> tuple[int, int]:

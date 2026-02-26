@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import verify_password
 from app.models.debate_agent import DebateAgent
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
@@ -20,7 +21,7 @@ class DebateMatchingService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def join_queue(self, user: User, topic_id: str, agent_id: str) -> dict:
+    async def join_queue(self, user: User, topic_id: str, agent_id: str, password: str | None = None) -> dict:
         """큐 등록. 상대가 이미 있으면 양쪽에 opponent_joined 이벤트 발행."""
         # 토픽 검증
         topic = await self.db.execute(
@@ -31,6 +32,9 @@ class DebateMatchingService:
             raise ValueError("Topic not found")
         if topic.status != "open":
             raise ValueError("Topic is not open for matches")
+
+        if topic.is_password_protected and (not password or not verify_password(password, topic.password_hash)):
+            raise ValueError("비밀번호가 올바르지 않습니다")
 
         # 에이전트 소유권 검증
         agent = await self.db.execute(

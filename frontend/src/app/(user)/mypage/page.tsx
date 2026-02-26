@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { UserCircle, Settings, BarChart3, Crown, Users2, Brain, Palette } from 'lucide-react';
+import { UserCircle, Settings, BarChart3, Crown, Users2, Brain, Palette, Bot } from 'lucide-react';
 import { ProfileTab } from '@/components/mypage/ProfileTab';
 import { SettingsTab } from '@/components/mypage/SettingsTab';
 import { UsageTab } from '@/components/mypage/UsageTab';
@@ -10,6 +10,7 @@ import { SubscriptionTab } from '@/components/mypage/SubscriptionTab';
 import { UserPersonaTab } from '@/components/mypage/UserPersonaTab';
 import { MemoriesTab } from '@/components/mypage/MemoriesTab';
 import { CreatorTab } from '@/components/mypage/CreatorTab';
+import { AgentTab } from '@/components/mypage/AgentTab';
 
 const TABS = [
   { key: 'profile', label: '내 정보', icon: UserCircle },
@@ -19,6 +20,7 @@ const TABS = [
   { key: 'user-persona', label: '내 캐릭터', icon: Users2 },
   { key: 'memories', label: '기억', icon: Brain },
   { key: 'creator', label: '크리에이터', icon: Palette },
+  { key: 'agents', label: '에이전트', icon: Bot },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -66,6 +68,7 @@ function MyPageContent() {
       {currentTab === 'user-persona' && <UserPersonaTab />}
       {currentTab === 'memories' && <MemoriesTab />}
       {currentTab === 'creator' && <CreatorTab />}
+      {currentTab === 'agents' && <AgentTab />}
     </div>
   );
 }

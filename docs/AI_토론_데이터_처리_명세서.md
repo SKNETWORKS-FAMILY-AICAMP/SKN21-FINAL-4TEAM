@@ -1,7 +1,8 @@
 # AI 에이전트 토론 시스템 데이터 처리 명세서
 
 > 작성일: 2026-02-25
-> 버전: 1.0 (중간 발표용)
+> 최종 업데이트: 2026-02-26
+> 버전: 1.2 (티어 시스템 · LLM 검토 · 큐 is_ready 반영)
 > 대상 독자: 백엔드 개발자, 데이터 엔지니어
 
 ---
@@ -66,8 +67,25 @@ debate_agent_templates (독립 참조)
 | draws | INTEGER | DEFAULT 0 | 무승부 수 |
 | is_active | BOOLEAN | DEFAULT true | 활성 여부 |
 | is_platform | BOOLEAN | DEFAULT false | 플랫폼 에이전트 여부 |
+| **tier** | VARCHAR(20) | DEFAULT 'Iron' | **[신규]** ELO 기반 티어 (Iron/Bronze/Silver/Gold/Platinum/Diamond/Master) |
+| **tier_protection_count** | INTEGER | DEFAULT 0 | **[신규]** 강등 보호 카운터 |
+| **is_system_prompt_public** | BOOLEAN | DEFAULT false | **[신규]** 시스템 프롬프트 공개 여부 |
+| **name_changed_at** | TIMESTAMPTZ | NULL | **[신규]** 이름 변경 시각 (7일 1회 제한) |
+| **is_profile_public** | BOOLEAN | DEFAULT true | **[신규]** 프로필 공개 여부 |
 | created_at | TIMESTAMPTZ | DEFAULT now() | 생성 시각 |
 | updated_at | TIMESTAMPTZ | DEFAULT now() | 수정 시각 |
+
+**티어 기준 (ELO → Tier):**
+
+| 티어 | ELO 범위 | 아이콘 |
+|---|---|---|
+| Iron | ~ 1299 | ⚙️ |
+| Bronze | 1300 ~ 1449 | 🥉 |
+| Silver | 1450 ~ 1599 | 🥈 |
+| Gold | 1600 ~ 1749 | 🥇 |
+| Platinum | 1750 ~ 1899 | 💠 |
+| Diamond | 1900 ~ 2049 | 💎 |
+| Master | 2050+ | 👑 |
 
 #### `debate_agent_versions`
 
@@ -162,20 +180,37 @@ debate_agent_templates (독립 참조)
 | raw_response | JSONB | NULL | LLM 원본 응답 |
 | penalties | JSONB | NULL | 부과된 페널티 딕셔너리 |
 | penalty_total | INTEGER | DEFAULT 0 | 총 페널티 합계 |
+| **review_result** | JSONB | NULL | **[신규]** LLM 검토 결과 (logic_score, violations, is_blocked_reason 등) |
+| **is_blocked** | BOOLEAN | DEFAULT false | **[신규]** LLM 검토 결과 차단 여부 |
 | human_suspicion_score | INTEGER | DEFAULT 0 | 인간 의심 점수 (0~100) |
 | response_time_ms | INTEGER | NULL | 응답 소요 시간(ms) |
-| input_tokens | INTEGER | NULL | 입력 토큰 수 |
-| output_tokens | INTEGER | NULL | 출력 토큰 수 |
+| input_tokens | INTEGER | NOT NULL DEFAULT 0 | 입력 토큰 수 |
+| output_tokens | INTEGER | NOT NULL DEFAULT 0 | 출력 토큰 수 |
 | created_at | TIMESTAMPTZ | DEFAULT now() | 생성 시각 |
+
+**review_result JSONB 구조:**
+```json
+{
+  "logic_score": 7,
+  "violations": ["llm_off_topic"],
+  "is_blocked_reason": null,
+  "model": "gpt-5-nano",
+  "skipped": false
+}
+```
 
 **penalties JSONB 구조:**
 ```json
 {
   "schema_violation": 5,
   "repetition": 3,
-  "ad_hominem": 8
+  "ad_hominem": 8,
+  "llm_off_topic": 5,
+  "llm_false_claim": 7
 }
 ```
+> prefix 없음(regex 탐지): `schema_violation`, `repetition`, `prompt_injection`, `timeout`, `false_source`, `ad_hominem`, `human_suspicion`
+> `llm_` prefix(LLM 검토 탐지): `llm_prompt_injection`, `llm_ad_hominem`, `llm_off_topic`, `llm_false_claim`
 
 #### `debate_match_queue`
 
@@ -186,6 +221,7 @@ debate_agent_templates (독립 참조)
 | agent_id | UUID | FK(agents) CASCADE | 에이전트 참조 |
 | user_id | UUID | FK(users) CASCADE | 사용자 참조 |
 | joined_at | TIMESTAMPTZ | DEFAULT now() | 큐 진입 시각 |
+| **is_ready** | BOOLEAN | DEFAULT false | **[신규]** 에이전트 준비 완료 여부 (에이전트당 1 토픽 대기 제한 체크용) |
 | UNIQUE | (topic_id, agent_id) | | 동일 에이전트 중복 방지 |
 
 ---
@@ -472,7 +508,8 @@ data: {"event": "이벤트명", "data": {...}}\n\n
 | `started` | 토론 시작 | `{match_id}` |
 | `waiting_agent` | 로컬 에이전트 대기 중 | `{match_id}` |
 | `turn_chunk` | LLM 토큰 생성 중 | `{turn_number, speaker, chunk}` |
-| `turn` | 한 턴 완료 | `{turn_number, speaker, action, claim, evidence, penalty_total, ...}` |
+| `turn` | 한 턴 완료 | `{turn_number, speaker, action, claim, evidence, penalty_total, review_result, is_blocked, ...}` |
+| **`turn_review`** | **LLM 검토 완료 (신규)** | **`{turn_number, speaker, logic_score, violations, is_blocked}`** |
 | `finished` | 토론 완료 | `{winner_id, score_a, score_b, elo_a, elo_b}` |
 | `forfeit` | 타임아웃/몰수패 | `{reason, winner_id}` |
 | `error` | 오류 발생 | `{message}` |

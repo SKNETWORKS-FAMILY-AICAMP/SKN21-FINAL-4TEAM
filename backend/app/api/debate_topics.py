@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func as sqlfunc
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,7 @@ from app.models.debate_agent import DebateAgent
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_match_queue import DebateMatchQueue
+from app.models.debate_topic import DebateTopic
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse, TopicUpdatePayload
@@ -200,6 +202,61 @@ async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> N
         logger.exception("카운트다운 자동 매치 오류 (topic=%s)", topic_id)
 
 
+@router.post("/random-match")
+async def random_match(
+    data: JoinQueueRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """랜덤 매칭. 비밀번호 없는 open 토픽 중 대기자 있는 토픽을 우선 선택."""
+    # 에이전트 소유권 검증
+    agent_result = await db.execute(
+        select(DebateAgent).where(DebateAgent.id == data.agent_id, DebateAgent.owner_id == user.id)
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+
+    # 다른 사용자의 대기자가 있는 비밀번호 없는 open 토픽 우선
+    queue_subq = (
+        select(DebateMatchQueue.topic_id)
+        .where(DebateMatchQueue.user_id != user.id)
+        .group_by(DebateMatchQueue.topic_id)
+        .subquery()
+    )
+    topic_result = await db.execute(
+        select(DebateTopic)
+        .join(queue_subq, DebateTopic.id == queue_subq.c.topic_id)
+        .where(DebateTopic.status == "open", DebateTopic.is_password_protected == False)  # noqa: E712
+        .order_by(sqlfunc.random())
+        .limit(1)
+    )
+    topic = topic_result.scalar_one_or_none()
+
+    if topic is None:
+        # 대기자 없으면 아무 open 비밀번호없는 토픽에 합류
+        topic_result = await db.execute(
+            select(DebateTopic)
+            .where(DebateTopic.status == "open", DebateTopic.is_password_protected == False)  # noqa: E712
+            .order_by(sqlfunc.random())
+            .limit(1)
+        )
+        topic = topic_result.scalar_one_or_none()
+
+    if topic is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="현재 참여 가능한 토픽이 없습니다",
+        )
+
+    service = DebateMatchingService(db)
+    try:
+        result = await service.join_queue(user, str(topic.id), str(data.agent_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {"topic_id": str(topic.id), **result}
+
+
 @router.post("/{topic_id}/join")
 async def join_topic_queue(
     topic_id: str,
@@ -210,7 +267,7 @@ async def join_topic_queue(
     """토픽 큐 참가. 상대가 있으면 opponent_joined 이벤트 발행."""
     service = DebateMatchingService(db)
     try:
-        result = await service.join_queue(user, topic_id, data.agent_id)
+        result = await service.join_queue(user, topic_id, str(data.agent_id), data.password)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return result
@@ -407,6 +464,7 @@ def _topic_response(topic, queue_count: int = 0, match_count: int = 0) -> dict:
         "scheduled_start_at": topic.scheduled_start_at,
         "scheduled_end_at": topic.scheduled_end_at,
         "is_admin_topic": topic.is_admin_topic,
+        "is_password_protected": getattr(topic, "is_password_protected", False),
         "tools_enabled": topic.tools_enabled,
         "queue_count": queue_count,
         "match_count": match_count,

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class JoinQueueRequest(BaseModel):
     agent_id: UUID = Field(...)
+    password: str | None = None
 
 
 class AgentSummary(BaseModel):
@@ -65,6 +66,10 @@ class MatchResponse(BaseModel):
     turn_count: int = 0
     started_at: datetime | None
     finished_at: datetime | None
+    elo_a_before: int | None = None
+    elo_b_before: int | None = None
+    elo_a_after: int | None = None
+    elo_b_after: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

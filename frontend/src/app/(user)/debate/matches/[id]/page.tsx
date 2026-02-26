@@ -67,6 +67,15 @@ export default function MatchPage() {
   }
 
   const isCompleted = currentMatch.status === 'completed';
+  const isForfeit = currentMatch.status === 'forfeit';
+
+  // ELO 필드 접근을 위한 타입 확장
+  const match = currentMatch as typeof currentMatch & {
+    elo_a_before?: number | null;
+    elo_b_before?: number | null;
+    elo_a_after?: number | null;
+    elo_b_after?: number | null;
+  };
 
   // HP 계산: 진행 중엔 패널티+턴 진행도 기반, 완료 시엔 최종 점수 사용
   const penaltiesA = turns
@@ -84,12 +93,73 @@ export default function MatchPage() {
     ? currentMatch.score_b
     : Math.max(20, 100 - attrition - penaltiesB);
 
-  const isWinnerA = isCompleted && currentMatch.winner_id === currentMatch.agent_a.id;
-  const isWinnerB = isCompleted && currentMatch.winner_id === currentMatch.agent_b.id;
+  const isWinnerA = (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_a.id;
+  const isWinnerB = (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_b.id;
+
+  // 종료 배너 결정
+  const showBanner = isCompleted || isForfeit;
+  let bannerText = '';
+  let bannerClass = '';
+  if (showBanner) {
+    if (isForfeit) {
+      const winnerName = isWinnerA ? currentMatch.agent_a.name : currentMatch.agent_b.name;
+      bannerText = `토론 종료 — ${winnerName} 부전승`;
+      bannerClass = 'bg-red-500/20 border-b border-red-500/30';
+    } else if (currentMatch.winner_id === currentMatch.agent_a.id) {
+      bannerText = `토론 종료 — ${currentMatch.agent_a.name} 승리!`;
+      bannerClass = 'bg-yellow-500/20 border-b border-yellow-500/30';
+    } else if (currentMatch.winner_id === currentMatch.agent_b.id) {
+      bannerText = `토론 종료 — ${currentMatch.agent_b.name} 승리!`;
+      bannerClass = 'bg-yellow-500/20 border-b border-yellow-500/30';
+    } else {
+      bannerText = '토론 종료 — 무승부';
+      bannerClass = 'bg-gray-500/20 border-b border-gray-500/30';
+    }
+  }
+
+  // ELO 변동 계산
+  const eloDeltaA =
+    match.elo_a_after != null && match.elo_a_before != null
+      ? match.elo_a_after - match.elo_a_before
+      : null;
+  const eloDeltaB =
+    match.elo_b_after != null && match.elo_b_before != null
+      ? match.elo_b_after - match.elo_b_before
+      : null;
 
   return (
     // -m-4 md:-m-6: main의 padding을 상쇄해 sticky 헤더가 화면 최상단에 정확히 고정되도록 함
     <div className="-m-4 md:-m-6">
+      {/* 종료 배너 — 최상단 고정 (배틀 헤더보다 위) */}
+      {showBanner && (
+        <div className={`sticky top-0 z-40 px-4 py-2 text-center text-sm font-semibold ${bannerClass}`}>
+          <span>{bannerText}</span>
+          {match.elo_a_after != null && (
+            <span className="ml-4 inline-flex items-center gap-3 text-xs font-mono">
+              <span>
+                {currentMatch.agent_a.name}{' '}
+                {eloDeltaA != null && (
+                  <span className={eloDeltaA >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    {eloDeltaA >= 0 ? '+' : ''}
+                    {eloDeltaA}
+                  </span>
+                )}
+              </span>
+              <span className="text-gray-500">|</span>
+              <span>
+                {currentMatch.agent_b.name}{' '}
+                {eloDeltaB != null && (
+                  <span className={eloDeltaB >= 0 ? 'text-green-400' : 'text-red-400'}>
+                    {eloDeltaB >= 0 ? '+' : ''}
+                    {eloDeltaB}
+                  </span>
+                )}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* 배틀 헤더 — 항상 화면 상단 고정 (sticky top-0) */}
       <div
         className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900
@@ -105,6 +175,8 @@ export default function MatchPage() {
               hp={hpA}
               side="left"
               isWinner={isWinnerA}
+              isCompleted={isCompleted || isForfeit}
+              agentImageUrl={currentMatch.agent_a.image_url}
             />
 
             {/* 중앙: 아이콘 + 상태 + 점수 */}
@@ -133,6 +205,8 @@ export default function MatchPage() {
               hp={hpB}
               side="right"
               isWinner={isWinnerB}
+              isCompleted={isCompleted || isForfeit}
+              agentImageUrl={currentMatch.agent_b.image_url}
             />
           </div>
 

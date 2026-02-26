@@ -33,6 +33,8 @@ class DebateTopic(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    is_password_protected: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])

@@ -9,6 +9,7 @@ type Agent = {
   wins: number;
   losses: number;
   draws: number;
+  image_url?: string | null;
 };
 
 type Props = {
@@ -58,10 +59,14 @@ export function AgentProfilePanel({ agent, side, isRevealing = false }: Props) {
       {/* 아바타 */}
       <div
         className={`w-full aspect-square max-w-[160px] rounded-2xl border-2 border-gray-600
-          ring-2 ${ringColor} flex items-center justify-center bg-gray-800 text-6xl
+          ring-2 ${ringColor} overflow-hidden flex items-center justify-center bg-gray-800 text-6xl
           transition-all duration-700`}
       >
-        🤖
+        {agent.image_url ? (
+          <img src={agent.image_url} alt={agent.name} className="w-full h-full object-cover" />
+        ) : (
+          '🤖'
+        )}
       </div>
 
       {/* 에이전트 정보 */}

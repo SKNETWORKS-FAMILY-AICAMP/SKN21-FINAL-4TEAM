@@ -15,6 +15,24 @@ from app.services.debate_template_service import DebateTemplateService
 logger = logging.getLogger(__name__)
 
 
+def get_tier_from_elo(elo: int) -> str:
+    """ELO 기반 티어 계산."""
+    if elo >= 2050:
+        return "Master"
+    elif elo >= 1900:
+        return "Diamond"
+    elif elo >= 1750:
+        return "Platinum"
+    elif elo >= 1600:
+        return "Gold"
+    elif elo >= 1450:
+        return "Silver"
+    elif elo >= 1300:
+        return "Bronze"
+    else:
+        return "Iron"
+
+
 class DebateAgentService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -123,6 +141,8 @@ class DebateAgentService:
             agent.image_url = data.image_url
         if data.is_system_prompt_public is not None:
             agent.is_system_prompt_public = data.is_system_prompt_public
+        if data.is_profile_public is not None:
+            agent.is_profile_public = data.is_profile_public
 
         # 새 버전 생성이 필요한지 판단
         new_prompt: str | None = None
@@ -193,16 +213,27 @@ class DebateAgentService:
         )
         return result.scalar_one_or_none()
 
-    async def get_ranking(self, limit: int = 50, offset: int = 0) -> list[dict]:
-        """ELO 기준 글로벌 랭킹 조회."""
-        result = await self.db.execute(
+    async def get_ranking(
+        self, limit: int = 50, offset: int = 0, search: str | None = None, tier: str | None = None
+    ) -> list[dict]:
+        """ELO 기준 글로벌 랭킹 조회. search: 에이전트명/소유자명, tier: 티어 필터."""
+        query = (
             select(DebateAgent, User.nickname)
             .join(User, DebateAgent.owner_id == User.id)
             .where(DebateAgent.is_active == True)  # noqa: E712
-            .order_by(DebateAgent.elo_rating.desc())
-            .offset(offset)
-            .limit(limit)
         )
+
+        if search:
+            like = f"%{search}%"
+            query = query.where(
+                (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
+            )
+
+        if tier:
+            query = query.where(DebateAgent.tier == tier)
+
+        query = query.order_by(DebateAgent.elo_rating.desc()).offset(offset).limit(limit)
+        result = await self.db.execute(query)
         rows = result.all()
         return [
             {
@@ -215,9 +246,44 @@ class DebateAgentService:
                 "wins": agent.wins,
                 "losses": agent.losses,
                 "draws": agent.draws,
+                "image_url": agent.image_url,
+                "tier": agent.tier,
+                "is_profile_public": agent.is_profile_public,
             }
             for agent, nickname in rows
         ]
+
+    async def get_my_ranking(self, user: User) -> list[dict]:
+        """내 에이전트들의 랭킹 순위 반환."""
+        from sqlalchemy import func as sqlfunc
+        # 전체 에이전트 중 내 에이전트들의 순위 계산
+        # rank = 내 ELO보다 높은 에이전트 수 + 1
+        result = await self.db.execute(
+            select(DebateAgent).where(
+                DebateAgent.owner_id == user.id,
+                DebateAgent.is_active == True,  # noqa: E712
+            ).order_by(DebateAgent.elo_rating.desc())
+        )
+        my_agents = list(result.scalars().all())
+
+        rankings = []
+        for agent in my_agents:
+            count_result = await self.db.execute(
+                select(sqlfunc.count(DebateAgent.id)).where(
+                    DebateAgent.is_active == True,  # noqa: E712
+                    DebateAgent.elo_rating > agent.elo_rating,
+                )
+            )
+            rank = (count_result.scalar() or 0) + 1
+            rankings.append({
+                "id": str(agent.id),
+                "name": agent.name,
+                "elo_rating": agent.elo_rating,
+                "tier": agent.tier,
+                "image_url": agent.image_url,
+                "rank": rank,
+            })
+        return rankings
 
     async def delete_agent(self, agent_id: str, user: User) -> None:
         """에이전트 삭제. 소유자만 삭제 가능. 진행 중인 매치가 있으면 삭제 불가."""
@@ -250,14 +316,42 @@ class DebateAgentService:
     async def update_elo(
         self, agent_id: str, new_elo: int, result_type: str, version_id: str | None = None
     ) -> None:
-        """ELO 및 전적 갱신. result_type: 'win' | 'loss' | 'draw'."""
+        """ELO 및 전적 갱신 + 티어 계산 및 강등 보호. result_type: 'win' | 'loss' | 'draw'."""
+        # 현재 에이전트 상태 조회 (티어 보호 로직에 필요)
+        result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
+        agent = result.scalar_one_or_none()
+        if agent is None:
+            return
+
+        new_tier = get_tier_from_elo(new_elo)
+        old_tier = agent.tier
+
         updates: dict = {"elo_rating": new_elo}
+
         if result_type == "win":
             updates["wins"] = DebateAgent.wins + 1
         elif result_type == "loss":
             updates["losses"] = DebateAgent.losses + 1
         else:
             updates["draws"] = DebateAgent.draws + 1
+
+        # 티어 변경 로직
+        tier_order = ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master"]
+        old_idx = tier_order.index(old_tier) if old_tier in tier_order else 0
+        new_idx = tier_order.index(new_tier) if new_tier in tier_order else 0
+
+        if new_idx > old_idx:
+            # 승급: 티어 갱신 + 보호 횟수 3 부여
+            updates["tier"] = new_tier
+            updates["tier_protection_count"] = 3
+        elif new_idx < old_idx:
+            # 강등 대상: 보호 있으면 유지, 없으면 강등
+            if agent.tier_protection_count > 0:
+                updates["tier_protection_count"] = DebateAgent.tier_protection_count - 1
+                # 티어는 유지 (updates에 tier 없음)
+            else:
+                updates["tier"] = new_tier
+        # else: 같은 티어면 아무 변경 없음
 
         await self.db.execute(
             update(DebateAgent).where(DebateAgent.id == agent_id).values(**updates)

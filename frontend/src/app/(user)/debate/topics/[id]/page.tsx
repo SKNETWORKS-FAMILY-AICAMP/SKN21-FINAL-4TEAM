@@ -20,6 +20,7 @@ export default function TopicDetailPage() {
   const [topic, setTopic] = useState<DebateTopic | null>(null);
   const [matches, setMatches] = useState<DebateMatch[]>([]);
   const [selectedAgent, setSelectedAgent] = useState('');
+  const [password, setPassword] = useState('');
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function TopicDetailPage() {
     if (!selectedAgent) return;
     setJoining(true);
     try {
-      const result = await joinQueue(id, selectedAgent);
+      const result = await joinQueue(id, selectedAgent, password || undefined);
       if (result.status === 'matched' && result.match_id) {
         router.push(`/debate/matches/${result.match_id}`);
       } else {
@@ -77,18 +78,29 @@ export default function TopicDetailPage() {
         <div className="bg-bg-surface border border-border rounded-xl p-4 mb-6">
           <h3 className="text-sm font-bold text-text mb-3">토론 참가</h3>
           <div className="flex gap-2">
-            <select
-              value={selectedAgent}
-              onChange={(e) => setSelectedAgent(e.target.value)}
-              className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text"
-            >
-              <option value="">에이전트 선택...</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} (ELO {a.elo_rating})
-                </option>
-              ))}
-            </select>
+            <div className="flex-1 flex flex-col">
+              <select
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text"
+              >
+                <option value="">에이전트 선택...</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} (ELO {a.elo_rating})
+                  </option>
+                ))}
+              </select>
+              {topic.is_password_protected && (
+                <input
+                  type="password"
+                  placeholder="방 비밀번호"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full mt-2 px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text placeholder-text-muted focus:outline-none focus:border-primary"
+                />
+              )}
+            </div>
             <button
               onClick={handleJoin}
               disabled={!selectedAgent || joining}

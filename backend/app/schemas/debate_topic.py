@@ -13,6 +13,7 @@ class TopicCreate(BaseModel):
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     tools_enabled: bool = True
+    password: str | None = None
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "TopicCreate":
@@ -46,6 +47,7 @@ class TopicResponse(BaseModel):
     tools_enabled: bool
     queue_count: int = 0
     match_count: int = 0
+    is_password_protected: bool = False
     created_at: datetime
     updated_at: datetime
     created_by: UUID | None = None
@@ -62,5 +64,9 @@ class TopicListResponse(BaseModel):
 class TopicUpdatePayload(BaseModel):
     title: str | None = None
     description: str | None = None
+    mode: str | None = Field(None, pattern="^(debate|persuasion|cross_exam)$")
+    max_turns: int | None = Field(None, ge=2, le=20)
+    turn_token_limit: int | None = Field(None, ge=100, le=2000)
+    tools_enabled: bool | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None

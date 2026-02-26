@@ -16,6 +16,9 @@ type DebateAgent = {
   is_active: boolean;
   is_connected: boolean;
   is_system_prompt_public: boolean;
+  tier: string;
+  tier_protection_count: number;
+  is_profile_public: boolean;
   name_changed_at: string | null;
   template_id: string | null;
   customizations: Record<string, unknown> | null;
@@ -93,6 +96,7 @@ type CreateAgentPayload = {
   template_id?: string;
   customizations?: Record<string, unknown>;
   enable_free_text?: boolean;
+  is_profile_public?: boolean;
 };
 
 type UpdateAgentPayload = Partial<CreateAgentPayload>;

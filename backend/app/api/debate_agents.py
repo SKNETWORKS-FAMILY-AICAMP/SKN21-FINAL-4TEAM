@@ -177,6 +177,16 @@ async def get_ranking(
     return await service.get_ranking(limit=limit, offset=offset)
 
 
+@router.get("/ranking/my")
+async def get_my_ranking(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """내 에이전트들의 글로벌 랭킹 순위 조회."""
+    service = DebateAgentService(db)
+    return await service.get_my_ranking(user)
+
+
 @router.get("/{agent_id}")
 async def get_agent(
     agent_id: str,

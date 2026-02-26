@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Plus, X, ChevronDown } from 'lucide-react';
+import { Swords, Plus, X, ChevronDown, Shuffle } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
+import { TierBadge } from '@/components/debate/TierBadge';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -42,11 +44,13 @@ const defaultForm = {
   tools_enabled: true,
   scheduled_start_at: null as string | null,
   scheduled_end_at: null as string | null,
+  password: '' as string,
 };
 
 const PAGE_SIZE = 20;
 
 export default function DebateTopicsPage() {
+  const router = useRouter();
   const {
     topics,
     topicsTotal,
@@ -59,6 +63,7 @@ export default function DebateTopicsPage() {
     createTopic,
     updateTopic,
     deleteTopic,
+    randomMatch,
   } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
   const { user } = useUserStore();
@@ -74,6 +79,12 @@ export default function DebateTopicsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // 랜덤 매칭 모달
+  const [showRandomModal, setShowRandomModal] = useState(false);
+  const [randomAgentId, setRandomAgentId] = useState('');
+  const [randomMatching, setRandomMatching] = useState(false);
+  const [randomError, setRandomError] = useState<string | null>(null);
 
   // 주제 수정 모달
   const [editTopic, setEditTopic] = useState<(typeof topics)[number] | null>(null);
@@ -136,6 +147,7 @@ export default function DebateTopicsPage() {
         tools_enabled: form.tools_enabled,
         scheduled_start_at: form.scheduled_start_at || null,
         scheduled_end_at: form.scheduled_end_at || null,
+        password: form.password || null,
       });
       setShowModal(false);
       setForm(defaultForm);
@@ -165,6 +177,7 @@ export default function DebateTopicsPage() {
       tools_enabled: topic.tools_enabled,
       scheduled_start_at: topic.scheduled_start_at ?? null,
       scheduled_end_at: topic.scheduled_end_at ?? null,
+      password: '',
     });
     setEditError(null);
     setEditShowAdvanced(false);
@@ -209,6 +222,21 @@ export default function DebateTopicsPage() {
     }
   };
 
+  const handleRandomMatch = async () => {
+    if (!randomAgentId) return;
+    setRandomError(null);
+    setRandomMatching(true);
+    try {
+      const result = await randomMatch(randomAgentId);
+      setShowRandomModal(false);
+      router.push(`/debate/topics/${result.topic_id}`);
+    } catch (err: unknown) {
+      setRandomError(err instanceof Error ? err.message : '매칭 실패');
+    } finally {
+      setRandomMatching(false);
+    }
+  };
+
   const currentUserId = user?.id ?? null;
 
   return (
@@ -219,6 +247,15 @@ export default function DebateTopicsPage() {
           AI 토론
         </h1>
         <div className="flex items-center gap-2">
+          {agents.length > 0 && (
+            <button
+              onClick={() => setShowRandomModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-semibold rounded-lg hover:bg-orange-500/20 transition-colors"
+            >
+              <Shuffle size={14} />
+              랜덤 매칭
+            </button>
+          )}
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-surface border border-border text-text text-xs font-semibold rounded-lg hover:border-primary/40 transition-colors"
@@ -380,7 +417,16 @@ export default function DebateTopicsPage() {
             ranking.map((entry, idx) => (
               <div
                 key={entry.id}
-                className="flex items-center gap-3 bg-bg-surface border border-border rounded-xl px-4 py-3"
+                className={`flex items-center gap-3 bg-bg-surface border border-border rounded-xl px-4 py-3 ${
+                  entry.is_profile_public !== false
+                    ? 'cursor-pointer hover:border-primary/40 transition-colors'
+                    : ''
+                }`}
+                onClick={() => {
+                  if (entry.is_profile_public !== false) {
+                    router.push(`/debate/agents/${entry.id}`);
+                  }
+                }}
               >
                 <span
                   className={`text-sm font-bold w-6 text-center ${
@@ -395,10 +441,21 @@ export default function DebateTopicsPage() {
                 >
                   {idx + 1}
                 </span>
+                {/* 아바타 */}
+                <div className="w-8 h-8 rounded-lg border border-border bg-bg overflow-hidden shrink-0 flex items-center justify-center text-base">
+                  {entry.image_url ? (
+                    <img src={entry.image_url} alt={entry.name} className="w-full h-full object-cover" />
+                  ) : (
+                    '🤖'
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-text truncate">{entry.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-bold text-text truncate">{entry.name}</p>
+                    {entry.tier && <TierBadge tier={entry.tier} />}
+                  </div>
                   <p className="text-xs text-text-muted truncate">
-                    {entry.owner_nickname} · {entry.provider} / {entry.model_id}
+                    {entry.owner_nickname} · {entry.provider}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -472,6 +529,18 @@ export default function DebateTopicsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-text-muted mb-1">방 비밀번호 (선택)</label>
+                <input
+                  type="password"
+                  maxLength={50}
+                  placeholder="비어 있으면 공개방"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full bg-bg border border-border rounded-lg px-3 py-2.5 text-sm text-text placeholder-text-muted focus:outline-none focus:border-primary"
+                />
               </div>
 
               {/* 고급 설정 토글 */}
@@ -581,6 +650,59 @@ export default function DebateTopicsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 랜덤 매칭 모달 */}
+      {showRandomModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-sm shadow-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-text flex items-center gap-2">
+                <Shuffle size={16} className="text-orange-400" />
+                랜덤 매칭
+              </h2>
+              <button
+                onClick={() => { setShowRandomModal(false); setRandomError(null); }}
+                className="text-text-muted hover:text-text transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-text-muted mb-4">
+              참가할 에이전트를 선택하면 열린 토픽에 자동으로 매칭됩니다.
+            </p>
+            <select
+              value={randomAgentId}
+              onChange={(e) => setRandomAgentId(e.target.value)}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2.5 text-sm text-text focus:outline-none focus:border-primary mb-3"
+            >
+              <option value="">에이전트 선택...</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} (ELO {a.elo_rating})
+                </option>
+              ))}
+            </select>
+            {randomError && <p className="text-xs text-red-400 mb-3">{randomError}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowRandomModal(false); setRandomError(null); }}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-text-muted hover:text-text transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleRandomMatch}
+                disabled={!randomAgentId || randomMatching}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-500/90 disabled:opacity-50 transition-colors"
+              >
+                {randomMatching ? '매칭 중...' : '매칭 시작'}
+              </button>
+            </div>
           </div>
         </div>
       )}

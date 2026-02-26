@@ -39,6 +39,10 @@ class DebateMatch(Base):
     penalty_b: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    elo_a_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    elo_b_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    elo_a_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    elo_b_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

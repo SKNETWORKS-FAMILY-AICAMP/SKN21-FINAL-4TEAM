@@ -85,6 +85,11 @@ export default function AdminUsersPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Filters
+  const [roleFilter, setRoleFilter] = useState('');
+  const [ageGroupFilter, setAgeGroupFilter] = useState('');
+  const [sortBy, setSortBy] = useState('');
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -101,6 +106,9 @@ export default function AdminUsersPage() {
       params.set('skip', String(page * PAGE_SIZE));
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (roleFilter) params.set('role', roleFilter);
+      if (ageGroupFilter) params.set('age_group', ageGroupFilter);
+      if (sortBy) params.set('sort_by', sortBy);
 
       const res = await api.get<UserListResponse>(`/admin/users?${params}`);
       setUsers(res.items ?? []);
@@ -111,7 +119,7 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, roleFilter, ageGroupFilter, sortBy]);
 
   useEffect(() => {
     fetchUsers();
@@ -233,6 +241,39 @@ export default function AdminUsersPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-bg-surface border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
         />
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <select
+          value={roleFilter}
+          onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
+          className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+        >
+          <option value="">전체 역할</option>
+          <option value="user">사용자</option>
+          <option value="admin">관리자</option>
+          <option value="superadmin">슈퍼관리자</option>
+        </select>
+        <select
+          value={ageGroupFilter}
+          onChange={(e) => { setAgeGroupFilter(e.target.value); setPage(0); }}
+          className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+        >
+          <option value="">전체 연령</option>
+          <option value="unverified">미인증</option>
+          <option value="minor_safe">청소년</option>
+          <option value="adult_verified">성인인증</option>
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
+          className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+        >
+          <option value="">가입일순</option>
+          <option value="nickname">닉네임순</option>
+          <option value="credit_balance">크레딧순</option>
+        </select>
       </div>
 
       {/* Selection toolbar (superadmin only) */}
