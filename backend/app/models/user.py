@@ -14,6 +14,7 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
+    login_id: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     nickname: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     email_hash: Mapped[str | None] = mapped_column(String(64))
     password_hash: Mapped[str | None] = mapped_column(String(128))

@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -49,8 +49,9 @@ async def list_users(
     count_query = select(func.count()).select_from(User)
 
     if search:
-        query = query.where(User.nickname.ilike(f"%{search}%"))
-        count_query = count_query.where(User.nickname.ilike(f"%{search}%"))
+        search_filter = or_(User.login_id.ilike(f"%{search}%"), User.nickname.ilike(f"%{search}%"))
+        query = query.where(search_filter)
+        count_query = count_query.where(search_filter)
     if role:
         query = query.where(User.role == role)
         count_query = count_query.where(User.role == role)
@@ -162,6 +163,7 @@ async def get_user_detail(
 
     return AdminUserDetailResponse(
         id=user.id,
+        login_id=user.login_id,
         nickname=user.nickname,
         role=user.role,
         age_group=user.age_group,

@@ -6,13 +6,14 @@ import {
   Drama, Check, X, AlertCircle, Eye, EyeOff,
   Heart, Swords, Sparkles, Smile, Ghost, Laugh, Clapperboard, Rocket, ChevronRight,
 } from 'lucide-react';
-import { login, register, checkNickname } from '@/lib/auth';
+import { login, register, checkNickname, checkLoginId } from '@/lib/auth';
 import { useUserStore } from '@/stores/userStore';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
 import { CATEGORIES } from '@/constants/categories';
 
 type AuthMode = 'login' | 'register';
+type LoginIdStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 type NicknameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 type Step = 'auth' | 'themes';
 
@@ -32,6 +33,13 @@ const THEMES = CATEGORIES.map((c) => ({
   icon: THEME_ICONS[c.id]?.icon ?? Heart,
   color: THEME_ICONS[c.id]?.color ?? 'text-text-muted',
 }));
+
+function validateLoginId(value: string): string | null {
+  if (value.length < 2) return '2자 이상 입력하세요';
+  if (value.length > 30) return '30자 이하로 입력하세요';
+  if (!/^[a-zA-Z0-9_]+$/.test(value)) return '영문, 숫자, 밑줄(_)만 가능';
+  return null;
+}
 
 function validateNickname(value: string): string | null {
   if (value.length < 2) return '2자 이상 입력하세요';
@@ -57,6 +65,7 @@ export default function HomePage() {
   const { setUser, setToken } = useUserStore();
   const [mode, setMode] = useState<AuthMode>('login');
   const [step, setStep] = useState<Step>('auth');
+  const [loginId, setLoginId] = useState('');
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -69,10 +78,46 @@ export default function HomePage() {
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
   const [registeredToken, setRegisteredToken] = useState<string | null>(null);
 
+  // LoginId duplicate check
+  const [loginIdStatus, setLoginIdStatus] = useState<LoginIdStatus>('idle');
+  const [loginIdError, setLoginIdError] = useState<string | null>(null);
+  const loginIdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Nickname duplicate check
   const [nicknameStatus, setNicknameStatus] = useState<NicknameStatus>('idle');
   const [nicknameError, setNicknameError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const checkLoginIdAvailability = useCallback((value: string) => {
+    if (loginIdDebounceRef.current) clearTimeout(loginIdDebounceRef.current);
+    const validationError = validateLoginId(value);
+    if (validationError) {
+      setLoginIdStatus('invalid');
+      setLoginIdError(validationError);
+      return;
+    }
+    setLoginIdStatus('checking');
+    setLoginIdError(null);
+    loginIdDebounceRef.current = setTimeout(async () => {
+      try {
+        const available = await checkLoginId(value);
+        setLoginIdStatus(available ? 'available' : 'taken');
+        setLoginIdError(available ? null : '이미 사용 중인 아이디입니다');
+      } catch {
+        setLoginIdStatus('idle');
+      }
+    }, 500);
+  }, []);
+
+  const handleLoginIdChange = (value: string) => {
+    setLoginId(value);
+    if (mode === 'register' && value.trim().length > 0) {
+      checkLoginIdAvailability(value.trim());
+    } else {
+      setLoginIdStatus('idle');
+      setLoginIdError(null);
+    }
+  };
 
   const checkNicknameAvailability = useCallback((value: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -107,6 +152,9 @@ export default function HomePage() {
 
   useEffect(() => {
     setError('');
+    setLoginId('');
+    setLoginIdStatus('idle');
+    setLoginIdError(null);
     setNicknameStatus('idle');
     setNicknameError(null);
     setConfirmPassword('');
@@ -118,6 +166,7 @@ export default function HomePage() {
   const passwordStrength = getPasswordStrength(password);
   const isRegisterValid =
     mode === 'register' &&
+    loginIdStatus === 'available' &&
     nicknameStatus === 'available' &&
     password.length >= 6 &&
     password === confirmPassword;
@@ -133,27 +182,30 @@ export default function HomePage() {
     setError('');
 
     if (mode === 'register') {
-      const validationError = validateNickname(nickname.trim());
-      if (validationError) { setError(validationError); return; }
+      const loginIdValidationError = validateLoginId(loginId.trim());
+      if (loginIdValidationError) { setError(loginIdValidationError); return; }
+      if (loginIdStatus !== 'available') { setError('아이디 중복 확인이 필요합니다'); return; }
+      const nicknameValidationError = validateNickname(nickname.trim());
+      if (nicknameValidationError) { setError(nicknameValidationError); return; }
+      if (nicknameStatus !== 'available') { setError('닉네임 중복 확인이 필요합니다'); return; }
       if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); return; }
       if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); return; }
-      if (nicknameStatus !== 'available') { setError('닉네임 중복 확인이 필요합니다'); return; }
     }
 
     setLoading(true);
     try {
       if (mode === 'login') {
-        const res = await login(nickname, password);
+        const res = await login(loginId, password);
         // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
         setToken(res.access_token); // 하위 호환성 (no-op)
         const user = await api.get<{
-          id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
+          id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
           age_group: string; adult_verified_at: string | null;
           preferred_llm_model_id: string | null;
           credit_balance?: number; subscription_plan_key?: string | null;
         }>('/auth/me');
         setUser({
-          id: user.id, nickname: user.nickname, role: user.role,
+          id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
           ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
           preferredLlmModelId: user.preferred_llm_model_id,
           creditBalance: user.credit_balance ?? 0,
@@ -161,7 +213,7 @@ export default function HomePage() {
         });
         router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/personas');
       } else {
-        const res = await register(nickname.trim(), password, email || undefined);
+        const res = await register(loginId.trim(), nickname.trim(), password, email || undefined);
         // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
         setToken(res.access_token); // 하위 호환성 (no-op)
         setRegisteredToken(res.access_token);
@@ -182,13 +234,13 @@ export default function HomePage() {
         await api.put('/auth/me', { preferred_themes: selectedThemes });
       }
       const user = await api.get<{
-        id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
+        id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
         age_group: string; adult_verified_at: string | null;
         preferred_llm_model_id: string | null;
         credit_balance?: number; subscription_plan_key?: string | null;
       }>('/auth/me');
       setUser({
-        id: user.id, nickname: user.nickname, role: user.role,
+        id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
         ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
         preferredLlmModelId: user.preferred_llm_model_id,
         creditBalance: user.credit_balance ?? 0,
@@ -310,39 +362,75 @@ export default function HomePage() {
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
-          {/* Nickname */}
+          {/* LoginId */}
           <div className="flex flex-col gap-1">
-            <label className="text-[13px] font-semibold text-text-label">닉네임</label>
+            <label className="text-[13px] font-semibold text-text-label">아이디</label>
             <div className="relative">
               <input
                 type="text"
-                placeholder={mode === 'register' ? '2~20자, 한글/영문/숫자' : '닉네임'}
-                value={nickname}
-                onChange={(e) => handleNicknameChange(e.target.value)}
+                placeholder={mode === 'register' ? '2~30자, 영문/숫자/밑줄' : '아이디'}
+                value={loginId}
+                onChange={(e) => handleLoginIdChange(e.target.value)}
                 required
-                maxLength={20}
+                maxLength={30}
                 className={`input py-3 px-4 pr-10 w-full ${
-                  mode === 'register' && nicknameStatus === 'taken' ? 'border-danger' : ''
-                } ${mode === 'register' && nicknameStatus === 'available' ? 'border-success' : ''}`}
+                  mode === 'register' && loginIdStatus === 'taken' ? 'border-danger' : ''
+                } ${mode === 'register' && loginIdStatus === 'available' ? 'border-success' : ''}`}
               />
-              {mode === 'register' && nickname.trim().length > 0 && (
+              {mode === 'register' && loginId.trim().length > 0 && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {nicknameStatus === 'checking' && (
+                  {loginIdStatus === 'checking' && (
                     <span className="inline-block w-4 h-4 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
                   )}
-                  {nicknameStatus === 'available' && <Check size={16} className="text-success" />}
-                  {nicknameStatus === 'taken' && <X size={16} className="text-danger" />}
-                  {nicknameStatus === 'invalid' && <AlertCircle size={16} className="text-warning" />}
+                  {loginIdStatus === 'available' && <Check size={16} className="text-success" />}
+                  {loginIdStatus === 'taken' && <X size={16} className="text-danger" />}
+                  {loginIdStatus === 'invalid' && <AlertCircle size={16} className="text-warning" />}
                 </span>
               )}
             </div>
-            {mode === 'register' && nicknameError && (
-              <span className="text-danger-text text-xs">{nicknameError}</span>
+            {mode === 'register' && loginIdError && (
+              <span className="text-danger-text text-xs">{loginIdError}</span>
             )}
-            {mode === 'register' && nicknameStatus === 'available' && (
-              <span className="text-success text-xs">사용 가능한 닉네임입니다</span>
+            {mode === 'register' && loginIdStatus === 'available' && (
+              <span className="text-success text-xs">사용 가능한 아이디입니다</span>
             )}
           </div>
+
+          {/* Nickname (register only) */}
+          {mode === 'register' && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[13px] font-semibold text-text-label">닉네임</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="2~20자, 한글/영문/숫자"
+                  value={nickname}
+                  onChange={(e) => handleNicknameChange(e.target.value)}
+                  required
+                  maxLength={20}
+                  className={`input py-3 px-4 pr-10 w-full ${
+                    nicknameStatus === 'taken' ? 'border-danger' : ''
+                  } ${nicknameStatus === 'available' ? 'border-success' : ''}`}
+                />
+                {nickname.trim().length > 0 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {nicknameStatus === 'checking' && (
+                      <span className="inline-block w-4 h-4 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
+                    )}
+                    {nicknameStatus === 'available' && <Check size={16} className="text-success" />}
+                    {nicknameStatus === 'taken' && <X size={16} className="text-danger" />}
+                    {nicknameStatus === 'invalid' && <AlertCircle size={16} className="text-warning" />}
+                  </span>
+                )}
+              </div>
+              {nicknameError && (
+                <span className="text-danger-text text-xs">{nicknameError}</span>
+              )}
+              {nicknameStatus === 'available' && (
+                <span className="text-success text-xs">사용 가능한 닉네임입니다</span>
+              )}
+            </div>
+          )}
 
           {/* Email (register only) */}
           {mode === 'register' && (

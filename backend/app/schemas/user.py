@@ -6,9 +6,22 @@ from pydantic import BaseModel, field_validator
 
 
 class UserCreate(BaseModel):
+    login_id: str
     nickname: str
     password: str
     email: str | None = None
+
+    @field_validator("login_id")
+    @classmethod
+    def validate_login_id(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("아이디는 2자 이상이어야 합니다")
+        if len(v) > 30:
+            raise ValueError("아이디는 30자 이하여야 합니다")
+        if not re.match(r"^[a-zA-Z0-9_]+$", v):
+            raise ValueError("아이디는 영문, 숫자, 밑줄(_)만 사용 가능합니다")
+        return v
 
     @field_validator("nickname")
     @classmethod
@@ -37,12 +50,13 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    nickname: str
+    login_id: str
     password: str
 
 
 class UserResponse(BaseModel):
     id: UUID
+    login_id: str
     nickname: str
     role: str
     age_group: str
@@ -89,6 +103,7 @@ class AdminUserDetailResponse(BaseModel):
     """관리자용 사용자 상세 (관계 카운트 + 크레딧 포함)."""
 
     id: UUID
+    login_id: str
     nickname: str
     role: str
     age_group: str

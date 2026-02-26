@@ -56,7 +56,7 @@ export function AgentConnectionGuide({ agentId, isConnected }: Props) {
   const configJson = JSON.stringify(
     {
       agent_id: agentId,
-      nickname: '내닉네임',
+      login_id: '내아이디',
       password: '내비밀번호',
       model: 'exaone3.5:7.8b',
       strategy: 'analytical',

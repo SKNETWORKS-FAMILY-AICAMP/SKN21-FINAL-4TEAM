@@ -47,14 +47,22 @@ async def check_nickname(nickname: str, db: AsyncSession = Depends(get_db)):
     return {"available": available}
 
 
+@router.get("/check-login-id")
+async def check_login_id(login_id: str, db: AsyncSession = Depends(get_db)):
+    """아이디 사용 가능 여부 확인."""
+    service = UserService(db)
+    available = await service.check_login_id_available(login_id)
+    return {"available": available}
+
+
 @router.post("/register", response_model=TokenResponse)
 async def register(data: UserCreate, response: Response, db: AsyncSession = Depends(get_db)):
     """사용자 회원가입 → JWT 발급 + HttpOnly 쿠키 설정."""
-    # 관리자 사칭 방지 — 일반 가입에서 'admin' 포함 닉네임 차단
-    if "admin" in data.nickname.lower():
+    # 관리자 사칭 방지 — 일반 가입에서 'admin' 포함 login_id/닉네임 차단
+    if "admin" in data.login_id.lower() or "admin" in data.nickname.lower():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nickname cannot contain 'admin'",
+            detail="ID and nickname cannot contain 'admin'",
         )
     service = UserService(db)
     try:

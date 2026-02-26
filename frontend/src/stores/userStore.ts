@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 
 type User = {
   id: string;
+  login_id: string;
   nickname: string;
   role: 'user' | 'admin' | 'superadmin';
   ageGroup: string;
@@ -65,6 +66,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           // 쿠키가 유효하면 자동으로 인증됨 (credentials: 'include' in api.ts)
           const data = await api.get<{
             id: string;
+            login_id: string;
             nickname: string;
             role: 'user' | 'admin' | 'superadmin';
             age_group: string;
@@ -76,6 +78,7 @@ export const useUserStore = create<UserState>((set, get) => ({
           set({
             user: {
               id: data.id,
+              login_id: data.login_id,
               nickname: data.nickname,
               role: data.role,
               ageGroup: data.age_group,

@@ -15,6 +15,7 @@ describe('useUserStore', () => {
   it('should set user', () => {
     const user = {
       id: '123',
+      login_id: 'testuser',
       nickname: 'testuser',
       role: 'user' as const,
       ageGroup: 'unverified',
@@ -39,6 +40,7 @@ describe('useUserStore', () => {
   it('should return false for isAdultVerified when adultVerifiedAt is null', () => {
     useUserStore.getState().setUser({
       id: '1',
+      login_id: 'test',
       nickname: 'test',
       role: 'user',
       ageGroup: 'unverified',
@@ -53,6 +55,7 @@ describe('useUserStore', () => {
   it('should return true for isAdultVerified when adultVerifiedAt is set', () => {
     useUserStore.getState().setUser({
       id: '1',
+      login_id: 'test',
       nickname: 'test',
       role: 'user',
       ageGroup: 'adult_verified',
@@ -71,6 +74,7 @@ describe('useUserStore', () => {
   it('should return false for isAdmin when role is user', () => {
     useUserStore.getState().setUser({
       id: '1',
+      login_id: 'test',
       nickname: 'test',
       role: 'user',
       ageGroup: 'unverified',
@@ -85,6 +89,7 @@ describe('useUserStore', () => {
   it('should return true for isAdmin when role is admin', () => {
     useUserStore.getState().setUser({
       id: '1',
+      login_id: 'admin',
       nickname: 'admin',
       role: 'admin',
       ageGroup: 'adult_verified',
@@ -99,6 +104,7 @@ describe('useUserStore', () => {
   it('should clear user and token on logout', async () => {
     useUserStore.getState().setUser({
       id: '1',
+      login_id: 'test',
       nickname: 'test',
       role: 'user',
       ageGroup: 'unverified',
