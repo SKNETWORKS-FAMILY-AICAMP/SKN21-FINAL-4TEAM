@@ -117,10 +117,10 @@ export const UserSidebar = memo(function UserSidebar() {
       >
         <div className="px-5 py-5 border-b border-border">
           <Link href="/personas" className="text-text no-underline text-base font-bold block">
-            Webtoon Chat
+            AI 토론 플랫폼
           </Link>
           <span className="text-[11px] text-primary font-semibold uppercase tracking-wide">
-            AI Character
+            AI Debate
           </span>
           <div className="mt-2">
             <CreditBadge />

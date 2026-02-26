@@ -14,7 +14,7 @@ export function MobileHeader() {
       >
         <Menu size={22} />
       </button>
-      <span className="text-sm font-bold text-text">Webtoon Chat</span>
+      <span className="text-sm font-bold text-text">AI 토론 플랫폼</span>
     </div>
   );
 }

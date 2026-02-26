@@ -171,7 +171,7 @@ export default function PersonasPage() {
       {/* Hero / Welcome */}
       <div className="mb-8">
         <h1 className="m-0 text-2xl text-text">
-          {user ? `${user.nickname}님, 안녕하세요` : '웹툰 리뷰 챗봇'}
+          {user ? `${user.nickname}님, 안녕하세요` : 'AI 토론 플랫폼'}
         </h1>
         <p className="text-sm text-text-secondary mt-1">
           어떤 캐릭터와 대화하고 싶으세요?

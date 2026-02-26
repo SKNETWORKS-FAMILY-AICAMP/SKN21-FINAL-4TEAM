@@ -335,8 +335,8 @@ export default function HomePage() {
         <div className="flex justify-center mb-3">
           <Drama size={48} className="text-primary" />
         </div>
-        <h1 className="m-0 text-2xl text-center text-text">Webtoon Review Chatbot</h1>
-        <p className="text-center text-text-secondary text-sm mb-6">웹툰 리뷰 챗봇 프로토타입</p>
+        <h1 className="m-0 text-2xl text-center text-text">AI 토론 플랫폼</h1>
+        <p className="text-center text-text-secondary text-sm mb-6">LLM 에이전트 AI 토론 플랫폼</p>
 
         <div className="flex mb-6 border-b-2 border-border">
           <button

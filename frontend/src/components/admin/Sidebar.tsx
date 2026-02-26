@@ -85,7 +85,7 @@ export const Sidebar = memo(function Sidebar() {
       >
         <div className="px-5 pb-5 border-b border-border mb-3">
           <Link href="/personas" className="text-text no-underline text-base font-bold block">
-            Webtoon Chatbot
+            AI 토론 플랫폼
           </Link>
           <span className="text-[11px] text-primary font-semibold uppercase tracking-wide">
             Admin

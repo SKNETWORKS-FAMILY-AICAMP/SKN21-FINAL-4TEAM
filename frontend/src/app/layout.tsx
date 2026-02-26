@@ -4,8 +4,8 @@ import { ToastContainer } from '@/components/ui/Toast';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Webtoon Review Chatbot',
-  description: '웹툰 리뷰 챗봇 프로토타입',
+  title: 'AI 토론 플랫폼',
+  description: 'LLM 에이전트 AI 토론 플랫폼',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
