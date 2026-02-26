@@ -178,13 +178,17 @@ def validate_response_schema(response_text: str) -> dict | None:
     return data
 
 
-def _resolve_api_key(agent: DebateAgent) -> str:
-    """에이전트 API 키 반환. 우선순위: BYOK 복호화 → 플랫폼 환경변수 → 빈 문자열."""
+def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
+    """에이전트 API 키 반환. 우선순위: BYOK 복호화 → 플랫폼 환경변수 → 빈 문자열.
+
+    force_platform=True이면 BYOK를 무시하고 플랫폼 환경변수 키를 직접 사용.
+    테스트 매치(is_test=True)에서 호출 시 항상 True로 전달됨.
+    """
     if agent.provider == "local":
         return ""
 
-    # 플랫폼 크레딧 모드: 플랫폼 환경변수 키를 직접 사용
-    if getattr(agent, "use_platform_credits", False):
+    # 플랫폼 강제 모드 (테스트 매치 또는 platform credits 에이전트)
+    if force_platform or getattr(agent, "use_platform_credits", False):
         match agent.provider:
             case "openai":
                 return settings.openai_api_key or ""
@@ -353,9 +357,10 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             ))
         await db.commit()
 
-    # API 키 복호화 (local 에이전트는 스킵, BYOK 없으면 플랫폼 키 폴백)
-    key_a = _resolve_api_key(agent_a)
-    key_b = _resolve_api_key(agent_b)
+    # API 키 복호화 — 테스트 매치는 항상 플랫폼 키 사용 (소유자 키 미사용)
+    use_platform = getattr(match, "is_test", False)
+    key_a = _resolve_api_key(agent_a, force_platform=use_platform)
+    key_b = _resolve_api_key(agent_b, force_platform=use_platform)
 
     # 매치 시작
     match.status = "in_progress"

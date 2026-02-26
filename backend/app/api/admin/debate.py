@@ -532,6 +532,7 @@ async def force_match(
         agent_a_version_id=ver_a.id if ver_a else None,
         agent_b_version_id=ver_b.id if ver_b else None,
         status="pending",
+        is_test=True,
     )
     db.add(match)
     await db.commit()

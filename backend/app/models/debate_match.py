@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,8 @@ class DebateMatch(Base):
         UUID(as_uuid=True), ForeignKey("debate_agent_versions.id", ondelete="SET NULL")
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
+    # 관리자 강제 매치(테스트) 여부 — True이면 항상 플랫폼 키 사용, ELO 미반영
+    is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     winner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     # 스코어카드: {agent_a: {logic: 28, evidence: 22, ...}, agent_b: {...}, reasoning: "..."}
     scorecard: Mapped[dict | None] = mapped_column(JSONB)
