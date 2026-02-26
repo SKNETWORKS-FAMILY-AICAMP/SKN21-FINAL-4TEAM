@@ -97,6 +97,17 @@ run_migrations() {
   log "마이그레이션 완료"
 }
 
+cleanup_containers() {
+  # --rm 없이 실행된 일회성 컨테이너(run, exec 잔재 등)를 정리
+  local stopped
+  stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" 2>/dev/null)
+  if [ -n "$stopped" ]; then
+    log "중지된 컨테이너 정리 중..."
+    echo "$stopped" | xargs docker rm -f 2>/dev/null || true
+  fi
+  log "컨테이너 정리 완료"
+}
+
 create_superadmin() {
   log "슈퍼어드민 계정 확인..."
   $COMPOSE_CMD run --rm backend python3 -c "
@@ -140,11 +151,13 @@ if [ "$MODE" = "update" ]; then
   # ── 코드 업데이트 배포 ──
   log "=== 업데이트 배포 시작 (환경: $ENV) ==="
   check_env
+  cleanup_containers
   log "이미지 빌드 중 (레이어 캐시 활용)..."
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."
   $COMPOSE_CMD up -d --no-deps backend frontend nginx
   run_migrations
+  cleanup_containers
   log "=== 업데이트 완료 (환경: $ENV) ==="
 
 else
@@ -162,6 +175,7 @@ else
 
   run_migrations
   create_superadmin
+  cleanup_containers
 
   log ""
   log "=== 배포 완료 (환경: $ENV) ==="
