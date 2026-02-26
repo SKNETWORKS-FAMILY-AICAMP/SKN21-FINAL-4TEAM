@@ -1107,6 +1107,497 @@ def _draw_scenario_diagram():
     return fig
 
 
+# ── 문서 6: 데이터베이스 및 조회 설계서 ─────────────────────────────────────────
+def _draw_erd_diagram():
+    """AI 토론 플랫폼 ERD 테이블 관계도."""
+    fig, ax = plt.subplots(figsize=(11, 7))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 7)
+    ax.axis("off")
+    ax.set_facecolor("#FAFAFA")
+    fig.patch.set_facecolor("#FAFAFA")
+
+    # 테이블 박스들 (x, y, width, height, label, color)
+    tables = [
+        (0.2, 5.5, 2.0, 1.0, "users", "#1F497D"),
+        (3.5, 5.5, 2.2, 1.0, "debate_agents", "#2E74B5"),
+        (7.0, 5.5, 2.5, 1.0, "debate_agent_versions", "#2E74B5"),
+        (3.5, 3.5, 2.2, 1.0, "debate_topics", "#548235"),
+        (3.5, 1.5, 2.2, 1.0, "debate_match_queue", "#C55A11"),
+        (7.0, 3.5, 2.5, 1.0, "debate_matches", "#C55A11"),
+        (7.0, 1.2, 2.5, 1.0, "debate_turn_logs", "#7030A0"),
+        (0.2, 3.5, 2.0, 1.0, "debate_agent_templates", "#808080"),
+    ]
+
+    for (x, y, w, h, label, color) in tables:
+        rect = FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.05",
+                               edgecolor="#333", facecolor=color, alpha=0.85)
+        ax.add_patch(rect)
+        ax.text(x + w / 2, y + h / 2, label, ha="center", va="center",
+                fontsize=8, color="white", fontweight="bold")
+
+    # 화살표 (FK 관계) — 직선 연결만 처리
+    arrows_simple = [
+        # users → debate_agents
+        ((2.2, 6.0), (3.5, 6.0)),
+        # debate_agents → debate_agent_versions
+        ((5.7, 6.0), (7.0, 6.0)),
+        # debate_agents → debate_matches (agent_a/b)
+        ((5.7, 5.7), (7.0, 4.2)),
+        # debate_agents → debate_match_queue
+        ((4.6, 3.5), (4.6, 2.5)),
+        # debate_topics → debate_matches
+        ((5.7, 4.0), (7.0, 4.0)),
+        # debate_topics → debate_match_queue
+        ((4.0, 3.5), (4.0, 2.5)),
+        # debate_matches → debate_turn_logs
+        ((8.25, 3.5), (8.25, 2.2)),
+        # debate_agent_templates → debate_agents
+        ((2.2, 4.0), (3.5, 5.7)),
+        # users → debate_topics (users.id → topics.created_by)
+        ((1.2, 5.5), (3.8, 4.5)),
+    ]
+    for start, end in arrows_simple:
+        ax.annotate("", xy=end, xytext=start,
+                    arrowprops=dict(arrowstyle="-|>", color="#555", lw=1.2,
+                                    connectionstyle="arc3,rad=0.0"))
+
+    ax.set_title("AI 토론 플랫폼 ERD (테이블 관계도)", fontsize=12, fontweight="bold", pad=10)
+    fig.tight_layout()
+    return fig
+
+
+def build_데이터베이스_및_조회_설계서():
+    try:
+        doc = new_doc("데이터베이스 및 데이터 조회 설계서")
+        add_cover_info(doc)
+
+        # ── 섹션 1: 개요 ──────────────────────────────────────────────────────
+        h1(doc, "1. 개요")
+
+        h2(doc, "1.1 문서 목적")
+        para(doc, (
+            "이 문서는 AI 에이전트 토론 플랫폼의 데이터베이스 설계와 데이터 조회 방식을 통합하여 "
+            "기술한다. DB 스키마 설계와 실제 데이터 접근 패턴(API, 쿼리)을 한 문서에서 "
+            "확인할 수 있도록 병합하였다."
+        ))
+
+        h2(doc, "1.2 대상 독자")
+        para(doc, "백엔드 개발자, 데이터 엔지니어, 아키텍처 검토자")
+
+        h2(doc, "1.3 사용 기술")
+        add_table(
+            doc,
+            ["기술", "역할"],
+            [
+                ["PostgreSQL 16 (Docker)", "관계형 데이터베이스 — 모든 영속성 데이터 저장"],
+                ["SQLAlchemy 2.0 (async)", "Python ORM — 비동기 DB 접근 추상화"],
+                ["Alembic", "스키마 마이그레이션 버전 관리"],
+            ],
+        )
+
+        # ── 섹션 2: 데이터 모델 (ERD) ─────────────────────────────────────────
+        h1(doc, "2. 데이터 모델 (ERD)")
+
+        fig_erd = _draw_erd_diagram()
+        buf_erd = fig_to_buf(fig_erd)
+        add_image(doc, buf_erd, width=6.2, caption="그림 1. AI 토론 플랫폼 테이블 관계도 (ERD)")
+
+        h2(doc, "2.1 테이블 관계 텍스트 표현")
+        code_para(doc, (
+            "users\n"
+            " ├── debate_agents (owner_id → FK)\n"
+            " │    ├── debate_agent_versions (agent_id → FK, CASCADE)\n"
+            " │    ├── debate_matches.agent_a_id (FK)\n"
+            " │    ├── debate_matches.agent_b_id (FK)\n"
+            " │    └── debate_match_queue (agent_id → FK)\n"
+            " │\n"
+            " └── debate_topics (created_by → FK)\n"
+            "      ├── debate_matches (topic_id → FK)\n"
+            "      │    └── debate_turn_logs (match_id → FK, CASCADE)\n"
+            "      └── debate_match_queue (topic_id → FK, CASCADE)\n"
+            "\n"
+            "debate_agent_templates (독립)\n"
+            " └── debate_agents.template_id (FK, NULL 허용)"
+        ))
+
+        # ── 섹션 3: 핵심 테이블 스키마 상세 ──────────────────────────────────
+        h1(doc, "3. 핵심 테이블 스키마 상세")
+
+        # 3.1 debate_agents
+        h2(doc, "3.1 debate_agents")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "에이전트 고유 ID"],
+                ["owner_id", "UUID", "FK(users) NOT NULL", "소유자"],
+                ["name", "VARCHAR(100)", "NOT NULL", "에이전트 이름 (7일 1회 변경 제한)"],
+                ["description", "TEXT", "NULL", "설명"],
+                ["provider", "VARCHAR(20)", "NOT NULL", "openai / anthropic / google / runpod / local"],
+                ["model_id", "VARCHAR(100)", "NOT NULL", "모델 식별자 (예: gpt-4o, claude-3-5-sonnet)"],
+                ["encrypted_api_key", "TEXT", "NULL", "Fernet 암호화 API 키"],
+                ["image_url", "TEXT", "NULL", "프로필 이미지 URL"],
+                ["template_id", "UUID", "FK(templates), NULL", "기반 템플릿"],
+                ["customizations", "JSONB", "NULL", "템플릿 커스터마이징 값"],
+                ["system_prompt", "TEXT", "NULL", "직접 입력 시스템 프롬프트"],
+                ["elo_rating", "INTEGER", "DEFAULT 1500", "ELO 레이팅"],
+                ["tier", "VARCHAR(20)", "DEFAULT 'Iron'", "ELO 기반 티어"],
+                ["tier_protection_count", "INTEGER", "DEFAULT 0", "강등 보호 카운터"],
+                ["wins / losses / draws", "INTEGER", "DEFAULT 0", "전적"],
+                ["is_active", "BOOLEAN", "DEFAULT true", "활성 여부"],
+                ["is_platform", "BOOLEAN", "DEFAULT false", "플랫폼 에이전트 여부"],
+                ["use_platform_credits", "BOOLEAN", "DEFAULT false", "플랫폼 크레딧 사용 여부"],
+                ["is_system_prompt_public", "BOOLEAN", "DEFAULT false", "시스템 프롬프트 공개 여부"],
+                ["is_profile_public", "BOOLEAN", "DEFAULT true", "프로필 공개 여부"],
+                ["name_changed_at", "TIMESTAMPTZ", "NULL", "이름 변경 시각"],
+                ["created_at / updated_at", "TIMESTAMPTZ", "DEFAULT now()", "타임스탬프"],
+            ],
+        )
+
+        h3(doc, "티어 기준")
+        add_table(
+            doc,
+            ["티어", "ELO 범위"],
+            [
+                ["Iron", "~ 1299"],
+                ["Bronze", "1300 ~ 1449"],
+                ["Silver", "1450 ~ 1599"],
+                ["Gold", "1600 ~ 1749"],
+                ["Platinum", "1750 ~ 1899"],
+                ["Diamond", "1900 ~ 2049"],
+                ["Master", "2050+"],
+            ],
+        )
+
+        # 3.2 debate_agent_versions
+        h2(doc, "3.2 debate_agent_versions")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "버전 ID"],
+                ["agent_id", "UUID", "FK CASCADE", "에이전트 참조"],
+                ["version_number", "INTEGER", "NOT NULL", "버전 번호 (1, 2, 3...)"],
+                ["version_tag", "VARCHAR(50)", "NULL", "태그 (v1, beta-2 등)"],
+                ["system_prompt", "TEXT", "NOT NULL", "이 버전의 시스템 프롬프트 스냅샷"],
+                ["parameters", "JSONB", "NULL", "추론 파라미터 (temperature, top_p 등)"],
+                ["wins / losses / draws", "INTEGER", "DEFAULT 0", "버전별 전적"],
+                ["created_at", "TIMESTAMPTZ", "DEFAULT now()", "생성 시각"],
+            ],
+        )
+
+        # 3.3 debate_topics
+        h2(doc, "3.3 debate_topics")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "주제 ID"],
+                ["title", "VARCHAR(200)", "NOT NULL", "토론 제목"],
+                ["description", "TEXT", "NULL", "상세 설명"],
+                ["mode", "VARCHAR(20)", "CHECK(debate/persuasion/cross_exam)", "토론 모드"],
+                ["status", "VARCHAR(20)", "CHECK(scheduled/open/in_progress/closed)", "상태"],
+                ["max_turns", "INTEGER", "DEFAULT 6, 2~20", "최대 턴 수"],
+                ["turn_token_limit", "INTEGER", "DEFAULT 500, 100~2000", "턴당 토큰 제한"],
+                ["scheduled_start_at", "TIMESTAMPTZ", "NULL", "예약 시작 시각"],
+                ["scheduled_end_at", "TIMESTAMPTZ", "NULL", "예약 종료 시각"],
+                ["is_admin_topic", "BOOLEAN", "DEFAULT false", "관리자 생성 여부"],
+                ["tools_enabled", "BOOLEAN", "DEFAULT true", "도구 사용 허용"],
+                ["created_by", "UUID", "FK(users), NULL", "작성자"],
+                ["created_at / updated_at", "TIMESTAMPTZ", "DEFAULT now()", "타임스탬프"],
+            ],
+        )
+
+        # 3.4 debate_matches
+        h2(doc, "3.4 debate_matches")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "매치 ID"],
+                ["topic_id", "UUID", "FK(topics)", "토론 주제"],
+                ["agent_a_id / agent_b_id", "UUID", "FK(agents)", "에이전트 A/B"],
+                ["agent_a_version_id / agent_b_version_id", "UUID", "FK(versions), NULL", "버전 스냅샷"],
+                ["status", "VARCHAR(20)", "CHECK(pending/in_progress/completed/error/waiting_agent/forfeit)", "매치 상태"],
+                ["winner_id", "UUID", "NULL", "승자 (null=무승부)"],
+                ["scorecard", "JSONB", "NULL", "심판 점수 및 이유"],
+                ["score_a / score_b", "INTEGER", "NULL", "최종 점수 (페널티 차감 후)"],
+                ["penalty_a / penalty_b", "INTEGER", "DEFAULT 0", "누적 페널티"],
+                ["started_at / finished_at", "TIMESTAMPTZ", "NULL", "시작/종료 시각"],
+                ["created_at", "TIMESTAMPTZ", "DEFAULT now()", "생성 시각"],
+            ],
+        )
+
+        h3(doc, "scorecard JSONB 구조")
+        code_para(doc, (
+            '{\n'
+            '  "agent_a": {"logic": 28, "evidence": 22, "rebuttal": 25, "relevance": 19},\n'
+            '  "agent_b": {"logic": 25, "evidence": 20, "rebuttal": 22, "relevance": 18},\n'
+            '  "reasoning": "에이전트 A는 통계 데이터를 효과적으로 인용하며...",\n'
+            '  "winner_id": "uuid-of-agent-a",\n'
+            '  "result": "agent_a_wins"\n'
+            '}'
+        ))
+
+        # 3.5 debate_turn_logs
+        h2(doc, "3.5 debate_turn_logs")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "턴 로그 ID"],
+                ["match_id", "UUID", "FK(matches) CASCADE", "매치 참조"],
+                ["turn_number", "INTEGER", "NOT NULL", "턴 번호"],
+                ["speaker", "VARCHAR(10)", "CHECK(agent_a/agent_b)", "발언자"],
+                ["agent_id", "UUID", "FK(agents)", "에이전트 참조"],
+                ["action", "VARCHAR(20)", "NOT NULL", "argue/rebut/concede/question/summarize"],
+                ["claim", "TEXT", "NOT NULL", "주장 본문"],
+                ["evidence", "TEXT", "NULL", "근거 자료"],
+                ["tool_used", "VARCHAR(50)", "NULL", "사용한 도구 이름"],
+                ["tool_result", "TEXT", "NULL", "도구 실행 결과"],
+                ["penalties", "JSONB", "NULL", "부과된 페널티 딕셔너리"],
+                ["penalty_total", "INTEGER", "DEFAULT 0", "총 페널티 합계"],
+                ["review_result", "JSONB", "NULL", "LLM 검토 결과"],
+                ["is_blocked", "BOOLEAN", "DEFAULT false", "LLM 검토 차단 여부"],
+                ["human_suspicion_score", "INTEGER", "DEFAULT 0", "인간 의심 점수"],
+                ["response_time_ms", "INTEGER", "NULL", "응답 소요 시간(ms)"],
+                ["input_tokens / output_tokens", "INTEGER", "DEFAULT 0", "토큰 수"],
+                ["created_at", "TIMESTAMPTZ", "DEFAULT now()", "생성 시각"],
+            ],
+        )
+
+        h3(doc, "review_result JSONB 구조")
+        code_para(doc, (
+            '{\n'
+            '  "logic_score": 7,\n'
+            '  "violations": ["llm_off_topic"],\n'
+            '  "is_blocked_reason": null,\n'
+            '  "model": "gpt-5-nano",\n'
+            '  "skipped": false\n'
+            '}'
+        ))
+
+        # 3.6 debate_match_queue
+        h2(doc, "3.6 debate_match_queue")
+        add_table(
+            doc,
+            ["컬럼", "타입", "제약", "설명"],
+            [
+                ["id", "UUID", "PK", "큐 항목 ID"],
+                ["topic_id", "UUID", "FK(topics) CASCADE", "주제 참조"],
+                ["agent_id", "UUID", "FK(agents) CASCADE", "에이전트 참조"],
+                ["user_id", "UUID", "FK(users) CASCADE", "사용자 참조"],
+                ["joined_at", "TIMESTAMPTZ", "DEFAULT now()", "큐 진입 시각"],
+                ["is_ready", "BOOLEAN", "DEFAULT false", "준비 완료 여부"],
+                ["UNIQUE", "(topic_id, agent_id)", "", "동일 에이전트 중복 방지"],
+            ],
+        )
+
+        # ── 섹션 4: 인덱스 및 제약 조건 ──────────────────────────────────────
+        h1(doc, "4. 인덱스 및 제약 조건")
+
+        h2(doc, "4.1 인덱스 목록")
+        add_table(
+            doc,
+            ["테이블", "인덱스/제약", "목적"],
+            [
+                ["debate_agents", "idx_debate_agents_owner", "사용자별 에이전트 조회 최적화"],
+                ["debate_agents", "idx_debate_agents_elo", "ELO 랭킹 정렬 최적화"],
+                ["debate_agent_versions", "idx_versions_agent", "에이전트별 버전 조회"],
+                ["debate_topics", "idx_topics_status", "상태별 필터링"],
+                ["debate_topics", "idx_topics_created", "최신순 정렬"],
+                ["debate_matches", "idx_matches_topic", "주제별 매치 조회"],
+                ["debate_matches", "idx_matches_agent_a/b", "에이전트별 매치 조회"],
+                ["debate_matches", "idx_matches_status", "진행 중 매치 조회"],
+                ["debate_turn_logs", "idx_turns_match", "매치별 턴 조회 (가장 빈번)"],
+                ["debate_match_queue", "UNIQUE(topic_id, agent_id)", "중복 큐 방지"],
+                ["debate_match_queue", "idx_queue_topic", "주제별 큐 조회"],
+            ],
+        )
+
+        h2(doc, "4.2 보안 제약사항")
+        para(doc, "매치 진행 중(in_progress) 에이전트 삭제 불가 — 애플리케이션 레벨 검증")
+        para(doc, "큐 진입 시 SELECT FOR UPDATE — 레이스 컨디션 방지")
+        para(doc, "버전 스냅샷: 매치 시작 시 agent_a_version_id 고정 — 이후 변경 불변")
+
+        # ── 섹션 5: 데이터 흐름 ────────────────────────────────────────────────
+        h1(doc, "5. 데이터 흐름")
+
+        h2(doc, "5.1 에이전트 생성 흐름")
+        code_para(doc, (
+            "POST /agents → AgentCreate 검증\n"
+            " ├── template_id 있으면: 템플릿 로드 → 프롬프트 조립\n"
+            " ├── api_key 있으면: Fernet.encrypt() → encrypted_api_key\n"
+            " └── system_prompt 없고 template 없으면 → 422\n"
+            "\n"
+            "DB INSERT: debate_agents\n"
+            "DB INSERT: debate_agent_versions (v1 스냅샷)\n"
+            "→ 반환: AgentResponse (elo_rating=1500)"
+        ))
+
+        h2(doc, "5.2 매치메이킹 흐름")
+        code_para(doc, (
+            "POST /topics/{id}/join → join_queue()\n"
+            " ├── 주제 status=open 검증\n"
+            " ├── 에이전트 소유권 검증 (admin 우회)\n"
+            " ├── API 키 또는 플랫폼 크레딧 검증\n"
+            " └── 에이전트당 1 토픽 대기 제한 검증\n"
+            "\n"
+            "SELECT FOR UPDATE → 동시 접근 직렬화\n"
+            "큐 < 2: INSERT debate_match_queue\n"
+            "큐 >= 2: DebateMatch 생성 → 큐 2개 삭제 → Redis PUBLISH matched"
+        ))
+
+        h2(doc, "5.3 토론 턴 저장 흐름")
+        code_para(doc, (
+            "_execute_turn() 완료 시:\n"
+            " 1. 페널티 탐지 (regex 7종)\n"
+            " 2. OptimizedOrchestrator.review_turn_fast() (LLM 또는 FastPath)\n"
+            " 3. DB INSERT: debate_turn_logs\n"
+            "    - claim, evidence, penalties, review_result, is_blocked\n"
+            "    - input_tokens, output_tokens 기록\n"
+            " 4. Redis PUBLISH: turn 이벤트"
+        ))
+
+        h2(doc, "5.4 매치 완료 및 ELO 갱신 흐름")
+        code_para(doc, (
+            "judge() 완료 시:\n"
+            " 1. score_a = sum(scorecard.agent_a) - penalty_a\n"
+            " 2. score_b = sum(scorecard.agent_b) - penalty_b\n"
+            " 3. |score_a - score_b| < 5 → 무승부\n"
+            " 4. calculate_elo(rating_a, rating_b, result)\n"
+            "    → 비대칭 K-factor (승 K=40, 패 K=24)\n"
+            " 5. DB UPDATE: debate_matches (status=completed, scorecard)\n"
+            " 6. DB UPDATE: debate_agents (elo_rating, tier, wins/losses)\n"
+            " 7. Redis PUBLISH: finished 이벤트"
+        ))
+
+        # ── 섹션 6: API 명세 (데이터 조회 관점) ──────────────────────────────
+        h1(doc, "6. API 명세 (데이터 조회 관점)")
+
+        h2(doc, "6.1 에이전트 조회 API")
+        add_table(
+            doc,
+            ["메서드", "경로", "설명", "주요 반환 필드"],
+            [
+                ["GET", "/agents/me", "내 에이전트 목록", "id, name, elo_rating, tier, wins/losses"],
+                ["GET", "/agents/ranking", "ELO 글로벌 랭킹", "elo_rating 기준 내림차순, tier 배지 포함"],
+                ["GET", "/agents/ranking/my", "내 에이전트들의 순위", "rank_position 포함"],
+                ["GET", "/agents/{id}", "에이전트 상세", "소유자=전체, 비소유자=공개 필드만"],
+                ["GET", "/agents/{id}/versions", "버전 히스토리", "version_number, wins/losses, created_at"],
+            ],
+        )
+
+        h2(doc, "6.2 주제 조회 API")
+        add_table(
+            doc,
+            ["메서드", "경로", "설명", "주요 반환 필드"],
+            [
+                ["GET", "/topics", "주제 목록", "sort=recent(기본)/popular_week, 페이지네이션"],
+                ["GET", "/topics/{id}", "주제 상세", "queue_count, match_count 포함"],
+                ["GET", "/topics/{id}/queue/status", "큐 상태", "queue_count, is_ready, joined_at"],
+            ],
+        )
+
+        h2(doc, "6.3 매치 조회 API")
+        add_table(
+            doc,
+            ["메서드", "경로", "설명", "주요 반환 필드"],
+            [
+                ["GET", "/matches/{id}", "매치 상세", "status, winner_id, score_a/b, elo 변동"],
+                ["GET", "/matches/{id}/turns", "턴 목록", "모든 발언, 페널티, review_result"],
+                ["GET", "/matches/{id}/scorecard", "스코어카드", "심판 4항목 점수, reasoning"],
+                ["GET", "/matches/{id}/stream", "SSE 스트림", "실시간 토큰, 턴, turn_review, finished"],
+            ],
+        )
+
+        h2(doc, "6.4 SSE 이벤트 타입 상세")
+        add_table(
+            doc,
+            ["이벤트", "발생 시점", "주요 페이로드"],
+            [
+                ["started", "토론 시작", "{match_id}"],
+                ["turn_chunk", "LLM 토큰 생성 중", "{turn_number, speaker, chunk}"],
+                ["turn", "턴 완료", "{action, claim, evidence, penalty_total, review_result, is_blocked}"],
+                ["turn_review", "LLM 검토 완료", "{logic_score, violations, is_blocked}"],
+                ["finished", "토론 완료", "{winner_id, score_a, score_b, elo_a, elo_b}"],
+                ["forfeit", "몰수패", "{reason, winner_id}"],
+            ],
+        )
+
+        # ── 섹션 7: 주요 쿼리 패턴 ────────────────────────────────────────────
+        h1(doc, "7. 주요 쿼리 패턴")
+
+        h2(doc, "7.1 ELO 랭킹 조회")
+        code_para(doc, (
+            "-- ELO 랭킹 (상위 100)\n"
+            "SELECT id, name, elo_rating, tier, wins, losses, draws,\n"
+            "       ROW_NUMBER() OVER (ORDER BY elo_rating DESC) AS rank_position\n"
+            "FROM debate_agents\n"
+            "WHERE is_active = TRUE\n"
+            "ORDER BY elo_rating DESC\n"
+            "LIMIT :limit OFFSET :offset;"
+        ))
+
+        h2(doc, "7.2 주제별 인기 정렬")
+        code_para(doc, (
+            "-- 주간 인기순 (최근 7일 매치 수)\n"
+            "SELECT t.*,\n"
+            "       COUNT(m.id) AS recent_match_count\n"
+            "FROM debate_topics t\n"
+            "LEFT JOIN debate_matches m\n"
+            "  ON m.topic_id = t.id\n"
+            "  AND m.created_at >= NOW() - INTERVAL '7 days'\n"
+            "GROUP BY t.id\n"
+            "ORDER BY recent_match_count DESC;"
+        ))
+
+        h2(doc, "7.3 매치의 모든 턴 + 검토 결과 조회")
+        code_para(doc, (
+            "SELECT turn_number, speaker, action, claim, evidence,\n"
+            "       penalty_total, penalties,\n"
+            "       review_result,     -- JSONB: logic_score, violations\n"
+            "       is_blocked,\n"
+            "       response_time_ms\n"
+            "FROM debate_turn_logs\n"
+            "WHERE match_id = :match_id\n"
+            "ORDER BY turn_number ASC;"
+        ))
+
+        h2(doc, "7.4 에이전트 버전별 전적 조회")
+        code_para(doc, (
+            "SELECT version_number, version_tag,\n"
+            "       wins, losses, draws,\n"
+            "       (wins::FLOAT / NULLIF(wins+losses+draws, 0)) AS win_rate,\n"
+            "       created_at\n"
+            "FROM debate_agent_versions\n"
+            "WHERE agent_id = :agent_id\n"
+            "ORDER BY version_number DESC;"
+        ))
+
+        h2(doc, "7.5 SQLAlchemy ORM 예시 (AsyncSession)")
+        code_para(doc, (
+            "# 에이전트 랭킹 조회 (ORM)\n"
+            "from sqlalchemy import select, func\n"
+            "\n"
+            "stmt = (\n"
+            "    select(DebateAgent)\n"
+            "    .where(DebateAgent.is_active == True)\n"
+            "    .order_by(DebateAgent.elo_rating.desc())\n"
+            "    .limit(limit).offset(offset)\n"
+            ")\n"
+            "result = await db.execute(stmt)\n"
+            "agents = result.scalars().all()"
+        ))
+
+        out = OUTPUT_DIR / "SKN21기_4Team_데이터베이스_및_조회_설계서.docx"
+        doc.save(str(out))
+        print(f"[OK] {out}")
+    except Exception as e:
+        print(f"[ERROR] 데이터베이스_및_조회_설계서: {e}")
+
+
 # ── 진입점 ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     build_기획서_v2()
@@ -1114,4 +1605,5 @@ if __name__ == "__main__":
     build_수집_데이터_명세서_v2()
     build_AI_학습_결과서_v2()
     build_에이전트_오케스트레이션_설계서()
+    build_데이터베이스_및_조회_설계서()
     print("모든 문서 생성 완료")
