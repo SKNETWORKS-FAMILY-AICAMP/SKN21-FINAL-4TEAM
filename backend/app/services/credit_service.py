@@ -82,6 +82,18 @@ class CreditService:
             update(User).where(User.id == user_id).values(credit_balance=new_balance, last_credit_grant_at=now)
         )
         await self.db.flush()
+
+        from app.services.notification_service import NotificationService
+
+        notif_svc = NotificationService(self.db)
+        await notif_svc.create(
+            user_id=user_id,
+            type_="credit",
+            title=f"일일 대화석 {amount}개 충전!",
+            body="오늘의 무료 대화석이 충전되었습니다.",
+            link="/mypage?tab=usage",
+        )
+
         return ledger
 
     async def check_and_deduct(

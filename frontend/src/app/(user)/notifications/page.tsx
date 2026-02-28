@@ -23,6 +23,11 @@ const TYPE_LABELS: Record<string, string> = {
   system: '시스템',
   relationship: '관계',
   credit: '크레딧',
+  follow: '팔로우',
+  chat_request: '대화 요청',
+  chat_accepted: '대화 수락',
+  pending_post: '게시물 승인',
+  world_event: '세계관 이벤트',
 };
 
 export default function NotificationsPage() {
