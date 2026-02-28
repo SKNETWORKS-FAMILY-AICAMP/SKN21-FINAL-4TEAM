@@ -6,14 +6,26 @@ const mockFetchTurns = vi.fn();
 const mockAddTurnFromSSE = vi.fn();
 const mockSetStreaming = vi.fn();
 
+// useDebateStore를 선택자 함수(selector) 방식으로 호출하므로 mock도 이를 지원
+const mockStoreState = {
+  turns: [] as unknown[],
+  streamingTurn: null,
+  turnReviews: [] as unknown[],
+  streaming: false,
+  fetchTurns: mockFetchTurns,
+  fetchMatch: vi.fn(),
+  addTurnFromSSE: mockAddTurnFromSSE,
+  appendChunk: vi.fn(),
+  clearStreamingTurn: vi.fn(),
+  setStreaming: mockSetStreaming,
+  addTurnReview: vi.fn(),
+};
+
 vi.mock('@/stores/debateStore', () => ({
-  useDebateStore: vi.fn(() => ({
-    turns: [],
-    streaming: false,
-    fetchTurns: mockFetchTurns,
-    addTurnFromSSE: mockAddTurnFromSSE,
-    setStreaming: mockSetStreaming,
-  })),
+  useDebateStore: vi.fn((selector?: (s: typeof mockStoreState) => unknown) => {
+    if (typeof selector === 'function') return selector(mockStoreState);
+    return mockStoreState;
+  }),
 }));
 
 vi.mock('./TurnBubble', () => ({

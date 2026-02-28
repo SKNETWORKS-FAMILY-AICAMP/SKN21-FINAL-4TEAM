@@ -13,8 +13,18 @@ type Props = {
 };
 
 export function DebateViewer({ match }: Props) {
-  const { turns, streamingTurn, turnReviews, streaming, fetchTurns, fetchMatch, addTurnFromSSE, appendChunk, clearStreamingTurn, setStreaming, addTurnReview } =
-    useDebateStore();
+  // 슬라이스별 구독 — appendChunk로 streamingTurn이 바뀔 때 turns는 재렌더링하지 않음
+  const turns = useDebateStore((s) => s.turns);
+  const streamingTurn = useDebateStore((s) => s.streamingTurn);
+  const turnReviews = useDebateStore((s) => s.turnReviews);
+  const streaming = useDebateStore((s) => s.streaming);
+  const fetchTurns = useDebateStore((s) => s.fetchTurns);
+  const fetchMatch = useDebateStore((s) => s.fetchMatch);
+  const addTurnFromSSE = useDebateStore((s) => s.addTurnFromSSE);
+  const appendChunk = useDebateStore((s) => s.appendChunk);
+  const clearStreamingTurn = useDebateStore((s) => s.clearStreamingTurn);
+  const setStreaming = useDebateStore((s) => s.setStreaming);
+  const addTurnReview = useDebateStore((s) => s.addTurnReview);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 

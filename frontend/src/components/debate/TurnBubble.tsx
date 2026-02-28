@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight, Ban } from 'lucide-react';
 import type { TurnLog, TurnReview } from '@/stores/debateStore';
 
@@ -67,7 +67,8 @@ function LogicScoreBar({ score }: { score: number | null }) {
   );
 }
 
-export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review }: Props) {
+// SSE 스트리밍 중 매 청크마다 완료된 턴이 불필요하게 재렌더링되는 것을 방지
+export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
@@ -222,4 +223,6 @@ export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agent
       </div>
     </div>
   );
-}
+});
+
+TurnBubble.displayName = 'TurnBubble';
