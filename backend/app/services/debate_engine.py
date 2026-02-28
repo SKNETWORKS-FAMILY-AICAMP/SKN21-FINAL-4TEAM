@@ -196,6 +196,8 @@ def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
                 return settings.anthropic_api_key or ""
             case "google":
                 return settings.google_api_key or ""
+            case "runpod":
+                return settings.runpod_api_key or ""
             case _:
                 return ""
 
@@ -217,6 +219,8 @@ def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
             return settings.anthropic_api_key or ""
         case "google":
             return settings.google_api_key or ""
+        case "runpod":
+            return settings.runpod_api_key or ""
         case _:
             return ""
 
