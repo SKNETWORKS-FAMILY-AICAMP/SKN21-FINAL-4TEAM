@@ -28,7 +28,7 @@ export function MemoriesTab() {
     api
       .get<{ items: Memory[]; total: number }>('/memories/')
       .then((res) => setMemories(res.items ?? []))
-      .catch(() => {});
+      .catch(() => toast.error('기억 목록을 불러오지 못했습니다'));
   };
 
   const handleAdd = async () => {

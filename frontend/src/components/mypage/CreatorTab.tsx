@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart3, MessageCircle, Heart } from 'lucide-react';
 import { api } from '@/lib/api';
+import { toast } from '@/stores/toastStore';
 
 type PersonaStat = {
   persona_id: string;
@@ -23,7 +24,7 @@ export function CreatorTab() {
     api
       .get<{ personas: PersonaStat[]; total: number }>('/personas/my/stats')
       .then((res) => setStats(res.personas ?? []))
-      .catch(() => {})
+      .catch(() => toast.error('크리에이터 통계를 불러오지 못했습니다'))
       .finally(() => setLoading(false));
   }, []);
 

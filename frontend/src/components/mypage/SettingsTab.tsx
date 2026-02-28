@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, Bot, Gem } from 'lucide-react';
 import { api } from '@/lib/api';
+import { toast } from '@/stores/toastStore';
 import { useUserStore } from '@/stores/userStore';
 import { AdultVerifyModal } from '@/components/auth/AdultVerifyModal';
 
@@ -27,7 +28,7 @@ export function SettingsTab() {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
 
   useEffect(() => {
-    api.get<LLMModel[]>('/models').then(setModels).catch(() => {});
+    api.get<LLMModel[]>('/models').then(setModels).catch(() => toast.error('모델 목록을 불러오지 못했습니다'));
     if (user?.preferredLlmModelId) {
       setSelectedModel(user.preferredLlmModelId);
     }

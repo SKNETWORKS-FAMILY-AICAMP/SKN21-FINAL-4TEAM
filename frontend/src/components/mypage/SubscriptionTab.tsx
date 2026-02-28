@@ -43,7 +43,7 @@ export function SubscriptionTab() {
         setPlans(p);
         setMySub(s);
       })
-      .catch(() => {})
+      .catch(() => toast.error('구독 정보를 불러오지 못했습니다'))
       .finally(() => setLoading(false));
   }, []);
 

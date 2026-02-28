@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Gem } from 'lucide-react';
 import { api } from '@/lib/api';
+import { toast } from '@/stores/toastStore';
 import { SkeletonStat } from '@/components/ui/Skeleton';
 
 type ModelUsage = {
@@ -91,7 +92,7 @@ export function UsageTab() {
     api
       .get<UsageSummary>('/usage/me')
       .then((s) => setSummary(s))
-      .catch(() => {})
+      .catch(() => toast.error('사용량 정보를 불러오지 못했습니다'))
       .finally(() => setLoading(false));
   }, []);
 

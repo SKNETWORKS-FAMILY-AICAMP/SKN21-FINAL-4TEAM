@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Bell, CheckCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { toast } from '@/stores/toastStore';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 type Notification = {
@@ -41,7 +42,7 @@ export default function NotificationsPage() {
     api
       .get<{ items: Notification[]; total: number }>(`/notifications/${params}`)
       .then((res) => setNotifications(res.items ?? []))
-      .catch(() => {})
+      .catch(() => toast.error('알림을 불러오지 못했습니다'))
       .finally(() => setLoading(false));
   }, [filter]);
 

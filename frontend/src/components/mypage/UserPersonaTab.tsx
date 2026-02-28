@@ -28,7 +28,7 @@ export function UserPersonaTab() {
     api
       .get<UserPersona[]>('/user-personas/')
       .then(setPersonas)
-      .catch(() => {});
+      .catch(() => toast.error('캐릭터 목록을 불러오지 못했습니다'));
   };
 
   const handleSubmit = async () => {
