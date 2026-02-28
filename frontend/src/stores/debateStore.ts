@@ -133,7 +133,9 @@ type DebateState = {
   streamingTurn: StreamingTurn | null;
   turnReviews: TurnReview[];
   ranking: RankingEntry[];
-  loading: boolean;
+  topicsLoading: boolean;
+  matchLoading: boolean;
+  rankingLoading: boolean;
   streaming: boolean;
   fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
@@ -163,10 +165,12 @@ export const useDebateStore = create<DebateState>((set) => ({
   streamingTurn: null,
   turnReviews: [],
   ranking: [],
-  loading: false,
+  topicsLoading: false,
+  matchLoading: false,
+  rankingLoading: false,
   streaming: false,
   fetchTopics: async (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => {
-    set({ loading: true });
+    set({ topicsLoading: true });
     try {
       const { status, sort, page = 1, pageSize = 20 } = params ?? {};
       const queryParams = new URLSearchParams();
@@ -179,11 +183,11 @@ export const useDebateStore = create<DebateState>((set) => ({
     } catch (err) {
       console.error('Failed to fetch topics:', err);
     } finally {
-      set({ loading: false });
+      set({ topicsLoading: false });
     }
   },
   fetchPopularTopics: async () => {
-    set({ loading: true });
+    set({ topicsLoading: true });
     try {
       const data = await api.get<{ items: DebateTopic[]; total: number }>(
         '/topics?sort=popular_week&page_size=10',
@@ -192,19 +196,19 @@ export const useDebateStore = create<DebateState>((set) => ({
     } catch (err) {
       console.error('Failed to fetch popular topics:', err);
     } finally {
-      set({ loading: false });
+      set({ topicsLoading: false });
     }
   },
   fetchMatch: async (matchId) => {
     // 새 매치 로드 전 이전 턴 초기화 — 같은 상대와의 이전 매치 내용이 잔류하지 않도록
-    set({ loading: true, turns: [], streamingTurn: null, turnReviews: [] });
+    set({ matchLoading: true, turns: [], streamingTurn: null, turnReviews: [] });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
       set({ currentMatch: data });
     } catch (err) {
       console.error('Failed to fetch match:', err);
     } finally {
-      set({ loading: false });
+      set({ matchLoading: false });
     }
   },
   fetchTurns: async (matchId) => {
@@ -216,14 +220,14 @@ export const useDebateStore = create<DebateState>((set) => ({
     }
   },
   fetchRanking: async () => {
-    set({ loading: true });
+    set({ rankingLoading: true });
     try {
       const data = await api.get<RankingEntry[]>('/agents/ranking');
       set({ ranking: data });
     } catch (err) {
       console.error('Failed to fetch ranking:', err);
     } finally {
-      set({ loading: false });
+      set({ rankingLoading: false });
     }
   },
   createTopic: async (payload) => {

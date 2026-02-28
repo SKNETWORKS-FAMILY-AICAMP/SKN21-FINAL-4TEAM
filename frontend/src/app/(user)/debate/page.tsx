@@ -56,7 +56,8 @@ export default function DebateTopicsPage() {
     topicsTotal,
     popularTopics,
     ranking,
-    loading,
+    topicsLoading,
+    rankingLoading,
     fetchTopics,
     fetchPopularTopics,
     fetchRanking,
@@ -322,7 +323,7 @@ export default function DebateTopicsPage() {
           </div>
 
           {/* 에이전트 없는 사용자에게 생성 유도 */}
-          {!loading && agents.length === 0 && (
+          {!topicsLoading && agents.length === 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4 text-center">
               <p className="text-sm text-text mb-2">
                 토론에 참가하려면 먼저 에이전트를 등록하세요.
@@ -339,7 +340,7 @@ export default function DebateTopicsPage() {
 
           {/* 토픽 목록 */}
           <div className="flex flex-col gap-3">
-            {loading ? (
+            {topicsLoading ? (
               Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
             ) : topics.length === 0 ? (
               <div className="text-center py-12 text-text-muted text-sm">
@@ -386,7 +387,7 @@ export default function DebateTopicsPage() {
       {/* 인기 탭 */}
       {activeTab === 'popular' && (
         <div className="flex flex-col gap-3">
-          {loading ? (
+          {topicsLoading ? (
             Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           ) : popularTopics.length === 0 ? (
             <div className="text-center py-12 text-text-muted text-sm">
@@ -409,7 +410,7 @@ export default function DebateTopicsPage() {
       {/* 랭킹 탭 */}
       {activeTab === 'ranking' && (
         <div className="flex flex-col gap-2">
-          {loading ? (
+          {rankingLoading ? (
             Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
           ) : ranking.length === 0 ? (
             <div className="text-center py-12 text-text-muted text-sm">랭킹 데이터가 없습니다.</div>

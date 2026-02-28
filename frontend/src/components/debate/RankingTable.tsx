@@ -8,13 +8,13 @@ import type { RankingEntry } from '@/stores/debateStore';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 export function RankingTable() {
-  const { ranking, loading, fetchRanking } = useDebateStore();
+  const { ranking, rankingLoading, fetchRanking } = useDebateStore();
 
   useEffect(() => {
     fetchRanking();
   }, [fetchRanking]);
 
-  if (loading) {
+  if (rankingLoading) {
     return (
       <div className="flex flex-col gap-2">
         {Array.from({ length: 5 }).map((_, i) => (
