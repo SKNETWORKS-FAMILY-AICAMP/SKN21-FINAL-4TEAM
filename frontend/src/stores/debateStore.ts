@@ -74,6 +74,7 @@ type TurnLog = {
     violations: { type: string; severity: string; detail: string }[];
     feedback: string;
     blocked: boolean;
+    skipped?: boolean;
   } | null;
   is_blocked: boolean;
   created_at: string;
@@ -86,6 +87,7 @@ type TurnReview = {
   violations: { type: string; severity: string; detail: string }[];
   feedback: string;
   blocked: boolean;
+  skipped?: boolean;
 };
 
 type StreamingTurn = {
@@ -262,7 +264,20 @@ export const useDebateStore = create<DebateState>((set) => ({
     await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);
   },
   addTurnFromSSE: (turn) => {
-    set((s) => ({ turns: [...s.turns, turn], streamingTurn: null }));
+    set((s) => {
+      const exists = s.turns.some(
+        (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
+      );
+      if (exists) {
+        return {
+          turns: s.turns.map((t) =>
+            t.turn_number === turn.turn_number && t.speaker === turn.speaker ? turn : t,
+          ),
+          streamingTurn: null,
+        };
+      }
+      return { turns: [...s.turns, turn], streamingTurn: null };
+    });
   },
   addTurnReview: (review) => {
     set((s) => ({ turnReviews: [...s.turnReviews, review] }));
