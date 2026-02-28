@@ -67,7 +67,16 @@ class CreditService:
 
         plan = await self._get_user_plan(user_id)
         amount = plan.daily_credits
-        new_balance = user.credit_balance + amount
+
+        # 원자적 증가 — Python 스냅샷 기반 계산의 lost update 방지
+        update_result = await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount, last_credit_grant_at=now)
+            .returning(User.credit_balance)
+        )
+        row = update_result.fetchone()
+        new_balance = row.credit_balance if row else user.credit_balance + amount
 
         ledger = CreditLedger(
             user_id=user_id,
@@ -77,10 +86,6 @@ class CreditService:
             description=f"일일 충전 ({plan.display_name})",
         )
         self.db.add(ledger)
-
-        await self.db.execute(
-            update(User).where(User.id == user_id).values(credit_balance=new_balance, last_credit_grant_at=now)
-        )
         await self.db.flush()
 
         # 알림은 best-effort — 실패해도 크레딧 지급은 계속
@@ -211,12 +216,20 @@ class CreditService:
         pkg = PURCHASE_PACKAGES[package]
         amount = pkg["credits"]
 
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if user is None:
+        # 존재 확인
+        exists = await self.db.execute(select(User.id).where(User.id == user_id))
+        if exists.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        new_balance = user.credit_balance + amount
+        # 원자적 증가 — lost update 방지
+        update_result = await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount)
+            .returning(User.credit_balance)
+        )
+        row = update_result.fetchone()
+        new_balance = row.credit_balance
 
         ledger = CreditLedger(
             user_id=user_id,
@@ -226,8 +239,6 @@ class CreditService:
             description=f"대화석 구매 ({package}: {amount}석)",
         )
         self.db.add(ledger)
-
-        await self.db.execute(update(User).where(User.id == user_id).values(credit_balance=new_balance))
         await self.db.commit()
 
         return {
@@ -238,12 +249,20 @@ class CreditService:
 
     async def admin_grant(self, user_id: uuid.UUID, amount: int, description: str | None = None) -> CreditLedger:
         """관리자 크레딧 지급."""
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if user is None:
+        # 존재 확인
+        exists = await self.db.execute(select(User.id).where(User.id == user_id))
+        if exists.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        new_balance = user.credit_balance + amount
+        # 원자적 증가 — lost update 방지
+        update_result = await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount)
+            .returning(User.credit_balance)
+        )
+        row = update_result.fetchone()
+        new_balance = row.credit_balance
 
         ledger = CreditLedger(
             user_id=user_id,
@@ -253,8 +272,6 @@ class CreditService:
             description=description or f"관리자 지급: +{amount}석",
         )
         self.db.add(ledger)
-
-        await self.db.execute(update(User).where(User.id == user_id).values(credit_balance=new_balance))
         await self.db.commit()
         await self.db.refresh(ledger)
         return ledger

@@ -70,7 +70,12 @@ class TestGrantDailyCredits:
         sub_result.scalar_one_or_none.return_value = None
         free_result = MagicMock()
         free_result.scalar_one_or_none.return_value = plan
-        db.execute = AsyncMock(side_effect=[user_result, sub_result, free_result, AsyncMock()])
+        # UPDATE ... RETURNING → fetchone().credit_balance = 60
+        update_result = MagicMock()
+        returning_row = MagicMock()
+        returning_row.credit_balance = 60
+        update_result.fetchone.return_value = returning_row
+        db.execute = AsyncMock(side_effect=[user_result, sub_result, free_result, update_result])
 
         service = CreditService(db)
         ledger = await service.grant_daily_credits(user.id)
@@ -151,9 +156,15 @@ class TestPurchaseCredits:
         user = _make_user(credit_balance=100)
 
         db = AsyncMock()
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = user
-        db.execute = AsyncMock(side_effect=[user_result, AsyncMock()])
+        # select(User.id) 존재 확인 → scalar_one_or_none returns user.id (non-None)
+        exists_result = MagicMock()
+        exists_result.scalar_one_or_none.return_value = user.id
+        # UPDATE ... RETURNING → fetchone().credit_balance = 600
+        update_result = MagicMock()
+        returning_row = MagicMock()
+        returning_row.credit_balance = 600
+        update_result.fetchone.return_value = returning_row
+        db.execute = AsyncMock(side_effect=[exists_result, update_result])
         db.commit = AsyncMock()
 
         service = CreditService(db)
