@@ -280,7 +280,19 @@ export const useDebateStore = create<DebateState>((set) => ({
     });
   },
   addTurnReview: (review) => {
-    set((s) => ({ turnReviews: [...s.turnReviews, review] }));
+    set((s) => {
+      const exists = s.turnReviews.some(
+        (r) => r.turn_number === review.turn_number && r.speaker === review.speaker,
+      );
+      if (exists) {
+        return {
+          turnReviews: s.turnReviews.map((r) =>
+            r.turn_number === review.turn_number && r.speaker === review.speaker ? review : r,
+          ),
+        };
+      }
+      return { turnReviews: [...s.turnReviews, review] };
+    });
   },
   appendChunk: (turn_number, speaker, chunk) => {
     set((s) => {
