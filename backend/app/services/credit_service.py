@@ -83,16 +83,20 @@ class CreditService:
         )
         await self.db.flush()
 
-        from app.services.notification_service import NotificationService
+        # 알림은 best-effort — 실패해도 크레딧 지급은 계속
+        try:
+            from app.services.notification_service import NotificationService
 
-        notif_svc = NotificationService(self.db)
-        await notif_svc.create(
-            user_id=user_id,
-            type_="credit",
-            title=f"일일 대화석 {amount}개 충전!",
-            body="오늘의 무료 대화석이 충전되었습니다.",
-            link="/mypage?tab=usage",
-        )
+            notif_svc = NotificationService(self.db)
+            await notif_svc.create(
+                user_id=user_id,
+                type_="credit",
+                title=f"일일 대화석 {amount}개 충전!",
+                body="오늘의 무료 대화석이 충전되었습니다.",
+                link="/mypage?tab=usage",
+            )
+        except Exception:
+            logger.warning("grant_daily_credits: 알림 생성 실패 (user_id=%s)", user_id)
 
         return ledger
 
