@@ -3,6 +3,7 @@
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import verify_password
@@ -81,7 +82,14 @@ class DebateMatchingService:
             user_id=user.id,
         )
         self.db.add(entry)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            constraint = str(exc.orig)
+            if "uq_debate_queue_topic_agent" in constraint:
+                raise ValueError("Agent already in queue for this topic")
+            raise ValueError("이미 대기 중인 항목이 있습니다. 잠시 후 다시 시도하세요.") from exc
 
         # 이미 대기 중인 다른 사용자 확인 (자기 매칭 방지)
         opponent_result = await self.db.execute(

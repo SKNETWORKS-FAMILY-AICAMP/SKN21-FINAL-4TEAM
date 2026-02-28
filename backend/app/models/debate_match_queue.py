@@ -37,5 +37,4 @@ class DebateMatchQueue(Base):
 
     __table_args__ = (
         UniqueConstraint("topic_id", "agent_id", name="uq_debate_queue_topic_agent"),
-        UniqueConstraint("user_id", name="uq_debate_queue_user"),
     )
