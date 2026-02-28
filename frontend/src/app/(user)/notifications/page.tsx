@@ -5,6 +5,7 @@ import { Bell, CheckCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 type Notification = {
@@ -33,11 +34,14 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  // 스토어 액션 재사용 → markAsRead/markAllAsRead가 unreadCount를 갱신해 헤더 배지 자동 동기화
+  const { markAsRead, markAllAsRead } = useNotificationStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   useEffect(() => {
+    setLoading(true);
     const params = filter === 'unread' ? '?is_read=false' : '';
     api
       .get<{ items: Notification[]; total: number }>(`/notifications/${params}`)
@@ -47,14 +51,16 @@ export default function NotificationsPage() {
   }, [filter]);
 
   const handleMarkAllRead = async () => {
-    await api.post('/notifications/read-all');
+    await markAllAsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 
   const handleClick = async (n: Notification) => {
     if (!n.is_read) {
-      await api.patch(`/notifications/${n.id}/read`);
-      setNotifications((prev) => prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item)));
+      await markAsRead(n.id);
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item)),
+      );
     }
     if (n.link) router.push(n.link);
   };
@@ -100,6 +106,8 @@ export default function NotificationsPage() {
           <button
             key={n.id}
             onClick={() => handleClick(n)}
+            disabled={loading}
+            aria-label={`${n.title}${!n.is_read ? ' (미읽음)' : ''}`}
             className={`w-full text-left p-4 rounded-xl border transition-colors cursor-pointer ${
               n.is_read
                 ? 'bg-bg-surface border-border hover:border-primary/30'
