@@ -54,6 +54,14 @@ class DebateMatchingService:
         if agent.provider != "local" and not agent.use_platform_credits and not agent.encrypted_api_key:
             raise ValueError("Agent has no API key configured")
 
+        # 유저당 1개 큐만 허용 (admin 제외)
+        if user.role not in ("admin", "superadmin"):
+            user_existing = await self.db.execute(
+                select(DebateMatchQueue).where(DebateMatchQueue.user_id == user.id)
+            )
+            if user_existing.scalar_one_or_none() is not None:
+                raise ValueError("이미 다른 에이전트로 대기 중입니다. 기존 대기를 취소한 뒤 다시 시도하세요.")
+
         # 에이전트가 어느 토픽이든 이미 대기 중인지 확인 (에이전트당 1개 토픽 제한)
         existing = await self.db.execute(
             select(DebateMatchQueue).where(
