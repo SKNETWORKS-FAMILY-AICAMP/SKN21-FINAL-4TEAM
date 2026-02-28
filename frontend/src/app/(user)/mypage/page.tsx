@@ -39,7 +39,8 @@ function MyPageContent() {
       <h1 className="page-title">마이페이지</h1>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-border overflow-x-auto scrollbar-hide">
+      <div className="relative mb-6">
+      <div className="flex gap-1 border-b border-border overflow-x-auto scrollbar-hide">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = currentTab === tab.key;
@@ -58,6 +59,8 @@ function MyPageContent() {
             </button>
           );
         })}
+      </div>
+      <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg to-transparent pointer-events-none md:hidden" />
       </div>
 
       {/* Tab content */}
@@ -80,7 +83,7 @@ export default function MyPage() {
         <div className="max-w-[800px] mx-auto py-6 px-4">
           <div className="h-8 w-32 bg-bg-hover rounded animate-pulse mb-6" />
           <div className="flex gap-1 mb-6 border-b border-border">
-            {Array.from({ length: 7 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-10 w-20 bg-bg-hover rounded animate-pulse" />
             ))}
           </div>
