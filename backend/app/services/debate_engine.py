@@ -674,15 +674,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
         judgment["output_tokens"],
     )
 
-    match.scorecard = judgment["scorecard"]
-    match.score_a = judgment["score_a"]
-    match.score_b = judgment["score_b"]
-    match.winner_id = judgment["winner_id"]
-    match.status = "completed"
-    match.finished_at = datetime.now(UTC)
-    await db.commit()
-
-    # ELO 갱신 (제로섬: 판정 점수차만큼 이전)
+    # ELO 계산 (커밋 전 먼저 수행)
     if judgment["winner_id"] == match.agent_a_id:
         elo_result = "a_win"
     elif judgment["winner_id"] == match.agent_b_id:
@@ -695,6 +687,15 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     elo_b_before = agent_b.elo_rating
     new_a, new_b = calculate_elo(elo_a_before, elo_b_before, elo_result, score_diff=score_diff)
 
+    # 판정 결과 + ELO + ELO before/after를 단일 트랜잭션으로 커밋
+    # (중간 실패 시 scorecard와 ELO가 불일치 상태로 남는 문제 방지)
+    match.scorecard = judgment["scorecard"]
+    match.score_a = judgment["score_a"]
+    match.score_b = judgment["score_b"]
+    match.winner_id = judgment["winner_id"]
+    match.status = "completed"
+    match.finished_at = datetime.now(UTC)
+
     agent_service = DebateAgentService(db)
     result_a = "win" if elo_result == "a_win" else ("loss" if elo_result == "b_win" else "draw")
     result_b = "win" if elo_result == "b_win" else ("loss" if elo_result == "a_win" else "draw")
@@ -706,9 +707,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
         str(agent_b.id), new_b, result_b,
         str(match.agent_b_version_id) if match.agent_b_version_id else None,
     )
-    await db.commit()
 
-    # ELO 변동 기록 (match 테이블에 before/after 저장)
     await db.execute(
         update(DebateMatch)
         .where(DebateMatch.id == match.id)
