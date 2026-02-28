@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,4 +37,6 @@ class DebateMatchQueue(Base):
 
     __table_args__ = (
         UniqueConstraint("topic_id", "agent_id", name="uq_debate_queue_topic_agent"),
+        Index("idx_debate_queue_user_id", "user_id"),
+        Index("idx_debate_queue_agent_id", "agent_id"),
     )
