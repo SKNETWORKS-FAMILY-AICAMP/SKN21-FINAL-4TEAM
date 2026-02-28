@@ -185,8 +185,16 @@ export function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agent
           </div>
         )}
 
+        {/* fast path 통과 — 규칙 위반 없음 라벨 */}
+        {review && review.skipped && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-text-muted">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>빠른 통과 — 규칙 위반 없음</span>
+          </div>
+        )}
+
         {/* LLM 검토 결과 — fast path(skipped)이면 아무것도 표시 안 함 */}
-        {review && (review.logic_score != null || review.violations.length > 0 || review.blocked) && (
+        {review && !review.skipped && (review.logic_score != null || review.violations.length > 0 || review.blocked) && (
           <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>
