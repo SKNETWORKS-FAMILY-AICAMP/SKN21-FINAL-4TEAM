@@ -34,6 +34,7 @@ const config: Config = {
           hover: '#333333',
           tag: '#333333',
           input: '#1e1e1e',
+          muted: '#3a3a3a',
         },
         border: {
           DEFAULT: '#333333',
