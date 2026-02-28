@@ -111,6 +111,75 @@ class DebateOrchestrator:
     def __init__(self):
         self.client = InferenceClient()
 
+    async def _call_review_llm(
+        self,
+        model_id: str,
+        api_key: str,
+        messages: list[dict],
+    ) -> tuple[dict, int, int]:
+        """LLM 호출 → 마크다운 제거 → JSON 파싱 → raw review dict 반환.
+
+        반환: (review_dict, input_tokens, output_tokens)
+        LLM 호출·파싱 실패 시 예외를 그대로 전파한다. 호출자가 폴백 처리 담당.
+        """
+        result = await asyncio.wait_for(
+            self.client._call_openai_byok(
+                model_id=model_id,
+                api_key=api_key,
+                messages=messages,
+                max_tokens=256,
+                temperature=0.1,
+            ),
+            timeout=settings.debate_turn_review_timeout,
+        )
+        raw_content = result.get("content", "")
+        input_tokens = result.get("input_tokens", 0)
+        output_tokens = result.get("output_tokens", 0)
+        content = raw_content.strip()
+        # 마크다운 코드블록 제거
+        if "```" in content:
+            content = re.sub(r"```(?:json)?\s*", "", content)
+            content = re.sub(r"```", "", content).strip()
+        # JSON 객체 추출 (앞뒤 텍스트 제거)
+        json_match = re.search(r"\{[\s\S]*\}", content)
+        if json_match:
+            content = json_match.group(0)
+        review = json.loads(content)
+        return review, input_tokens, output_tokens
+
+    def _build_review_result(
+        self,
+        review: dict,
+        input_tokens: int,
+        output_tokens: int,
+        skipped: bool = False,
+    ) -> dict:
+        """파싱된 review dict를 최종 결과 dict로 변환."""
+        penalties: dict[str, int] = {}
+        for v in review.get("violations", []):
+            v_type = v.get("type", "")
+            if v_type in LLM_VIOLATION_PENALTIES:
+                penalties[v_type] = LLM_VIOLATION_PENALTIES[v_type]
+        penalty_total = sum(penalties.values())
+        block = bool(review.get("block", False))
+        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if block else None
+
+        result = {
+            "logic_score": int(review.get("logic_score", 5)),
+            "violations": review.get("violations", []),
+            "feedback": review.get("feedback", ""),
+            "block": block,
+            "penalties": penalties,
+            "penalty_total": penalty_total,
+            "blocked_claim": blocked_claim,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
+        # OptimizedDebateOrchestrator의 review_turn_fast는 skipped 플래그를 포함
+        if skipped is not None:
+            result["skipped"] = skipped
+        return result
+
     async def review_turn(
         self,
         topic: str,
@@ -146,67 +215,23 @@ class DebateOrchestrator:
             logger.debug("review_turn skipped: openai_api_key not configured")
             return self._review_fallback()
 
-        raw_content = ""
-        input_tokens = 0
-        output_tokens = 0
         try:
-            result = await asyncio.wait_for(
-                self.client._call_openai_byok(
-                    model_id=model_id,
-                    api_key=settings.openai_api_key,
-                    messages=messages,
-                    max_tokens=256,
-                    temperature=0.1,
-                ),
-                timeout=settings.debate_turn_review_timeout,
+            review, input_tokens, output_tokens = await self._call_review_llm(
+                model_id=model_id,
+                api_key=settings.openai_api_key,
+                messages=messages,
             )
-            raw_content = result.get("content", "")
-            input_tokens = result.get("input_tokens", 0)
-            output_tokens = result.get("output_tokens", 0)
-            content = raw_content.strip()
-            # 마크다운 코드블록 제거
-            if "```" in content:
-                content = re.sub(r"```(?:json)?\s*", "", content)
-                content = re.sub(r"```", "", content).strip()
-            # JSON 객체 추출 (앞뒤 텍스트 제거)
-            json_match = re.search(r"\{[\s\S]*\}", content)
-            if json_match:
-                content = json_match.group(0)
-            review = json.loads(content)
         except (TimeoutError, asyncio.TimeoutError):
             logger.warning("review_turn timeout for turn %d speaker=%s", turn_number, speaker)
             return self._review_fallback()
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
-            logger.warning(
-                "review_turn parse error: %s | raw: %.300s", exc, raw_content
-            )
+            logger.warning("review_turn parse error: %s", exc)
             return self._review_fallback()
         except Exception as exc:
             logger.error("review_turn unexpected error: %s", exc)
             return self._review_fallback()
 
-        # 벌점 산출
-        penalties: dict[str, int] = {}
-        for v in review.get("violations", []):
-            v_type = v.get("type", "")
-            if v_type in LLM_VIOLATION_PENALTIES:
-                penalties[v_type] = LLM_VIOLATION_PENALTIES[v_type]
-        penalty_total = sum(penalties.values())
-
-        block = bool(review.get("block", False))
-        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if block else None
-
-        return {
-            "logic_score": int(review.get("logic_score", 5)),
-            "violations": review.get("violations", []),
-            "feedback": review.get("feedback", ""),
-            "block": block,
-            "penalties": penalties,
-            "penalty_total": penalty_total,
-            "blocked_claim": blocked_claim,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        }
+        return self._build_review_result(review, input_tokens, output_tokens)
 
     def _review_fallback(self) -> dict:
         """검토 실패 시 토론을 중단하지 않기 위한 안전 폴백."""
@@ -222,15 +247,16 @@ class DebateOrchestrator:
             "output_tokens": 0,
         }
 
-    async def judge(
+    async def _judge_with_model(
         self,
         match: DebateMatch,
         turns: list[DebateTurnLog],
         topic: DebateTopic,
-        agent_a_name: str = "에이전트 A",
-        agent_b_name: str = "에이전트 B",
+        agent_a_name: str,
+        agent_b_name: str,
+        model_id: str,
     ) -> dict:
-        """LLM으로 토론 판정. 스코어카드 dict 반환.
+        """지정된 model_id로 LLM 판정을 수행하고 스코어카드·점수·승패를 반환한다.
 
         A/B 라벨을 50% 확률로 스왑하여 발언 순서 편향을 제거한다.
         스왑 시 scorecard를 역변환하여 원래 A/B 에이전트에 점수를 복원한다.
@@ -250,9 +276,8 @@ class DebateOrchestrator:
         judge_output_tokens = 0
         raw_content = ""
         try:
-            # 플랫폼 키로 오케스트레이터 모델 호출
             result = await self.client._call_openai_byok(
-                model_id=settings.debate_orchestrator_model,
+                model_id=model_id,
                 api_key=settings.openai_api_key,
                 messages=messages,
                 max_tokens=1024,
@@ -327,6 +352,20 @@ class DebateOrchestrator:
             "output_tokens": judge_output_tokens,
         }
 
+    async def judge(
+        self,
+        match: DebateMatch,
+        turns: list[DebateTurnLog],
+        topic: DebateTopic,
+        agent_a_name: str = "에이전트 A",
+        agent_b_name: str = "에이전트 B",
+    ) -> dict:
+        """LLM으로 토론 판정. 스코어카드 dict 반환."""
+        return await self._judge_with_model(
+            match, turns, topic, agent_a_name, agent_b_name,
+            model_id=settings.debate_orchestrator_model,
+        )
+
     def _format_debate_log(
         self,
         turns: list[DebateTurnLog],
@@ -400,62 +439,23 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
             logger.debug("review_turn_fast skipped: openai_api_key not configured")
             return self._review_fallback()
 
-        raw_content = ""
-        input_tokens = 0
-        output_tokens = 0
         try:
-            result = await asyncio.wait_for(
-                self.client._call_openai_byok(
-                    model_id=review_model,
-                    api_key=settings.openai_api_key,
-                    messages=messages,
-                    max_tokens=256,
-                    temperature=0.1,
-                ),
-                timeout=settings.debate_turn_review_timeout,
+            review, input_tokens, output_tokens = await self._call_review_llm(
+                model_id=review_model,
+                api_key=settings.openai_api_key,
+                messages=messages,
             )
-            raw_content = result.get("content", "")
-            input_tokens = result.get("input_tokens", 0)
-            output_tokens = result.get("output_tokens", 0)
-            content = raw_content.strip()
-            if "```" in content:
-                content = re.sub(r"```(?:json)?\s*", "", content)
-                content = re.sub(r"```", "", content).strip()
-            json_match = re.search(r"\{[\s\S]*\}", content)
-            if json_match:
-                content = json_match.group(0)
-            review = json.loads(content)
         except (TimeoutError, asyncio.TimeoutError):
             logger.warning("review_turn_fast timeout for turn %d speaker=%s", turn_number, speaker)
             return self._review_fallback()
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
-            logger.warning("review_turn_fast parse error: %s | raw: %.300s", exc, raw_content)
+            logger.warning("review_turn_fast parse error: %s", exc)
             return self._review_fallback()
         except Exception as exc:
             logger.error("review_turn_fast unexpected error: %s", exc)
             return self._review_fallback()
 
-        penalties: dict[str, int] = {}
-        for v in review.get("violations", []):
-            v_type = v.get("type", "")
-            if v_type in LLM_VIOLATION_PENALTIES:
-                penalties[v_type] = LLM_VIOLATION_PENALTIES[v_type]
-        penalty_total = sum(penalties.values())
-        block = bool(review.get("block", False))
-        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if block else None
-
-        return {
-            "logic_score": int(review.get("logic_score", 5)),
-            "violations": review.get("violations", []),
-            "feedback": review.get("feedback", ""),
-            "block": block,
-            "penalties": penalties,
-            "penalty_total": penalty_total,
-            "blocked_claim": blocked_claim,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "skipped": False,
-        }
+        return self._build_review_result(review, input_tokens, output_tokens, skipped=False)
 
     def _fast_path_result(self, claim: str) -> dict:
         """패스트패스: LLM 호출 없이 안전한 발언으로 즉시 통과."""
@@ -481,86 +481,11 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
         agent_b_name: str = "에이전트 B",
     ) -> dict:
         """Phase 1: 중량 judge 모델(debate_judge_model)로 최종 판정."""
-        # 부모 judge()를 그대로 호출하되, debate_judge_model을 임시로 반영
-        # debate_orchestrator_model을 debate_judge_model로 교체하여 판정 실행
-        original_model = settings.debate_orchestrator_model
-        # pydantic-settings는 직접 수정이 불가해 client 호출을 직접 제어
-        judge_model = settings.debate_judge_model or original_model
-
-        # 50% 스왑으로 편향 제거 (부모와 동일)
-        swap = random.random() < 0.5
-        debate_log = self._format_debate_log(
-            turns, topic, agent_a_name, agent_b_name, swap_sides=swap
+        judge_model = settings.debate_judge_model or settings.debate_orchestrator_model
+        return await self._judge_with_model(
+            match, turns, topic, agent_a_name, agent_b_name,
+            model_id=judge_model,
         )
-        messages = [
-            {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-            {"role": "user", "content": debate_log},
-        ]
-
-        judge_input_tokens = 0
-        judge_output_tokens = 0
-        raw_content = ""
-        try:
-            result = await self.client._call_openai_byok(
-                model_id=judge_model,
-                api_key=settings.openai_api_key,
-                messages=messages,
-                max_tokens=1024,
-                temperature=0.3,
-            )
-            judge_input_tokens = result.get("input_tokens", 0)
-            judge_output_tokens = result.get("output_tokens", 0)
-            raw_content = result.get("content", "")
-            content = raw_content.strip()
-            if content.startswith("```"):
-                content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.MULTILINE)
-                content = re.sub(r"\s*```\s*$", "", content.strip())
-            json_match = re.search(r"\{[\s\S]*\}", content)
-            if json_match:
-                content = json_match.group(0)
-            scorecard = json.loads(content)
-            if not isinstance(scorecard.get("agent_a"), dict) or not isinstance(scorecard.get("agent_b"), dict):
-                raise ValueError("Invalid scorecard structure")
-        except (json.JSONDecodeError, KeyError, ValueError) as exc:
-            logger.error("OptimizedOrchestrator judge parse error: %s | raw: %.500s", exc, raw_content)
-            scorecard = {
-                "agent_a": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
-                "agent_b": {"logic": 15, "evidence": 12, "rebuttal": 12, "relevance": 10},
-                "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
-            }
-            swap = False
-
-        if swap and isinstance(scorecard.get("agent_a"), dict) and isinstance(scorecard.get("agent_b"), dict):
-            scorecard["agent_a"], scorecard["agent_b"] = scorecard["agent_b"], scorecard["agent_a"]
-            reasoning = scorecard.get("reasoning", "")
-            if reasoning and agent_a_name and agent_b_name and agent_a_name != agent_b_name:
-                _pa = "\x00__AGENT_A__\x00"
-                _pb = "\x00__AGENT_B__\x00"
-                reasoning = (
-                    reasoning.replace(agent_a_name, _pa).replace(agent_b_name, _pb)
-                    .replace(_pa, agent_b_name).replace(_pb, agent_a_name)
-                )
-                scorecard["reasoning"] = reasoning
-
-        score_a = sum(scorecard.get("agent_a", {}).values()) if isinstance(scorecard.get("agent_a"), dict) else 0
-        score_b = sum(scorecard.get("agent_b", {}).values()) if isinstance(scorecard.get("agent_b"), dict) else 0
-        penalty_a = match.penalty_a
-        penalty_b = match.penalty_b
-        final_a = max(0, score_a - penalty_a)
-        final_b = max(0, score_b - penalty_b)
-        diff = abs(final_a - final_b)
-        winner_id = (match.agent_a_id if final_a > final_b else match.agent_b_id) if diff >= 5 else None
-
-        return {
-            "scorecard": scorecard,
-            "score_a": final_a,
-            "score_b": final_b,
-            "penalty_a": penalty_a,
-            "penalty_b": penalty_b,
-            "winner_id": winner_id,
-            "input_tokens": judge_input_tokens,
-            "output_tokens": judge_output_tokens,
-        }
 
 
 def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0) -> tuple[int, int]:
