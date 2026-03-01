@@ -26,7 +26,7 @@ export function UserPersonaTab() {
 
   const loadPersonas = () => {
     api
-      .get<UserPersona[]>('/user-personas/')
+      .get<UserPersona[]>('/user-personas')
       .then(setPersonas)
       .catch(() => toast.error('캐릭터 목록을 불러오지 못했습니다'));
   };
@@ -37,7 +37,7 @@ export function UserPersonaTab() {
       if (editId) {
         await api.patch(`/user-personas/${editId}`, { display_name: name, description: desc || null });
       } else {
-        await api.post('/user-personas/', { display_name: name, description: desc || null });
+        await api.post('/user-personas', { display_name: name, description: desc || null });
       }
       setShowForm(false);
       setEditId(null);

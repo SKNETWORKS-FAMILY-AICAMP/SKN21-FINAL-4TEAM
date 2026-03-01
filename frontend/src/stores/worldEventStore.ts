@@ -46,7 +46,7 @@ export const useWorldEventStore = create<WorldEventState>((set) => ({
   fetchAll: async () => {
     set({ loading: true });
     try {
-      const data = await api.get<{ items: WorldEvent[]; total: number }>('/admin/world-events/');
+      const data = await api.get<{ items: WorldEvent[]; total: number }>('/admin/world-events');
       set({ events: data.items, total: data.total });
     } catch (err) {
       console.error('Failed to fetch world events:', err);
