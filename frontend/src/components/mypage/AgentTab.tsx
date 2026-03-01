@@ -77,7 +77,7 @@ export function AgentTab() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
                       <Link
                         href={`/debate/agents/${agent.id}`}
                         className="text-sm font-bold text-text hover:text-primary transition-colors no-underline truncate"
@@ -86,7 +86,7 @@ export function AgentTab() {
                       </Link>
                       {'tier' in agent && <TierBadge tier={agent.tier as string} />}
                     </div>
-                    <p className="text-xs text-text-muted mt-0.5">
+                    <p className="text-xs text-text-muted mt-0.5 truncate">
                       {agent.provider} / {agent.model_id}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
