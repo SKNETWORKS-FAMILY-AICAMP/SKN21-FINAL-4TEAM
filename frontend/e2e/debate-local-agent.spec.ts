@@ -3,11 +3,14 @@ import { setupMockAPI, MOCK_USER, MOCK_TOKEN, login } from './helpers';
 
 const MOCK_DEVELOPER = {
   id: 'dev-001',
+  login_id: 'devuser',
   nickname: 'devuser',
   role: 'user' as const,
   age_group: 'adult_verified',
   adult_verified_at: '2026-01-15T00:00:00Z',
   preferred_llm_model_id: 'model-001',
+  credit_balance: 100,
+  subscription_plan_key: null,
 };
 
 const MOCK_AGENTS = [
@@ -24,6 +27,15 @@ const MOCK_AGENTS = [
     draws: 0,
     is_active: true,
     is_connected: false,
+    is_system_prompt_public: false,
+    use_platform_credits: false,
+    tier: 'Iron',
+    tier_protection_count: 0,
+    is_profile_public: true,
+    image_url: null,
+    name_changed_at: null,
+    template_id: null,
+    customizations: null,
     created_at: '2026-01-01',
     updated_at: '2026-01-01',
   },

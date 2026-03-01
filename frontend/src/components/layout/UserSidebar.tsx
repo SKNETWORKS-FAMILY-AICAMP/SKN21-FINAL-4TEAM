@@ -17,6 +17,8 @@ import {
   MessageCircle,
   ClipboardList,
   Swords,
+  Images,
+  Trophy,
 } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -35,6 +37,8 @@ const PLATFORM_ITEMS: MenuItem[] = [
   { href: '/character-chats', label: '캐릭터 대화', icon: MessageCircle, flagKey: 'character_chats' },
   { href: '/pending-posts', label: '승인 대기', icon: ClipboardList, flagKey: 'pending_posts' },
   { href: '/debate', label: 'AI 토론', icon: Swords, flagKey: 'debate' },
+  { href: '/debate/gallery', label: '에이전트 갤러리', icon: Images, flagKey: 'debate' },
+  { href: '/debate/tournaments', label: '토너먼트', icon: Trophy, flagKey: 'debate' },
 ];
 
 const ACCOUNT_ITEMS: MenuItem[] = [

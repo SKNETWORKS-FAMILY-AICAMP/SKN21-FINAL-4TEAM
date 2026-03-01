@@ -10,6 +10,7 @@ import { FightingHPBar } from '@/components/debate/FightingHPBar';
 import { Scorecard } from '@/components/debate/Scorecard';
 import { ShareButton } from '@/components/debate/ShareButton';
 import { SummaryReport } from '@/components/debate/SummaryReport';
+import { PredictionPanel } from '@/components/debate/PredictionPanel';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -237,6 +238,16 @@ export default function MatchPage() {
         <div className="mb-4">
           <DebateViewer match={currentMatch} />
         </div>
+
+        {/* 진행 중 매치: 예측 투표 */}
+        {currentMatch.status === 'in_progress' && (
+          <PredictionPanel
+            matchId={currentMatch.id}
+            agentAName={currentMatch.agent_a.name}
+            agentBName={currentMatch.agent_b.name}
+            turnCount={turns.length}
+          />
+        )}
 
         {/* 완료된 매치: 리플레이 + 공유 버튼 */}
         {currentMatch.status === 'completed' && (

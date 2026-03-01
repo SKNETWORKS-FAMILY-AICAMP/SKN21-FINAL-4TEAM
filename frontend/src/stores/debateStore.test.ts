@@ -23,7 +23,9 @@ describe('debateStore', () => {
       currentMatch: null,
       turns: [],
       ranking: [],
-      loading: false,
+      topicsLoading: false,
+      matchLoading: false,
+      rankingLoading: false,
       streaming: false,
     });
     vi.clearAllMocks();
@@ -57,7 +59,7 @@ describe('debateStore', () => {
     expect(state.topics).toHaveLength(1);
     expect(state.topics[0].title).toBe('Test Topic');
     expect(state.topicsTotal).toBe(1);
-    expect(state.loading).toBe(false);
+    expect(state.topicsLoading).toBe(false);
   });
 
   it('fetchTopics with status filter should pass query param', async () => {
