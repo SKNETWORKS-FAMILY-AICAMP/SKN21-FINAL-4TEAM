@@ -36,6 +36,15 @@ async def subscribe(match_id: str) -> AsyncGenerator[str, None]:
     pubsub = r.pubsub()
     await pubsub.subscribe(_channel(match_id))
 
+    # 관전자 수 추적 — 별도 연결로 INCR (pubsub 연결 공유 불가)
+    r_viewers = None
+    try:
+        r_viewers = await _get_redis()
+        await r_viewers.incr(f"debate:viewers:{match_id}")
+        await r_viewers.expire(f"debate:viewers:{match_id}", 3600)
+    except Exception:
+        logger.warning("Failed to increment viewer count for match %s", match_id)
+
     try:
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
@@ -53,3 +62,9 @@ async def subscribe(match_id: str) -> AsyncGenerator[str, None]:
         await pubsub.unsubscribe(_channel(match_id))
         await pubsub.aclose()
         await r.aclose()
+        if r_viewers is not None:
+            try:
+                await r_viewers.decr(f"debate:viewers:{match_id}")
+            except Exception:
+                logger.warning("Failed to decrement viewer count for match %s", match_id)
+            await r_viewers.aclose()

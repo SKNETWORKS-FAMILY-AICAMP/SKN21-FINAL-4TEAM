@@ -5,11 +5,92 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.schemas.debate_match import MatchListResponse, TurnLogResponse
+from app.schemas.debate_match import PredictionCreate, TurnLogResponse
 from app.services.debate_broadcast import subscribe
 from app.services.debate_match_service import DebateMatchService
 
 router = APIRouter()
+
+
+@router.get("/featured")
+async def get_featured_matches(
+    limit: int = Query(5, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """하이라이트 매치 목록."""
+    service = DebateMatchService(db)
+    items, total = await service.list_featured(limit=limit)
+    return {"items": items, "total": total}
+
+
+@router.get("/{match_id}/viewers")
+async def get_viewer_count(
+    match_id: str,
+    user: User = Depends(get_current_user),
+):
+    """현재 관전자 수 조회. Redis debate:viewers:{match_id}"""
+    import redis.asyncio as aioredis
+
+    from app.core.config import settings
+
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        count_str = await r.get(f"debate:viewers:{match_id}")
+        return {"count": int(count_str) if count_str else 0}
+    finally:
+        await r.aclose()
+
+
+@router.post("/{match_id}/predictions", status_code=status.HTTP_201_CREATED)
+async def create_prediction(
+    match_id: str,
+    data: PredictionCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """예측 투표. in_progress 매치 && turn_count<=2만 허용."""
+    service = DebateMatchService(db)
+    try:
+        return await service.create_prediction(match_id, user.id, data.prediction)
+    except ValueError as exc:
+        detail = str(exc)
+        if "DUPLICATE" in detail:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 투표했습니다") from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+
+
+@router.get("/{match_id}/predictions")
+async def get_predictions(
+    match_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """예측 투표 통계 및 내 투표 결과 조회."""
+    service = DebateMatchService(db)
+    return await service.get_prediction_stats(match_id, user.id)
+
+
+@router.get("/{match_id}/summary")
+async def get_match_summary(
+    match_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """토론 요약 리포트 조회. 생성 중이면 generating, 완료면 ready."""
+    from sqlalchemy import select
+
+    from app.models.debate_match import DebateMatch
+
+    res = await db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+    match = res.scalar_one_or_none()
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+    if match.status != "completed":
+        return {"status": "unavailable"}
+    if match.summary_report is None:
+        return {"status": "generating"}
+    return {"status": "ready", **match.summary_report}
 
 
 @router.get("/{match_id}")
