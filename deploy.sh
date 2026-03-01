@@ -162,6 +162,8 @@ if [ "$MODE" = "update" ]; then
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."
   $COMPOSE_CMD up -d --no-deps backend frontend nginx
+  # backend/frontend 재시작 후 컨테이너 IP가 바뀔 수 있으므로 nginx도 강제 재시작
+  $COMPOSE_CMD restart nginx
   run_migrations
   cleanup_containers
   log "=== 업데이트 완료 (환경: $ENV) ==="
