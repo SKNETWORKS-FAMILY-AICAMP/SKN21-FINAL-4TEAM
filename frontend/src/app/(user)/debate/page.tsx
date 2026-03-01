@@ -11,6 +11,8 @@ import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
 import { TierBadge } from '@/components/debate/TierBadge';
+import { HighlightBanner } from '@/components/debate/HighlightBanner';
+import { SeasonBanner } from '@/components/debate/SeasonBanner';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -61,6 +63,7 @@ export default function DebateTopicsPage() {
     fetchTopics,
     fetchPopularTopics,
     fetchRanking,
+    fetchFeatured,
     createTopic,
     updateTopic,
     deleteTopic,
@@ -97,7 +100,8 @@ export default function DebateTopicsPage() {
   // 초기 로드
   useEffect(() => {
     fetchMyAgents();
-  }, [fetchMyAgents]);
+    fetchFeatured();
+  }, [fetchMyAgents, fetchFeatured]);
 
   // 주제 탭: 필터·정렬·페이지 변경 시 재조회
   useEffect(() => {
@@ -242,6 +246,7 @@ export default function DebateTopicsPage() {
 
   return (
     <div className="max-w-[700px] mx-auto py-6 px-4">
+      <SeasonBanner />
       <div className="flex items-center justify-between mb-5">
         <h1 className="page-title flex items-center gap-2">
           <Swords size={24} className="text-primary" />
@@ -387,6 +392,7 @@ export default function DebateTopicsPage() {
       {/* 인기 탭 */}
       {activeTab === 'popular' && (
         <div className="flex flex-col gap-3">
+          <HighlightBanner />
           {topicsLoading ? (
             Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
           ) : popularTopics.length === 0 ? (

@@ -45,6 +45,18 @@ class DebateMatch(Base):
     elo_b_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     elo_a_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     elo_b_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 기능 7: 주간 하이라이트
+    is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    featured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 기능 9: 토너먼트 연계
+    tournament_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_tournaments.id", ondelete="SET NULL"), nullable=True
+    )
+    tournament_round: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 기능 10: 멀티 에이전트 포맷
+    format: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'1v1'"))
+    # 기능 11: 토론 요약 리포트
+    summary_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

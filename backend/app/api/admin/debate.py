@@ -489,8 +489,9 @@ async def force_match(
     db: AsyncSession = Depends(get_db),
 ):
     """관리자 테스트용 강제 매치 생성. 큐 없이 두 에이전트를 즉시 매칭하고 토론을 시작."""
-    from app.models.debate_agent_version import DebateAgentVersion
     from sqlalchemy import select as sa_select
+
+    from app.models.debate_agent_version import DebateAgentVersion
 
     # 토픽 존재 확인
     topic = await db.get(DebateTopic, topic_id)
@@ -541,3 +542,113 @@ async def force_match(
     background_tasks.add_task(_run_debate_safe, str(match.id))
 
     return {"match_id": str(match.id), "topic_id": topic_id}
+
+
+# ---------------------------------------------------------------------------
+# 하이라이트 (기능 7)
+# ---------------------------------------------------------------------------
+
+@router.patch("/matches/{match_id}/feature")
+async def toggle_match_feature(
+    match_id: str,
+    featured: bool,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """매치 하이라이트 설정/해제 (관리자)."""
+    service = DebateMatchService(db)
+    try:
+        return await service.toggle_featured(match_id, featured)
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail) from exc
+
+
+# ---------------------------------------------------------------------------
+# 시즌 시스템 (기능 8)
+# ---------------------------------------------------------------------------
+
+@router.post("/seasons", status_code=status.HTTP_201_CREATED)
+async def create_season(
+    data: dict,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 생성 (superadmin 전용)."""
+    from datetime import datetime as dt
+
+    from app.services.debate_season_service import DebateSeasonService
+
+    service = DebateSeasonService(db)
+    season = await service.create_season(
+        season_number=data["season_number"],
+        title=data["title"],
+        start_at=dt.fromisoformat(data["start_at"]),
+        end_at=dt.fromisoformat(data["end_at"]),
+    )
+    return {"id": str(season.id), "status": season.status}
+
+
+@router.post("/seasons/{season_id}/close")
+async def close_season(
+    season_id: str,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 종료 — results INSERT, ELO soft reset, 보상 지급 (superadmin 전용)."""
+    from app.services.debate_season_service import DebateSeasonService
+
+    service = DebateSeasonService(db)
+    try:
+        await service.close_season(season_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# 토너먼트 (기능 9)
+# ---------------------------------------------------------------------------
+
+@router.post("/tournaments", status_code=status.HTTP_201_CREATED)
+async def create_tournament(
+    data: dict,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """토너먼트 생성 (superadmin 전용)."""
+    from app.services.debate_tournament_service import DebateTournamentService
+
+    service = DebateTournamentService(db)
+    t = await service.create_tournament(
+        title=data["title"],
+        topic_id=data["topic_id"],
+        bracket_size=data["bracket_size"],
+        created_by=user.id,
+    )
+    return {"id": str(t.id)}
+
+
+@router.post("/tournaments/{tournament_id}/start")
+async def start_tournament(
+    tournament_id: str,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """토너먼트 시작 (superadmin 전용)."""
+    from datetime import UTC, datetime
+
+    from app.models.debate_tournament import DebateTournament
+
+    res = await db.execute(select(DebateTournament).where(DebateTournament.id == tournament_id))
+    t = res.scalar_one_or_none()
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+    if t.status != "registration":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 시작된 토너먼트입니다")
+    t.status = "in_progress"
+    t.current_round = 1
+    t.started_at = datetime.now(UTC)
+    await db.commit()
+    return {"ok": True}
