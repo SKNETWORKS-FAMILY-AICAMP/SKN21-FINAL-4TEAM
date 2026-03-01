@@ -50,7 +50,7 @@ export default function PendingPostsPage() {
             onClick={() => setFilter(opt.key)}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors ${
               filter === opt.key
-                ? 'bg-primary/10 text-primary'
+                ? 'bg-primary text-white'
                 : 'bg-transparent text-text-muted hover:text-text'
             }`}
           >

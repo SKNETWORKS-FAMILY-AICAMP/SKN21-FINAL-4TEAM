@@ -306,7 +306,7 @@ export default function DebateTopicsPage() {
                   onClick={() => handleFilterChange(opt.key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors ${
                     filter === opt.key
-                      ? 'bg-primary/10 text-primary'
+                      ? 'bg-primary text-white'
                       : 'bg-transparent text-text-muted hover:text-text'
                   }`}
                 >
