@@ -177,11 +177,12 @@ app.include_router(world_events.router, prefix="/api/world-events", tags=["world
 
 # Debate routes (feature flag)
 if settings.debate_enabled:
-    from app.api import debate_agents, debate_matches, debate_topics, debate_ws
+    from app.api import debate_agents, debate_matches, debate_topics, debate_tournaments, debate_ws
 
     app.include_router(debate_agents.router, prefix="/api/agents", tags=["debate-agents"])
     app.include_router(debate_topics.router, prefix="/api/topics", tags=["debate-topics"])
     app.include_router(debate_matches.router, prefix="/api/matches", tags=["debate-matches"])
+    app.include_router(debate_tournaments.router, prefix="/api/tournaments", tags=["tournaments"])
     app.include_router(debate_ws.router, tags=["debate-ws"])
 
 # Admin routes
