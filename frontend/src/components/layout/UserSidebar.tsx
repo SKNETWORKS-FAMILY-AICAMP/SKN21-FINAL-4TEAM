@@ -93,6 +93,15 @@ export const UserSidebar = memo(function UserSidebar() {
     if (href === '/mypage') return pathname.startsWith('/mypage');
     if (href === '/personas') return pathname === '/personas';
     if (href === '/notifications') return pathname.startsWith('/notifications');
+    // /debate는 갤러리·토너먼트 전용 메뉴가 있으므로 해당 하위 경로에선 비활성
+    if (href === '/debate') {
+      return (
+        pathname === '/debate' ||
+        (pathname.startsWith('/debate/') &&
+          !pathname.startsWith('/debate/gallery') &&
+          !pathname.startsWith('/debate/tournaments'))
+      );
+    }
     return pathname === href || pathname.startsWith(href + '/');
   };
 
