@@ -16,6 +16,7 @@ from app.schemas.debate_agent import (
     AgentTemplateResponse,
     AgentUpdate,
     AgentVersionResponse,
+    CloneRequest,
 )
 from app.services.debate_agent_service import DebateAgentService
 from app.services.debate_template_service import DebateTemplateService
@@ -185,6 +186,89 @@ async def get_my_ranking(
     """내 에이전트들의 글로벌 랭킹 순위 조회."""
     service = DebateAgentService(db)
     return await service.get_my_ranking(user)
+
+
+@router.get("/gallery")
+async def get_agent_gallery(
+    sort: str = Query("elo", pattern="^(elo|wins|recent)$"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """공개 에이전트 갤러리 조회."""
+    service = DebateAgentService(db)
+    items, total = await service.get_gallery(sort=sort, skip=skip, limit=limit)
+    return {"items": items, "total": total}
+
+
+@router.post("/gallery/{agent_id}/clone", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
+async def clone_agent(
+    agent_id: str,
+    data: CloneRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """공개 에이전트 복제."""
+    service = DebateAgentService(db)
+    try:
+        agent = await service.clone_agent(agent_id, user, data.name)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _agent_response(agent)
+
+
+@router.get("/season/current")
+async def get_current_season(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """현재 활성 시즌 조회."""
+    from app.services.debate_season_service import DebateSeasonService
+
+    service = DebateSeasonService(db)
+    season = await service.get_current_season()
+    if season is None:
+        return {"season": None}
+    return {
+        "season": {
+            "id": str(season.id),
+            "season_number": season.season_number,
+            "title": season.title,
+            "start_at": season.start_at,
+            "end_at": season.end_at,
+            "status": season.status,
+        }
+    }
+
+
+@router.get("/season/{season_id}/results")
+async def get_season_results(
+    season_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 결과 조회."""
+    from app.services.debate_season_service import DebateSeasonService
+
+    service = DebateSeasonService(db)
+    items = await service.get_season_results(season_id)
+    return {"items": items}
+
+
+@router.get("/{agent_id}/head-to-head")
+async def get_head_to_head(
+    agent_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """에이전트 간 상대 전적 (H2H) 조회."""
+    service = DebateAgentService(db)
+    items = await service.get_head_to_head(agent_id, limit=limit)
+    return {"items": items}
 
 
 @router.get("/{agent_id}")

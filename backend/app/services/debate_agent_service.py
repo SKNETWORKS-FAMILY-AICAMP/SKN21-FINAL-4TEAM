@@ -1,8 +1,9 @@
 import logging
+import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import case, func, select, update
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import encrypt_api_key
@@ -374,3 +375,157 @@ class DebateAgentService:
                 .where(DebateAgentVersion.id == version_id)
                 .values(**ver_updates)
             )
+
+    async def get_head_to_head(self, agent_id: str, limit: int = 5) -> list[dict]:
+        """상대별 전적 집계 (agent_a 또는 agent_b로 참가한 매치 모두 포함)."""
+        from app.models.debate_match import DebateMatch
+
+        agent_uuid = uuid.UUID(agent_id)
+
+        # agent_a 측: opponent = agent_b
+        stmt_as_a = (
+            select(
+                DebateMatch.agent_b_id.label("opponent_id"),
+                func.count().label("total"),
+                func.sum(case((DebateMatch.winner_id == agent_uuid, 1), else_=0)).label("wins"),
+                func.sum(case((
+                    (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid), 1  # noqa: E711
+                ), else_=0)).label("losses"),
+                func.sum(case((
+                    (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"), 1  # noqa: E711
+                ), else_=0)).label("draws"),
+            )
+            .where(DebateMatch.agent_a_id == agent_uuid)
+            .where(DebateMatch.status == "completed")
+            .group_by(DebateMatch.agent_b_id)
+        )
+
+        # agent_b 측: opponent = agent_a
+        stmt_as_b = (
+            select(
+                DebateMatch.agent_a_id.label("opponent_id"),
+                func.count().label("total"),
+                func.sum(case((DebateMatch.winner_id == agent_uuid, 1), else_=0)).label("wins"),
+                func.sum(case((
+                    (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid), 1  # noqa: E711
+                ), else_=0)).label("losses"),
+                func.sum(case((
+                    (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"), 1  # noqa: E711
+                ), else_=0)).label("draws"),
+            )
+            .where(DebateMatch.agent_b_id == agent_uuid)
+            .where(DebateMatch.status == "completed")
+            .group_by(DebateMatch.agent_a_id)
+        )
+
+        # UNION ALL → GROUP BY opponent_id
+        union = stmt_as_a.union_all(stmt_as_b).subquery()
+        agg = (
+            select(
+                union.c.opponent_id,
+                func.sum(union.c.total).label("total_matches"),
+                func.sum(union.c.wins).label("wins"),
+                func.sum(union.c.losses).label("losses"),
+                func.sum(union.c.draws).label("draws"),
+            )
+            .group_by(union.c.opponent_id)
+            .order_by(func.sum(union.c.total).desc())
+            .limit(limit)
+        )
+
+        rows = (await self.db.execute(agg)).all()
+
+        # 상대 에이전트 이름 배치 조회
+        opp_ids = [r.opponent_id for r in rows]
+        agents_map: dict = {}
+        if opp_ids:
+            res = await self.db.execute(
+                select(DebateAgent).where(DebateAgent.id.in_(opp_ids))
+            )
+            agents_map = {str(a.id): a for a in res.scalars()}
+
+        result = []
+        for r in rows:
+            a = agents_map.get(str(r.opponent_id))
+            result.append({
+                "opponent_id": str(r.opponent_id),
+                "opponent_name": a.name if a else "[삭제됨]",
+                "opponent_image_url": a.image_url if a else None,
+                "total_matches": int(r.total_matches),
+                "wins": int(r.wins),
+                "losses": int(r.losses),
+                "draws": int(r.draws),
+            })
+        return result
+
+    async def get_gallery(self, sort: str = "elo", skip: int = 0, limit: int = 20) -> tuple[list, int]:
+        """갤러리: is_system_prompt_public=True AND is_active=True AND is_profile_public=True."""
+        base_cond = (
+            (DebateAgent.is_system_prompt_public == True)  # noqa: E712
+            & (DebateAgent.is_active == True)  # noqa: E712
+            & (DebateAgent.is_profile_public == True)  # noqa: E712
+        )
+
+        sort_col = {
+            "elo": DebateAgent.elo_rating.desc(),
+            "wins": DebateAgent.wins.desc(),
+            "recent": DebateAgent.created_at.desc(),
+        }.get(sort, DebateAgent.elo_rating.desc())
+
+        count_q = select(func.count(DebateAgent.id)).where(base_cond)
+        total = (await self.db.execute(count_q)).scalar() or 0
+
+        q = (
+            select(DebateAgent, User.nickname.label("owner_nickname"))
+            .join(User, DebateAgent.owner_id == User.id)
+            .where(base_cond)
+            .order_by(sort_col)
+            .offset(skip)
+            .limit(limit)
+        )
+        rows = (await self.db.execute(q)).all()
+
+        items = []
+        for agent, nickname in rows:
+            items.append({
+                "id": str(agent.id),
+                "name": agent.name,
+                "description": agent.description,
+                "provider": agent.provider,
+                "model_id": agent.model_id,
+                "image_url": agent.image_url,
+                "elo_rating": agent.elo_rating,
+                "wins": agent.wins,
+                "losses": agent.losses,
+                "draws": agent.draws,
+                "tier": get_tier_from_elo(agent.elo_rating),
+                "owner_nickname": nickname or "unknown",
+                "created_at": agent.created_at,
+            })
+        return items, total
+
+    async def clone_agent(self, source_id: str, user: User, name: str) -> DebateAgent:
+        """공개 에이전트 복제. is_system_prompt_public=True인 에이전트만 가능."""
+        source = await self.get_agent(source_id)
+        if source is None:
+            raise ValueError("Agent not found")
+        if not source.is_system_prompt_public:
+            raise PermissionError("이 에이전트는 복제 불가능합니다")
+
+        # 최신 버전의 system_prompt 가져오기
+        latest = await self.get_latest_version(source_id)
+        prompt = latest.system_prompt if latest else "(empty)"
+
+        create_data = AgentCreate(
+            name=name,
+            description=source.description,
+            provider=source.provider,
+            model_id=source.model_id,
+            system_prompt=prompt,
+            is_system_prompt_public=False,
+            is_profile_public=True,
+            use_platform_credits=source.use_platform_credits,
+            template_id=source.template_id,
+            customizations=source.customizations,
+        )
+        return await self.create_agent(create_data, user)

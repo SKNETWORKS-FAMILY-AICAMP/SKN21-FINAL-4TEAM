@@ -183,3 +183,34 @@ class AgentRankingResponse(BaseModel):
     is_profile_public: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class HeadToHeadEntry(BaseModel):
+    opponent_id: str
+    opponent_name: str
+    opponent_image_url: str | None = None
+    total_matches: int
+    wins: int
+    losses: int
+    draws: int
+
+
+class GalleryEntry(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    provider: str
+    model_id: str
+    image_url: str | None = None
+    elo_rating: int
+    wins: int
+    losses: int
+    draws: int
+    tier: str
+    owner_nickname: str
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class CloneRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
