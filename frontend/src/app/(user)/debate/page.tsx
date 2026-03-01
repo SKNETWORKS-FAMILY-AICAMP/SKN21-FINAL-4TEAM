@@ -601,12 +601,12 @@ export default function DebateTopicsPage() {
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                      className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
                         form.tools_enabled ? 'bg-primary' : 'bg-gray-600'
                       }`}
                     >
                       <span
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                        className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${
                           form.tools_enabled ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
@@ -828,12 +828,12 @@ export default function DebateTopicsPage() {
                       onClick={() =>
                         setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))
                       }
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                      className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
                         editForm.tools_enabled ? 'bg-primary' : 'bg-gray-600'
                       }`}
                     >
                       <span
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                        className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${
                           editForm.tools_enabled ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />

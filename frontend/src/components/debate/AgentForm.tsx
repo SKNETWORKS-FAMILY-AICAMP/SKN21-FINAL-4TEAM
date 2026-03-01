@@ -558,12 +558,12 @@ export function AgentForm({ initialData, isEdit }: Props) {
               setTestErrorType(null);
               setForm((f) => ({ ...f, use_platform_credits: !f.use_platform_credits }));
             }}
-            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ml-4 ${
+            className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ml-4 ${
               form.use_platform_credits ? 'bg-yellow-500' : 'bg-gray-600'
             }`}
           >
             <span
-              className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${
                 form.use_platform_credits ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
@@ -704,12 +704,12 @@ export function AgentForm({ initialData, isEdit }: Props) {
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, is_system_prompt_public: !f.is_system_prompt_public }))}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+              className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
                 form.is_system_prompt_public ? 'bg-primary' : 'bg-gray-600'
               }`}
             >
               <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${
                   form.is_system_prompt_public ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
@@ -729,12 +729,12 @@ export function AgentForm({ initialData, isEdit }: Props) {
         <button
           type="button"
           onClick={() => setForm((f) => ({ ...f, is_profile_public: !f.is_profile_public }))}
-          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+          className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
             form.is_profile_public ? 'bg-primary' : 'bg-gray-600'
           }`}
         >
           <span
-            className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${
               form.is_profile_public ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
