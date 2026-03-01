@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import { Link2, Check } from 'lucide-react';
 import { TierBadge } from './TierBadge';
 
 type GalleryEntry = {
@@ -25,6 +26,14 @@ export function GalleryCard({ entry, onClone }: Props) {
   const [cloning, setCloning] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState(`${entry.name} (복제)`);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/debate/agents/${entry.id}`;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleClone = async () => {
     setCloning(true);
@@ -74,13 +83,28 @@ export function GalleryCard({ entry, onClone }: Props) {
           <span>{entry.draws}D</span>
           <span>ELO {entry.elo_rating}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="text-primary hover:underline text-xs"
-        >
-          복제
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleShare}
+            title="링크 복사"
+            className="flex items-center gap-1 text-text-muted hover:text-text transition-colors"
+          >
+            {copied ? (
+              <Check size={13} className="text-green-400" />
+            ) : (
+              <Link2 size={13} />
+            )}
+            <span className="text-xs">{copied ? '복사됨' : '공유'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="text-primary hover:underline text-xs"
+          >
+            복제
+          </button>
+        </div>
       </div>
 
       {showModal && (
