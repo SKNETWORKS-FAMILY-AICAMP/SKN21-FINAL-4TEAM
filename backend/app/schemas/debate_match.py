@@ -84,3 +84,16 @@ class MatchStreamEvent(BaseModel):
     """SSE로 전송되는 이벤트."""
     event: str  # turn, penalty, finished, error
     data: dict
+
+
+class PredictionCreate(BaseModel):
+    prediction: str = Field(..., pattern="^(a_win|b_win|draw)$")
+
+
+class PredictionStats(BaseModel):
+    a_win: int = 0
+    b_win: int = 0
+    draw: int = 0
+    total: int = 0
+    my_prediction: str | None = None
+    is_correct: bool | None = None

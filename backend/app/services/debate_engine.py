@@ -380,6 +380,15 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
         if settings.debate_orchestrator_optimized
         else DebateOrchestrator()
     )
+
+    # 멀티 에이전트 포맷 분기 — 1v1이 아닌 경우 _execute_multi_and_finalize로 위임 후 반환
+    match_format = getattr(match, "format", "1v1")
+    if match_format != "1v1":
+        await _execute_multi_and_finalize(
+            match, topic, db, client, orchestrator, agent_a, agent_b
+        )
+        return
+
     claims_a: list[str] = []
     claims_b: list[str] = []
     total_penalty_a = 0
@@ -720,6 +729,27 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     )
     await db.commit()
 
+    # 예측 투표 정산 (판정 완료 직후)
+    from app.services.debate_match_service import DebateMatchService
+    match_service = DebateMatchService(db)
+    await match_service.resolve_predictions(
+        str(match.id),
+        str(match.winner_id) if match.winner_id else None,
+        str(match.agent_a_id),
+        str(match.agent_b_id),
+    )
+
+    # 토너먼트 라운드 진행 (토너먼트 소속 매치인 경우)
+    if match.tournament_id:
+        from app.services.debate_tournament_service import DebateTournamentService
+        t_service = DebateTournamentService(db)
+        await t_service.advance_round(str(match.tournament_id))
+
+    # 요약 리포트 생성 (비동기 백그라운드, 결과 대기 안 함)
+    if settings.debate_summary_enabled:
+        from app.services.debate_summary_service import generate_summary_task
+        asyncio.create_task(generate_summary_task(str(match.id)))
+
     await publish_event(str(match.id), "finished", {
         "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
         "score_a": judgment["score_a"],
@@ -998,3 +1028,175 @@ async def _load_turns(db: AsyncSession, match_id) -> list[DebateTurnLog]:
         .order_by(DebateTurnLog.turn_number, DebateTurnLog.speaker)
     )
     return list(result.scalars().all())
+
+
+async def _execute_multi_and_finalize(
+    match: DebateMatch,
+    topic,
+    db: AsyncSession,
+    client,
+    orchestrator,
+    agent_a: DebateAgent,
+    agent_b: DebateAgent,
+) -> None:
+    """2v2/3v3 라운드 로빈: A팀과 B팀의 각 슬롯별로 기존 _execute_turn() 재사용.
+
+    1v1 로직을 깨뜨리지 않도록 별도 함수로 분리.
+    판정/ELO 갱신/이벤트 발행까지 처리.
+    """
+    from app.models.debate_match_participant import DebateMatchParticipant
+
+    parts_res = await db.execute(
+        select(DebateMatchParticipant)
+        .where(DebateMatchParticipant.match_id == match.id)
+        .order_by(DebateMatchParticipant.team, DebateMatchParticipant.slot)
+    )
+    parts = list(parts_res.scalars().all())
+    team_a = [p for p in parts if p.team == "A"]
+    team_b = [p for p in parts if p.team == "B"]
+
+    if not team_a or not team_b:
+        logger.warning("Multi-agent match %s has no participants, skipping", match.id)
+        return
+
+    max_slots = max(len(team_a), len(team_b))
+    claims_a: list[str] = []
+    claims_b: list[str] = []
+    total_penalty_a = 0
+    total_penalty_b = 0
+
+    for turn_num in range(1, topic.max_turns + 1):
+        for i in range(max_slots):
+            a_part = team_a[i % len(team_a)]
+            b_part = team_b[i % len(team_b)]
+
+            # A팀 에이전트 조회
+            multi_agent_a = (await db.execute(
+                select(DebateAgent).where(DebateAgent.id == a_part.agent_id)
+            )).scalar_one_or_none()
+            # B팀 에이전트 조회
+            multi_agent_b = (await db.execute(
+                select(DebateAgent).where(DebateAgent.id == b_part.agent_id)
+            )).scalar_one_or_none()
+
+            if multi_agent_a is None or multi_agent_b is None:
+                logger.warning("Multi-agent: agent not found, slot %d turn %d", i, turn_num)
+                continue
+
+            key_a = _resolve_api_key(multi_agent_a)
+            key_b = _resolve_api_key(multi_agent_b)
+
+            ver_a = (await db.execute(
+                select(DebateAgentVersion).where(DebateAgentVersion.id == a_part.version_id)
+            )).scalar_one_or_none() if a_part.version_id else None
+            ver_b = (await db.execute(
+                select(DebateAgentVersion).where(DebateAgentVersion.id == b_part.version_id)
+            )).scalar_one_or_none() if b_part.version_id else None
+
+            turn_a = await _execute_turn(
+                db, client, match, topic, turn_num, "agent_a",
+                multi_agent_a, ver_a, key_a, claims_a, claims_b, [], [],
+                my_accumulated_penalty=total_penalty_a,
+            )
+            total_penalty_a += turn_a.penalty_total
+            claims_a.append(turn_a.claim)
+
+            await publish_event(str(match.id), "turn", {
+                "turn_number": turn_num,
+                "speaker": f"agent_a_slot{i}",
+                "action": turn_a.action,
+                "claim": turn_a.claim,
+                "evidence": turn_a.evidence,
+                "penalties": turn_a.penalties,
+                "penalty_total": turn_a.penalty_total,
+            })
+
+            turn_b = await _execute_turn(
+                db, client, match, topic, turn_num, "agent_b",
+                multi_agent_b, ver_b, key_b, claims_b, claims_a, [], [],
+                my_accumulated_penalty=total_penalty_b,
+            )
+            total_penalty_b += turn_b.penalty_total
+            claims_b.append(turn_b.claim)
+
+            await publish_event(str(match.id), "turn", {
+                "turn_number": turn_num,
+                "speaker": f"agent_b_slot{i}",
+                "action": turn_b.action,
+                "claim": turn_b.claim,
+                "evidence": turn_b.evidence,
+                "penalties": turn_b.penalties,
+                "penalty_total": turn_b.penalty_total,
+            })
+
+    match.penalty_a = total_penalty_a
+    match.penalty_b = total_penalty_b
+    await db.commit()
+    logger.info("Multi-agent match %s turns completed", match.id)
+
+    # 판정
+    turns = await _load_turns(db, match.id)
+    judgment = await orchestrator.judge(
+        match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
+    )
+
+    await _log_orchestrator_usage(
+        db, agent_a.owner_id, settings.debate_orchestrator_model,
+        judgment["input_tokens"], judgment["output_tokens"],
+    )
+
+    if judgment["winner_id"] == match.agent_a_id:
+        elo_result = "a_win"
+    elif judgment["winner_id"] == match.agent_b_id:
+        elo_result = "b_win"
+    else:
+        elo_result = "draw"
+
+    score_diff = abs(judgment["score_a"] - judgment["score_b"])
+    elo_a_before = agent_a.elo_rating
+    elo_b_before = agent_b.elo_rating
+    new_a, new_b = calculate_elo(elo_a_before, elo_b_before, elo_result, score_diff=score_diff)
+
+    match.scorecard = judgment["scorecard"]
+    match.score_a = judgment["score_a"]
+    match.score_b = judgment["score_b"]
+    match.winner_id = judgment["winner_id"]
+    match.status = "completed"
+    match.finished_at = datetime.now(UTC)
+
+    agent_service = DebateAgentService(db)
+    result_a = "win" if elo_result == "a_win" else ("loss" if elo_result == "b_win" else "draw")
+    result_b = "win" if elo_result == "b_win" else ("loss" if elo_result == "a_win" else "draw")
+    await agent_service.update_elo(str(agent_a.id), new_a, result_a)
+    await agent_service.update_elo(str(agent_b.id), new_b, result_b)
+
+    await db.execute(
+        update(DebateMatch)
+        .where(DebateMatch.id == match.id)
+        .values(elo_a_before=elo_a_before, elo_b_before=elo_b_before, elo_a_after=new_a, elo_b_after=new_b)
+    )
+    await db.commit()
+
+    # 예측 정산 + 토너먼트 + 요약
+    from app.services.debate_match_service import DebateMatchService
+    match_service = DebateMatchService(db)
+    await match_service.resolve_predictions(
+        str(match.id),
+        str(match.winner_id) if match.winner_id else None,
+        str(match.agent_a_id),
+        str(match.agent_b_id),
+    )
+    if match.tournament_id:
+        from app.services.debate_tournament_service import DebateTournamentService
+        await DebateTournamentService(db).advance_round(str(match.tournament_id))
+    if settings.debate_summary_enabled:
+        from app.services.debate_summary_service import generate_summary_task
+        asyncio.create_task(generate_summary_task(str(match.id)))
+
+    await publish_event(str(match.id), "finished", {
+        "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
+        "score_a": judgment["score_a"],
+        "score_b": judgment["score_b"],
+        "elo_a": new_a,
+        "elo_b": new_b,
+    })

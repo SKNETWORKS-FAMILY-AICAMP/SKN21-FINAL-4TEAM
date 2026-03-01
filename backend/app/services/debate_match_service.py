@@ -1,7 +1,10 @@
 import logging
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 
+from sqlalchemy import case as sa_case
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.debate_agent import DebateAgent
@@ -214,3 +217,152 @@ class DebateMatchService:
             "elo_rating": agent.elo_rating,
             "image_url": agent.image_url,
         }
+
+    async def create_prediction(self, match_id: str, user_id: uuid.UUID, prediction: str) -> dict:
+        """예측 투표. status='in_progress' && turn_count<=2만 허용."""
+        from app.models.debate_match_prediction import DebateMatchPrediction
+
+        result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+        match = result.scalar_one_or_none()
+        if match is None:
+            raise ValueError("Match not found")
+        if match.status != "in_progress":
+            raise ValueError("투표는 진행 중인 매치에서만 가능합니다")
+
+        # turn_count 조회
+        cnt_result = await self.db.execute(
+            select(func.count(DebateTurnLog.id)).where(DebateTurnLog.match_id == match.id)
+        )
+        turn_count = cnt_result.scalar() or 0
+        if turn_count > 2:
+            raise ValueError("투표 시간이 지났습니다 (2턴 이후 불가)")
+
+        # 중복 검사
+        dup = await self.db.execute(
+            select(DebateMatchPrediction).where(
+                DebateMatchPrediction.match_id == match.id,
+                DebateMatchPrediction.user_id == user_id,
+            )
+        )
+        if dup.scalar_one_or_none() is not None:
+            raise ValueError("DUPLICATE")
+
+        pred = DebateMatchPrediction(match_id=match.id, user_id=user_id, prediction=prediction)
+        self.db.add(pred)
+        await self.db.commit()
+        return {"ok": True, "prediction": prediction}
+
+    async def get_prediction_stats(self, match_id: str, user_id: uuid.UUID) -> dict:
+        """집계 + 내 투표 결과 반환."""
+        from app.models.debate_match_prediction import DebateMatchPrediction
+
+        agg = await self.db.execute(
+            select(
+                func.sum(sa_case((DebateMatchPrediction.prediction == "a_win", 1), else_=0)).label("a_win"),
+                func.sum(sa_case((DebateMatchPrediction.prediction == "b_win", 1), else_=0)).label("b_win"),
+                func.sum(sa_case((DebateMatchPrediction.prediction == "draw", 1), else_=0)).label("draw"),
+                func.count().label("total"),
+            ).where(DebateMatchPrediction.match_id == match_id)
+        )
+        row = agg.one()
+
+        my = await self.db.execute(
+            select(DebateMatchPrediction).where(
+                DebateMatchPrediction.match_id == match_id,
+                DebateMatchPrediction.user_id == user_id,
+            )
+        )
+        my_pred = my.scalar_one_or_none()
+
+        return {
+            "a_win": int(row.a_win or 0),
+            "b_win": int(row.b_win or 0),
+            "draw": int(row.draw or 0),
+            "total": int(row.total or 0),
+            "my_prediction": my_pred.prediction if my_pred else None,
+            "is_correct": my_pred.is_correct if my_pred else None,
+        }
+
+    async def resolve_predictions(
+        self, match_id: str, winner_id: str | None, agent_a_id: str, agent_b_id: str
+    ) -> None:
+        """판정 후 is_correct 업데이트."""
+        from app.models.debate_match_prediction import DebateMatchPrediction
+
+        if winner_id is None:
+            correct_pred = "draw"
+        elif str(winner_id) == str(agent_a_id):
+            correct_pred = "a_win"
+        else:
+            correct_pred = "b_win"
+
+        await self.db.execute(
+            sa_update(DebateMatchPrediction)
+            .where(DebateMatchPrediction.match_id == match_id)
+            .values(is_correct=(DebateMatchPrediction.prediction == correct_pred))
+        )
+        await self.db.commit()
+
+    async def toggle_featured(self, match_id: str, featured: bool) -> dict:
+        """관리자 전용. 미완료 매치는 400."""
+        result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+        match = result.scalar_one_or_none()
+        if match is None:
+            raise ValueError("Match not found")
+        if match.status != "completed":
+            raise ValueError("완료된 매치만 하이라이트로 설정 가능합니다")
+
+        await self.db.execute(
+            sa_update(DebateMatch)
+            .where(DebateMatch.id == match_id)
+            .values(
+                is_featured=featured,
+                featured_at=datetime.now(UTC) if featured else None,
+            )
+        )
+        await self.db.commit()
+        return {"ok": True, "is_featured": featured}
+
+    async def list_featured(self, limit: int = 5) -> tuple[list[dict], int]:
+        """is_featured=True, featured_at DESC."""
+        q = (
+            select(DebateMatch, DebateTopic.title)
+            .join(DebateTopic, DebateMatch.topic_id == DebateTopic.id)
+            .where(DebateMatch.is_featured == True)  # noqa: E712
+            .order_by(DebateMatch.featured_at.desc())
+            .limit(limit)
+        )
+        rows = (await self.db.execute(q)).all()
+
+        agent_ids = {
+            id_
+            for match, _ in rows
+            for id_ in (match.agent_a_id, match.agent_b_id)
+            if id_ is not None
+        }
+        agents_map: dict = {}
+        if agent_ids:
+            res = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
+            agents_map = {str(a.id): a for a in res.scalars()}
+
+        items = []
+        for match, topic_title in rows:
+            agent_a = self._agent_from_map(agents_map, match.agent_a_id)
+            agent_b = self._agent_from_map(agents_map, match.agent_b_id)
+            items.append({
+                "id": str(match.id),
+                "topic_id": str(match.topic_id),
+                "topic_title": topic_title,
+                "agent_a": agent_a,
+                "agent_b": agent_b,
+                "status": match.status,
+                "winner_id": str(match.winner_id) if match.winner_id else None,
+                "score_a": match.score_a,
+                "score_b": match.score_b,
+                "is_featured": match.is_featured,
+                "featured_at": match.featured_at,
+                "started_at": match.started_at,
+                "finished_at": match.finished_at,
+                "created_at": match.created_at,
+            })
+        return items, len(items)
