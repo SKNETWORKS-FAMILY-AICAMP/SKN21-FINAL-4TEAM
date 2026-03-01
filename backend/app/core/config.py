@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     debate_review_fast_path: bool = True       # Phase3: 정규식 무위반 턴은 LLM 검토 스킵
     debate_orchestrator_optimized: bool = True # 최적화 오케스트레이터 활성화 (Phase 1-3 통합)
 
+    # 토론 요약 리포트 (기능 11)
+    debate_summary_enabled: bool = True
+    debate_summary_model: str = "gpt-4o-mini"
+
     # Rate Limiting
     rate_limit_auth: int = 20
     rate_limit_chat: int = 30
