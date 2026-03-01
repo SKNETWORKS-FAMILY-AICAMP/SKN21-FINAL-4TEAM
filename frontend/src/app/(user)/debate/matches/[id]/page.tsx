@@ -3,11 +3,13 @@
 import { useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Swords } from 'lucide-react';
+import { ArrowLeft, Swords, Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import { DebateViewer } from '@/components/debate/DebateViewer';
 import { FightingHPBar } from '@/components/debate/FightingHPBar';
 import { Scorecard } from '@/components/debate/Scorecard';
+import { ShareButton } from '@/components/debate/ShareButton';
+import { SummaryReport } from '@/components/debate/SummaryReport';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -30,7 +32,7 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
-  const { currentMatch, turns, fetchMatch } = useDebateStore();
+  const { currentMatch, turns, fetchMatch, startReplay } = useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
 
@@ -236,6 +238,21 @@ export default function MatchPage() {
           <DebateViewer match={currentMatch} />
         </div>
 
+        {/* 완료된 매치: 리플레이 + 공유 버튼 */}
+        {currentMatch.status === 'completed' && (
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              type="button"
+              onClick={startReplay}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-sm font-semibold transition-colors"
+            >
+              <Play size={14} />
+              리플레이 시작
+            </button>
+            <ShareButton matchId={currentMatch.id} topicTitle={currentMatch.topic_title} />
+          </div>
+        )}
+
         {/* 스코어카드 (완료된 매치) */}
         {currentMatch.status === 'completed' && (
           <div ref={scorecardRef}>
@@ -246,6 +263,7 @@ export default function MatchPage() {
               penaltyA={currentMatch.penalty_a}
               penaltyB={currentMatch.penalty_b}
             />
+            <SummaryReport matchId={currentMatch.id} />
           </div>
         )}
       </div>

@@ -133,15 +133,22 @@ type DebateState = {
   streamingTurn: StreamingTurn | null;
   turnReviews: TurnReview[];
   ranking: RankingEntry[];
+  featuredMatches: DebateMatch[];
   topicsLoading: boolean;
   matchLoading: boolean;
   rankingLoading: boolean;
   streaming: boolean;
+  // 리플레이 상태
+  replayMode: boolean;
+  replayIndex: number;
+  replaySpeed: number; // 0.5 | 1 | 2
+  replayPlaying: boolean;
   fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
   fetchRanking: () => Promise<void>;
+  fetchFeatured: (limit?: number) => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
   deleteTopic: (topicId: string) => Promise<void>;
@@ -153,9 +160,14 @@ type DebateState = {
   clearStreamingTurn: () => void;
   setStreaming: (v: boolean) => void;
   addTurnReview: (review: TurnReview) => void;
+  // 리플레이 액션
+  startReplay: () => void;
+  stopReplay: () => void;
+  setReplaySpeed: (speed: number) => void;
+  tickReplay: () => void;
 };
 
-export const useDebateStore = create<DebateState>((set) => ({
+export const useDebateStore = create<DebateState>((set, get) => ({
   topics: [],
   topicsTotal: 0,
   popularTopics: [],
@@ -165,10 +177,15 @@ export const useDebateStore = create<DebateState>((set) => ({
   streamingTurn: null,
   turnReviews: [],
   ranking: [],
+  featuredMatches: [],
   topicsLoading: false,
   matchLoading: false,
   rankingLoading: false,
   streaming: false,
+  replayMode: false,
+  replayIndex: 0,
+  replaySpeed: 1,
+  replayPlaying: false,
   fetchTopics: async (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => {
     set({ topicsLoading: true });
     try {
@@ -228,6 +245,16 @@ export const useDebateStore = create<DebateState>((set) => ({
       console.error('Failed to fetch ranking:', err);
     } finally {
       set({ rankingLoading: false });
+    }
+  },
+  fetchFeatured: async (limit = 5) => {
+    try {
+      const data = await api.get<{ items: DebateMatch[]; total: number }>(
+        `/matches/featured?limit=${limit}`,
+      );
+      set({ featuredMatches: data.items });
+    } catch (err) {
+      console.error('Failed to fetch featured matches:', err);
     }
   },
   createTopic: async (payload) => {
@@ -308,6 +335,19 @@ export const useDebateStore = create<DebateState>((set) => ({
   },
   clearStreamingTurn: () => set({ streamingTurn: null }),
   setStreaming: (v) => set({ streaming: v }),
+  startReplay: () => set({ replayMode: true, replayIndex: 0, replayPlaying: true }),
+  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: 0 }),
+  setReplaySpeed: (speed) => set({ replaySpeed: speed }),
+  tickReplay: () => {
+    const { replayIndex, turns } = get();
+    const maxIndex = turns.length - 1;
+    if (replayIndex >= maxIndex) {
+      set({ replayPlaying: false });
+    } else {
+      set({ replayIndex: replayIndex + 1 });
+    }
+  },
 }));
 
 export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };
+export type { DebateState };

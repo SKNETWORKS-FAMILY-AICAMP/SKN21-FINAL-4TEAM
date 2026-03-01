@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog, TurnReview } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
 import { StreamingTurnBubble } from './StreamingTurnBubble';
+import { ReplayControls } from './ReplayControls';
+import { LiveBadge } from './LiveBadge';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
+import { api } from '@/lib/api';
 
 type Props = {
   match: DebateMatch;
@@ -18,6 +21,8 @@ export function DebateViewer({ match }: Props) {
   const streamingTurn = useDebateStore((s) => s.streamingTurn);
   const turnReviews = useDebateStore((s) => s.turnReviews);
   const streaming = useDebateStore((s) => s.streaming);
+  const replayMode = useDebateStore((s) => s.replayMode);
+  const replayIndex = useDebateStore((s) => s.replayIndex);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
   const fetchMatch = useDebateStore((s) => s.fetchMatch);
   const addTurnFromSSE = useDebateStore((s) => s.addTurnFromSSE);
@@ -28,9 +33,28 @@ export function DebateViewer({ match }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 
+  // 관전자 수 (in_progress 매치만)
+  const [viewerCount, setViewerCount] = useState(0);
+
   useEffect(() => {
     fetchTurns(match.id);
   }, [match.id, fetchTurns]);
+
+  // 관전자 수 폴링 (in_progress 매치, 30초 간격)
+  useEffect(() => {
+    if (match.status !== 'in_progress') return;
+    const fetchViewers = async () => {
+      try {
+        const data = await api.get<{ count: number }>(`/matches/${match.id}/viewers`);
+        setViewerCount(data.count);
+      } catch {
+        /* ignore */
+      }
+    };
+    fetchViewers();
+    const interval = setInterval(fetchViewers, 30000);
+    return () => clearInterval(interval);
+  }, [match.id, match.status]);
 
   // 바닥 감지: window 레벨 스크롤
   useEffect(() => {
@@ -120,8 +144,21 @@ export function DebateViewer({ match }: Props) {
     }
   }, [turns.length]);
 
+  // 리플레이 모드일 때 표시할 턴 슬라이스
+  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : turns;
+
   return (
     <div className="flex flex-col gap-3">
+      {/* 관전자 수 배지 (in_progress) */}
+      {match.status === 'in_progress' && viewerCount > 0 && (
+        <div className="flex justify-end">
+          <LiveBadge count={viewerCount} />
+        </div>
+      )}
+
+      {/* 리플레이 컨트롤 */}
+      <ReplayControls />
+
       {match.status === 'waiting_agent' && (
         <div className="text-center py-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 text-sm">
@@ -146,20 +183,29 @@ export function DebateViewer({ match }: Props) {
         </div>
       )}
 
-      {turns.map((turn) => {
-        const review = turnReviews.find(
-          (r) => r.turn_number === turn.turn_number && r.speaker === turn.speaker,
-        ) ?? turn.review_result ?? null;
+      {visibleTurns.map((turn, idx) => {
+        const review =
+          turnReviews.find(
+            (r) => r.turn_number === turn.turn_number && r.speaker === turn.speaker,
+          ) ??
+          turn.review_result ??
+          null;
+        // 리플레이 모드에서 마지막 턴에 fade 효과 적용
+        const isLast = replayMode && idx === visibleTurns.length - 1;
         return (
-          <TurnBubble
+          <div
             key={turn.id || `${turn.turn_number}-${turn.speaker}`}
-            turn={turn}
-            agentAName={match.agent_a.name}
-            agentBName={match.agent_b.name}
-            agentAImageUrl={match.agent_a.image_url}
-            agentBImageUrl={match.agent_b.image_url}
-            review={review}
-          />
+            className={isLast ? 'animate-pulse' : undefined}
+          >
+            <TurnBubble
+              turn={turn}
+              agentAName={match.agent_a.name}
+              agentBName={match.agent_b.name}
+              agentAImageUrl={match.agent_a.image_url}
+              agentBImageUrl={match.agent_b.image_url}
+              review={review}
+            />
+          </div>
         );
       })}
 
