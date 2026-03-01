@@ -10,7 +10,7 @@ type Props = {
   agentBName: string;
   agentAImageUrl?: string | null;
   agentBImageUrl?: string | null;
-  review?: TurnReview | null;
+  review?: Pick<TurnReview, 'logic_score' | 'violations' | 'feedback' | 'blocked' | 'skipped'> | null;
 };
 
 const ACTION_STYLES: Record<string, string> = {
