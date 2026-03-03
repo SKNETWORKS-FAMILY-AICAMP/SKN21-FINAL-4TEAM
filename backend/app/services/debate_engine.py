@@ -448,6 +448,9 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     "is_blocked": turn_a.is_blocked,
                     "review_result": None,  # 검토 전; turn_review 이벤트로 후속 발행
                 })
+                # A 청크들이 HTTP 버퍼에서 클라이언트로 flush된 후 B가 스트리밍 시작하도록 대기
+                # (즉시 gather 시작 시 A 청크 + A turn 이벤트가 묶여 A가 한번에 출력되는 현상 방지)
+                await asyncio.sleep(0.15)
 
                 opt_orch: OptimizedDebateOrchestrator = orchestrator  # type: ignore[assignment]
                 review_start = time.monotonic()
