@@ -32,7 +32,14 @@ export function AgentCard({ agent }: Props) {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-bold text-text truncate">{agent.name}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text truncate">{agent.name}</h3>
+            {agent.active_series_id && (
+              <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 font-semibold">
+                ⚔️
+              </span>
+            )}
+          </div>
           <span className="text-xs text-text-muted flex items-center gap-1">
             {agent.provider === 'local' && (
               <span

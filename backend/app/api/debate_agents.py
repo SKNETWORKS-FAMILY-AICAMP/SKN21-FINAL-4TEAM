@@ -17,6 +17,7 @@ from app.schemas.debate_agent import (
     AgentUpdate,
     AgentVersionResponse,
     CloneRequest,
+    PromotionSeriesResponse,
 )
 from app.services.debate_agent_service import DebateAgentService
 from app.services.debate_template_service import DebateTemplateService
@@ -347,3 +348,49 @@ async def get_agent_versions(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     versions = await service.get_agent_versions(agent_id)
     return [AgentVersionResponse.model_validate(v) for v in versions]
+
+
+@router.get("/{agent_id}/series", response_model=PromotionSeriesResponse | None)
+async def get_agent_active_series(
+    agent_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """에이전트의 현재 활성 승급전/강등전 시리즈 조회. 없으면 null 반환."""
+    from app.services.debate_promotion_service import DebatePromotionService
+
+    agent_service = DebateAgentService(db)
+    agent = await agent_service.get_agent(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    promo_svc = DebatePromotionService(db)
+    series = await promo_svc.get_active_series(agent_id)
+    if series is None:
+        return None
+    return PromotionSeriesResponse.model_validate(series)
+
+
+@router.get("/{agent_id}/series/history", response_model=list[PromotionSeriesResponse])
+async def get_agent_series_history(
+    agent_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """에이전트의 승급전/강등전 시리즈 이력 조회 (최신 순)."""
+    from app.services.debate_promotion_service import DebatePromotionService
+
+    agent_service = DebateAgentService(db)
+    agent = await agent_service.get_agent(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    promo_svc = DebatePromotionService(db)
+    history = await promo_svc.get_series_history(agent_id, limit=limit, offset=offset)
+    return [PromotionSeriesResponse.model_validate(s) for s in history]

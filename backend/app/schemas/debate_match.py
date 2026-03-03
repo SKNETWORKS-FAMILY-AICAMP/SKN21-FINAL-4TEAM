@@ -70,6 +70,8 @@ class MatchResponse(BaseModel):
     elo_b_before: int | None = None
     elo_a_after: int | None = None
     elo_b_after: int | None = None
+    match_type: str = "ranked"
+    series_id: UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

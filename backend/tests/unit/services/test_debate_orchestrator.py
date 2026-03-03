@@ -10,74 +10,117 @@ from app.services.debate_orchestrator import DebateOrchestrator, LLM_VIOLATION_P
 
 
 class TestEloCalculation:
-    """제로섬 ELO: 판정 점수차(score_diff)만큼 승자→패자로 이전. 최대 max_transfer(=30) 캡."""
+    """표준 ELO(K × (실제 - 기대승률)) + 판정 점수차 배수.
 
-    def test_a_win_zero_sum(self):
-        """A 승리 + score_diff=15 → A +15, B -15 (제로섬)."""
+    공식: E_a = 1/(1+10^((Rb-Ra)/400)), delta = round(K*(S-E)*mult), 제로섬 유지.
+    mult = 1.0 + (score_diff/100) × 1.0, 최대 2.0.  K=32.
+    """
+
+    def test_same_rating_a_win_with_diff(self):
+        """동일 레이팅 A 승리, diff=15 → +18 (K×0.5×1.15=18.4→18)."""
         new_a, new_b = calculate_elo(1500, 1500, "a_win", score_diff=15)
-        assert new_a == 1515
-        assert new_b == 1485
-        assert new_a + new_b == 3000
+        assert new_a == 1518
+        assert new_b == 1482
+        assert new_a + new_b == 3000  # 제로섬
 
-    def test_b_win_zero_sum(self):
-        """B 승리 + score_diff=20 → B +20, A -20 (제로섬)."""
+    def test_same_rating_b_win_with_diff(self):
+        """동일 레이팅 B 승리, diff=20 → -19 (K×0.5×1.2=19.2→19)."""
         new_a, new_b = calculate_elo(1500, 1500, "b_win", score_diff=20)
-        assert new_a == 1480
-        assert new_b == 1520
+        assert new_a == 1481
+        assert new_b == 1519
         assert new_a + new_b == 3000
 
-    def test_draw_no_change(self):
-        """무승부: ELO 변동 없음."""
+    def test_same_rating_draw_no_change(self):
+        """동일 레이팅 무승부: E=0.5=S → 변동 없음."""
         new_a, new_b = calculate_elo(1500, 1500, "draw")
         assert new_a == 1500
         assert new_b == 1500
 
-    def test_score_diff_capped_at_max_transfer(self):
-        """score_diff가 max_transfer(30)를 초과하면 30으로 캡."""
+    def test_score_diff_increases_gain(self):
+        """점수차가 클수록 변동 증가 — diff=50: +24 (K×0.5×1.5=24)."""
         new_a, new_b = calculate_elo(1500, 1500, "a_win", score_diff=50)
-        assert new_a == 1530
-        assert new_b == 1470
+        assert new_a == 1524
+        assert new_b == 1476
         assert new_a + new_b == 3000
 
-    def test_zero_score_diff_no_change(self):
-        """score_diff=0이면 승리여도 ELO 변동 없음."""
+    def test_zero_score_diff_base_elo_applies(self):
+        """diff=0이어도 표준 ELO 기본 변동은 발생 — 동일 레이팅 승리 시 +16."""
         new_a, new_b = calculate_elo(1500, 1500, "a_win", score_diff=0)
-        assert new_a == 1500
-        assert new_b == 1500
+        assert new_a == 1516
+        assert new_b == 1484
 
-    def test_draw_preserves_elo_sum(self):
-        """무승부: 서로 다른 레이팅에서도 합계 보존."""
+    def test_draw_different_ratings_redistributes(self):
+        """레이팅 차이 있는 무승부: 상위(1600)는 -8, 하위(1400)는 +8 (표준 ELO)."""
         new_a, new_b = calculate_elo(1600, 1400, "draw")
+        assert new_a == 1592   # 강자가 무승부로 기대치 미달 → 하락
+        assert new_b == 1408
         assert new_a + new_b == 3000
-        assert new_a == 1600
-        assert new_b == 1400
 
-    def test_win_zero_sum_different_ratings(self):
-        """다른 레이팅에서도 제로섬 유지."""
+    def test_expected_win_gives_fewer_points(self):
+        """예상된 승리(강자→약자)는 적은 점수: 1700 vs 1300, diff=20 → +3."""
         new_a, new_b = calculate_elo(1700, 1300, "a_win", score_diff=20)
+        assert new_a == 1703
+        assert new_b == 1297
         assert new_a + new_b == 3000
-        assert new_a == 1720
-        assert new_b == 1280
 
-    def test_b_win_different_ratings_zero_sum(self):
-        """B 승리, 다른 레이팅 — 제로섬."""
+    def test_upset_loss_costs_more(self):
+        """기대 밖 패배(강자→약자에게 짐): 1800 vs 1200, B 승, diff=10 → A -34."""
         new_a, new_b = calculate_elo(1800, 1200, "b_win", score_diff=10)
+        assert new_a == 1766
+        assert new_b == 1234
         assert new_a + new_b == 3000
-        assert new_a == 1790
-        assert new_b == 1210
 
-    def test_exact_max_transfer_not_capped(self):
-        """score_diff == max_transfer(30)이면 캡 없이 30 적용."""
+    def test_score_diff_30_with_same_rating(self):
+        """동일 레이팅, diff=30: +21 (K×0.5×1.3=20.8→21)."""
         new_a, new_b = calculate_elo(1500, 1500, "a_win", score_diff=30)
-        assert new_a == 1530
-        assert new_b == 1470
+        assert new_a == 1521
+        assert new_b == 1479
 
     def test_extreme_rating_difference_zero_sum(self):
-        """극단적 레이팅 차이에서도 제로섬."""
+        """극단적 레이팅 차이에서도 제로섬 유지. 약자(800)가 강자(2800) 이김 → 큰 획득."""
         new_a, new_b = calculate_elo(2800, 800, "b_win", score_diff=25)
         assert new_a + new_b == 2800 + 800
-        assert new_b == 825
-        assert new_a == 2775
+        assert new_b == 840   # 약자가 강자 이겨 +40
+        assert new_a == 2760
+
+    def test_upset_win_gives_more_points(self):
+        """업셋(하위가 상위 이김)은 많이 획득: 1300 vs 1500, A 승, diff=20 → +29."""
+        new_a, new_b = calculate_elo(1300, 1500, "a_win", score_diff=20)
+        assert new_a == 1329
+        assert new_b == 1471
+
+    def test_expected_and_upset_symmetry(self):
+        """예상 승리(+9) < 업셋 승리(+29): 상대 레이팅 반영 검증."""
+        _, _, da_expected = _elo_delta(1700, 1500, "a_win", diff=20)
+        _, _, da_upset = _elo_delta(1300, 1500, "a_win", diff=20)
+        assert da_upset > da_expected
+
+    def test_underdog_beats_strong_opponent_large_reward(self):
+        """약자(1500)가 강자(1700) 이길 때 diff=0이어도 +24 (기대 이하 결과 보상)."""
+        new_a, new_b = calculate_elo(1500, 1700, "a_win", score_diff=0)
+        assert new_a == 1524
+        assert new_b == 1676
+
+    def test_underdog_loses_to_stronger_small_penalty(self):
+        """약자(1500)가 강자(1700)에게 질 때 diff=0이면 -8만 잃음 (기대된 결과)."""
+        new_a, new_b = calculate_elo(1500, 1700, "b_win", score_diff=0)
+        assert new_a == 1492   # -8 (기대된 패배라 적은 손실)
+        assert new_b == 1708   # +8 (기대된 승리라 적은 획득)
+
+    def test_score_diff_multiplier_capped_at_max(self):
+        """diff=100(최대)이어도 multiplier는 2.0으로 캡. 동일 레이팅 승리: K×0.5×2=32."""
+        new_a, new_b = calculate_elo(1500, 1500, "a_win", score_diff=100)
+        assert new_a == 1532   # 32 × 1.0(win) × 2.0(mult)
+        assert new_b == 1468
+        # score_diff=200(초과)도 같은 결과여야 함
+        new_a2, new_b2 = calculate_elo(1500, 1500, "a_win", score_diff=200)
+        assert new_a2 == new_a
+
+
+def _elo_delta(ra, rb, result, diff=0):
+    """테스트 헬퍼: (new_a, new_b, delta_a) 반환."""
+    new_a, new_b = calculate_elo(ra, rb, result, score_diff=diff)
+    return new_a, new_b, new_a - ra
 
 
 class TestJudge:

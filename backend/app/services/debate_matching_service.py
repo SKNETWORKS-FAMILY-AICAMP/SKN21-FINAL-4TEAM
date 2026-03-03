@@ -193,6 +193,17 @@ class DebateMatchingService:
             agent_b_version_id=ver_b.id if ver_b else None,
             status="pending",
         )
+
+        # 시리즈 소속 매치인 경우 match_type / series_id 태깅 (첫 번째 시리즈 기준)
+        from app.services.debate_promotion_service import DebatePromotionService
+        promo_svc = DebatePromotionService(self.db)
+        for agent_id in [str(my_entry.agent_id), str(opponent_entry.agent_id)]:
+            series = await promo_svc.get_active_series(agent_id)
+            if series:
+                match.match_type = series.series_type
+                match.series_id = series.id
+                break
+
         self.db.add(match)
         await self.db.delete(my_entry)
         await self.db.delete(opponent_entry)

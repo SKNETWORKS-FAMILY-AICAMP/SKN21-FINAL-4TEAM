@@ -57,6 +57,13 @@ class DebateMatch(Base):
     format: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'1v1'"))
     # 기능 11: 토론 요약 리포트
     summary_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 승급전/강등전 시스템
+    match_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ranked")
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("debate_promotion_series.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -76,5 +83,9 @@ class DebateMatch(Base):
         CheckConstraint(
             "status IN ('pending', 'in_progress', 'completed', 'error', 'waiting_agent', 'forfeit')",
             name="ck_debate_matches_status",
+        ),
+        CheckConstraint(
+            "match_type IN ('ranked', 'promotion', 'demotion')",
+            name="ck_debate_matches_match_type",
         ),
     )

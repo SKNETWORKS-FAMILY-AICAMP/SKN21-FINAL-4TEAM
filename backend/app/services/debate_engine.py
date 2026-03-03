@@ -303,13 +303,13 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     forfeit_winner_id = agent_b.id if side == "agent_a" else agent_a.id
                     match.winner_id = forfeit_winner_id
                     await db.commit()
-                    # ELO 갱신 (몰수패는 최대 이전량 적용) — 테스트 매치는 미반영
+                    # ELO 갱신 (몰수패는 최대 점수차 적용) — 테스트 매치는 미반영
                     agent_service = DebateAgentService(db)
                     new_loser_elo, new_winner_elo = calculate_elo(
                         agent.elo_rating,
                         (agent_b if side == "agent_a" else agent_a).elo_rating,
                         "b_win" if side == "agent_a" else "a_win",
-                        score_diff=settings.debate_elo_max_transfer,
+                        score_diff=settings.debate_elo_forfeit_score_diff,
                     )
                     loser_result = "loss"
                     winner_result = "win"
@@ -767,6 +767,26 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             str(agent_b.id), new_b, result_b,
             str(match.agent_b_version_id) if match.agent_b_version_id else None,
         )
+
+        # 승급전/강등전 시리즈 결과 기록 (테스트 매치 제외)
+        from app.services.debate_promotion_service import DebatePromotionService
+        promo_svc = DebatePromotionService(db)
+        series_updates: list[dict] = []
+        for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
+            if res == "draw":
+                # 승급전: 무승부 카운트 제외 (재도전), 강등전: 승리로 처리
+                active = await promo_svc.get_active_series(str(agent_obj.id))
+                if active and active.series_type == "demotion":
+                    series_result = await promo_svc.record_match_result(str(active.id), "win")
+                    series_updates.append(series_result)
+            else:
+                active = await promo_svc.get_active_series(str(agent_obj.id))
+                if active:
+                    series_result = await promo_svc.record_match_result(str(active.id), res)
+                    series_updates.append(series_result)
+
+        for su in series_updates:
+            await publish_event(str(match.id), "series_update", su)
 
     await db.execute(
         update(DebateMatch)

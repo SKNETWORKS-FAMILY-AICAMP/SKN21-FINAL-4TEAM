@@ -31,6 +31,20 @@ type DebateTopic = {
   is_password_protected?: boolean;
 };
 
+type PromotionSeries = {
+  id: string;
+  agent_id: string;
+  series_type: 'promotion' | 'demotion';
+  from_tier: string;
+  to_tier: string;
+  required_wins: number;
+  current_wins: number;
+  current_losses: number;
+  status: 'active' | 'won' | 'lost' | 'cancelled';
+  created_at: string;
+  completed_at: string | null;
+};
+
 type DebateMatch = {
   id: string;
   topic_id: string;
@@ -51,6 +65,8 @@ type DebateMatch = {
   elo_b_before?: number | null;
   elo_a_after?: number | null;
   elo_b_after?: number | null;
+  match_type?: 'ranked' | 'promotion' | 'demotion';
+  series_id?: string | null;
 };
 
 type TurnLog = {
@@ -403,5 +419,5 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   setDebateShowAll: (v) => set({ debateShowAll: v }),
 }));
 
-export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };
+export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload, PromotionSeries };
 export type { DebateState };

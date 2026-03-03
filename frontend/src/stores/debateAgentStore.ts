@@ -19,6 +19,7 @@ type DebateAgent = {
   use_platform_credits: boolean;
   tier: string;
   tier_protection_count: number;
+  active_series_id: string | null;
   is_profile_public: boolean;
   name_changed_at: string | null;
   template_id: string | null;

@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Swords } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
+import type { PromotionSeries } from '@/stores/debateStore';
 import { DebateViewer } from '@/components/debate/DebateViewer';
 import { FightingHPBar } from '@/components/debate/FightingHPBar';
+import { PromotionBadge } from '@/components/debate/PromotionBadge';
+import { PromotionSeriesProgress } from '@/components/debate/PromotionSeriesProgress';
 import { Scorecard } from '@/components/debate/Scorecard';
 import { ShareButton } from '@/components/debate/ShareButton';
 import { SummaryReport } from '@/components/debate/SummaryReport';
@@ -36,6 +39,8 @@ export default function MatchPage() {
   const { currentMatch, turns, fetchMatch, debateShowAll } = useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
+  // 승급전/강등전 시리즈 상태 (SSE series_update 이벤트로 업데이트)
+  const [seriesUpdate, setSeriesUpdate] = useState<PromotionSeries | null>(null);
 
   useEffect(() => {
     fetchMatch(id);
@@ -165,8 +170,14 @@ export default function MatchPage() {
 
       {/* 배틀 헤더 — 항상 화면 상단 고정 (sticky top-0) */}
       <div
-        className="sticky top-0 z-30 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900
-          border-b border-gray-700/50 shadow-lg shadow-black/40"
+        className={`sticky top-0 z-30 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900
+          border-b shadow-lg shadow-black/40 ${
+            currentMatch.match_type === 'promotion'
+              ? 'border-yellow-400/60 shadow-yellow-400/10'
+              : currentMatch.match_type === 'demotion'
+                ? 'border-red-500/60 shadow-red-500/20'
+                : 'border-gray-700/50'
+          }`}
       >
         <div className="max-w-[700px] mx-auto px-5 pt-4 pb-4">
           {/* HP 게이지 영역 */}
@@ -182,7 +193,7 @@ export default function MatchPage() {
               agentImageUrl={currentMatch.agent_a.image_url}
             />
 
-            {/* 중앙: 아이콘 + 상태 + 점수 */}
+            {/* 중앙: 아이콘 + 상태 + 점수 + 승급전/강등전 배지 */}
             <div className="flex flex-col items-center gap-1.5 shrink-0 pt-1">
               <Swords size={18} className="text-primary" />
               <span
@@ -191,6 +202,9 @@ export default function MatchPage() {
               >
                 {STATUS_LABELS[currentMatch.status] ?? currentMatch.status}
               </span>
+              {currentMatch.match_type && currentMatch.match_type !== 'ranked' && (
+                <PromotionBadge type={currentMatch.match_type as 'promotion' | 'demotion'} size="sm" />
+              )}
               {isCompleted && (
                 <span className="text-sm font-mono font-bold text-gray-100 mt-0.5">
                   {hpA} <span className="text-gray-600 font-normal">:</span> {hpB}
@@ -220,6 +234,29 @@ export default function MatchPage() {
               「{currentMatch.topic_title}」
             </h1>
           </div>
+
+          {/* 승급전/강등전 시리즈 진행도 */}
+          {(seriesUpdate || currentMatch.match_type !== 'ranked') && (() => {
+            const activeSeries = seriesUpdate ?? (currentMatch.match_type && currentMatch.match_type !== 'ranked' ? {
+              id: currentMatch.series_id ?? '',
+              agent_id: '',
+              series_type: currentMatch.match_type as 'promotion' | 'demotion',
+              from_tier: '',
+              to_tier: '',
+              required_wins: currentMatch.match_type === 'promotion' ? 2 : 1,
+              current_wins: 0,
+              current_losses: 0,
+              status: 'active' as const,
+              created_at: '',
+              completed_at: null,
+            } : null);
+            if (!activeSeries || !activeSeries.from_tier) return null;
+            return (
+              <div className="mt-2 pt-2 border-t border-gray-700/50 flex justify-center">
+                <PromotionSeriesProgress series={activeSeries} />
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -236,7 +273,7 @@ export default function MatchPage() {
 
         {/* 토론 뷰어 */}
         <div className="mb-4">
-          <DebateViewer match={currentMatch} />
+          <DebateViewer match={currentMatch} onSeriesUpdate={setSeriesUpdate} />
         </div>
 
         {/* 진행 중 매치: 예측 투표 */}

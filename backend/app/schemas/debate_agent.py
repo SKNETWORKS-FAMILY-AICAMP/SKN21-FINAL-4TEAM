@@ -134,6 +134,7 @@ class AgentResponse(BaseModel):
     customizations: dict | None
     tier: str = "Iron"
     tier_protection_count: int = 0
+    active_series_id: UUID | None = None
     is_profile_public: bool = True
     created_at: datetime
     updated_at: datetime
@@ -214,3 +215,19 @@ class GalleryEntry(BaseModel):
 
 class CloneRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+
+
+class PromotionSeriesResponse(BaseModel):
+    id: UUID
+    agent_id: UUID
+    series_type: str
+    from_tier: str
+    to_tier: str
+    required_wins: int
+    current_wins: int
+    current_losses: int
+    status: str
+    created_at: datetime
+    completed_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eye, Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
-import type { DebateMatch, TurnLog, TurnReview } from '@/stores/debateStore';
+import type { DebateMatch, TurnLog, TurnReview, PromotionSeries } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
 import { StreamingTurnBubble } from './StreamingTurnBubble';
 import { ReplayControls } from './ReplayControls';
@@ -14,9 +14,10 @@ import { api } from '@/lib/api';
 
 type Props = {
   match: DebateMatch;
+  onSeriesUpdate?: (series: PromotionSeries) => void;
 };
 
-export function DebateViewer({ match }: Props) {
+export function DebateViewer({ match, onSeriesUpdate }: Props) {
   // 슬라이스별 구독 — appendChunk로 streamingTurn이 바뀔 때 turns는 재렌더링하지 않음
   const turns = useDebateStore((s) => s.turns);
   const streamingTurn = useDebateStore((s) => s.streamingTurn);
@@ -135,6 +136,8 @@ export function DebateViewer({ match }: Props) {
                 addTurnFromSSE(event.data as TurnLog);
               } else if (event.event === 'turn_review') {
                 addTurnReview(event.data as TurnReview);
+              } else if (event.event === 'series_update') {
+                onSeriesUpdate?.(event.data as PromotionSeries);
               } else if (event.event === 'finished' || event.event === 'error') {
                 clearStreamingTurn();
                 // 결과창 즉시 표시 — fetchMatch 후에도 debateShowAll이 리셋되지 않도록 먼저 설정
@@ -156,7 +159,7 @@ export function DebateViewer({ match }: Props) {
     })();
 
     return () => controller.abort();
-  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, fetchTurns, setStreaming, addTurnReview]);
+  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, fetchTurns, setStreaming, addTurnReview, onSeriesUpdate]);
 
   // 스마트 자동 스크롤: 완료 턴이 추가될 때만 (스트리밍 청크는 스크롤 안 함)
   useEffect(() => {

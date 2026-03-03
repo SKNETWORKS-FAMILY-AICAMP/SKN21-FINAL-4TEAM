@@ -72,12 +72,17 @@ const config: Config = {
           '70%': { opacity: '1', transform: 'translateX(-50%) translateY(8px)' },
           '100%': { opacity: '0', transform: 'translateX(-50%) translateY(24px)' },
         },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% center' },
+          '100%': { backgroundPosition: '200% center' },
+        },
       },
       animation: {
         'slide-in': 'slide-in 0.25s ease-out',
         'slide-in-left': 'slide-in-left 0.25s ease-out',
         'fade-in': 'fade-in 0.3s ease-out',
         'slide-up': 'slide-up 3s ease-out forwards',
+        shimmer: 'shimmer 2s linear infinite',
       },
     },
   },

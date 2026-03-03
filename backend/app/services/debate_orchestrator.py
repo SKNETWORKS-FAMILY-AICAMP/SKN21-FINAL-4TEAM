@@ -516,19 +516,45 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
 
 
 def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0) -> tuple[int, int]:
-    """제로섬 ELO. 판정 점수차만큼 승자→패자로 이전 (최대 debate_elo_max_transfer 캡).
+    """표준 ELO + 판정 점수차 배수.
 
     result: 'a_win' | 'b_win' | 'draw'
-    score_diff: abs(score_a - score_b) — 점수차가 클수록 이전량 증가
-    무승부는 변동 없음. (new_a, new_b) 반환.
+    score_diff: abs(score_a - score_b), 0~100 범위
+
+    공식:
+      E_a  = 1 / (1 + 10^((rating_b - rating_a) / 400))   # 기대 승률
+      base = K × (실제결과 - E_a)                           # 표준 ELO 변동
+      mult = 1.0 + (score_diff / scale) × weight           # 점수차 배수 [1.0 ~ max_mult]
+      delta_a = round(base × mult),  delta_b = -delta_a    # 제로섬 유지
+
+    효과:
+      - 강자를 이기면 많이 획득, 약자에게 지면 많이 잃음
+      - 압도적 승리(score_diff 큼)일수록 최대 max_mult배 변동
     """
-    max_transfer = settings.debate_elo_max_transfer
-    transfer = min(abs(score_diff), max_transfer)
+    K = settings.debate_elo_k_factor
+    scale = settings.debate_elo_score_diff_scale
+    weight = settings.debate_elo_score_diff_weight
+    max_mult = settings.debate_elo_score_mult_max
+
+    # 기대 승률 (로지스틱 ELO 공식)
+    E_a = 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
 
     if result == "a_win":
-        return rating_a + transfer, rating_b - transfer
+        S_a = 1.0
     elif result == "b_win":
-        return rating_a - transfer, rating_b + transfer
-    else:
-        # 무승부 또는 score_diff=0 — 변동 없음
-        return rating_a, rating_b
+        S_a = 0.0
+    else:  # draw
+        S_a = 0.5
+
+    # 기본 ELO 변동
+    base_delta = K * (S_a - E_a)
+
+    # 점수차 배수 (1.0 이상, max_mult 이하)
+    mult = 1.0 + (min(abs(score_diff), scale) / scale) * weight
+    mult = min(mult, max_mult)
+
+    # 반올림 후 제로섬 보정 (delta_a + delta_b = 0 항상 유지)
+    delta_a = round(base_delta * mult)
+    delta_b = -delta_a
+
+    return rating_a + delta_a, rating_b + delta_b

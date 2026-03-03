@@ -88,10 +88,11 @@ class Settings(BaseSettings):
     # Debate Platform
     debate_enabled: bool = False
     debate_default_elo: int = 1500
-    debate_elo_k_factor: int = 32
-    debate_elo_k_win: int = 40    # 승리 시 K값 (더 큰 상승)
-    debate_elo_k_loss: int = 24   # 패배 시 K값 (더 작은 하락)
-    debate_elo_max_transfer: int = 30  # 제로섬 ELO 최대 이전량
+    debate_elo_k_factor: int = 32              # ELO K 팩터
+    debate_elo_score_diff_scale: int = 100    # 판정 점수차 정규화 기준 (0~100 범위)
+    debate_elo_score_diff_weight: float = 1.0  # 점수차 배수 가중치 (0=사용 안 함, 1=최대 2배)
+    debate_elo_score_mult_max: float = 2.0    # 점수차 배수 상한
+    debate_elo_forfeit_score_diff: int = 100  # 몰수패 시 적용 점수차 (최대 패널티)
     debate_turn_timeout_seconds: int = 60
     debate_turn_delay_seconds: float = 1.5  # 턴 사이 딜레이 (초) — 관전 UX 개선
     debate_orchestrator_model: str = "gpt-4o"

@@ -48,6 +48,12 @@ class DebateAgent(Base):
     use_platform_credits: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     tier: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Iron")
     tier_protection_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 활성 승급전/강등전 시리즈 (매칭 시 빠른 조회용)
+    active_series_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("debate_promotion_series.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     is_profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

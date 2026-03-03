@@ -319,16 +319,19 @@ class DebateAgentService:
 
     async def update_elo(
         self, agent_id: str, new_elo: int, result_type: str, version_id: str | None = None
-    ) -> None:
-        """ELO 및 전적 갱신 + 티어 계산 및 강등 보호. result_type: 'win' | 'loss' | 'draw'."""
-        # 현재 에이전트 상태 조회 (티어 보호 로직에 필요)
+    ) -> dict | None:
+        """ELO 및 전적 갱신 + 승급전/강등전 시리즈 트리거.
+
+        result_type: 'win' | 'loss' | 'draw'
+        반환: 시리즈가 새로 생성된 경우 시리즈 정보 dict, 없으면 None
+        """
+        from app.services.debate_promotion_service import DebatePromotionService
+
+        # 현재 에이전트 상태 조회 (시리즈/보호 로직에 필요)
         result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
         agent = result.scalar_one_or_none()
         if agent is None:
-            return
-
-        new_tier = get_tier_from_elo(new_elo)
-        old_tier = agent.tier
+            return None
 
         updates: dict = {"elo_rating": new_elo}
 
@@ -339,23 +342,37 @@ class DebateAgentService:
         else:
             updates["draws"] = DebateAgent.draws + 1
 
-        # 티어 변경 로직
-        tier_order = ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master"]
-        old_idx = tier_order.index(old_tier) if old_tier in tier_order else 0
-        new_idx = tier_order.index(new_tier) if new_tier in tier_order else 0
+        # 활성 시리즈가 없을 때만 티어 자동 변경 및 시리즈 트리거
+        # (시리즈 진행 중에는 티어 변경 없음 — 시리즈 결과가 티어를 결정)
+        new_series: object | None = None
+        if agent.active_series_id is None:
+            promo_svc = DebatePromotionService(self.db)
+            new_series = await promo_svc.check_and_trigger(
+                agent_id=agent_id,
+                old_elo=agent.elo_rating,
+                new_elo=new_elo,
+                current_tier=agent.tier,
+                protection_count=agent.tier_protection_count,
+            )
 
-        if new_idx > old_idx:
-            # 승급: 티어 갱신 + 보호 횟수 3 부여
-            updates["tier"] = new_tier
-            updates["tier_protection_count"] = 3
-        elif new_idx < old_idx:
-            # 강등 대상: 보호 있으면 유지, 없으면 강등
-            if agent.tier_protection_count > 0:
-                updates["tier_protection_count"] = DebateAgent.tier_protection_count - 1
-                # 티어는 유지 (updates에 tier 없음)
-            else:
-                updates["tier"] = new_tier
-        # else: 같은 티어면 아무 변경 없음
+            if new_series is None:
+                # 시리즈 미생성: 기존 즉시 승급/강등 로직 유지
+                tier_order = ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master"]
+                old_tier = agent.tier
+                new_tier = get_tier_from_elo(new_elo)
+                old_idx = tier_order.index(old_tier) if old_tier in tier_order else 0
+                new_idx = tier_order.index(new_tier) if new_tier in tier_order else 0
+
+                if new_idx > old_idx:
+                    # 최상위 Master는 시리즈 없이 즉시 승급
+                    updates["tier"] = new_tier
+                    updates["tier_protection_count"] = 3
+                elif new_idx < old_idx:
+                    if agent.tier_protection_count > 0:
+                        updates["tier_protection_count"] = DebateAgent.tier_protection_count - 1
+                    # else: 강등전 시리즈가 check_and_trigger에서 생성됐어야 하지만
+                    #       Iron 강등 등 예외 케이스는 그냥 유지
+        # else: 시리즈 진행 중 — ELO만 업데이트, 티어 변경 없음
 
         await self.db.execute(
             update(DebateAgent).where(DebateAgent.id == agent_id).values(**updates)
@@ -375,6 +392,16 @@ class DebateAgentService:
                 .where(DebateAgentVersion.id == version_id)
                 .values(**ver_updates)
             )
+
+        if new_series is not None:
+            return {
+                "series_id": str(new_series.id),
+                "series_type": new_series.series_type,
+                "from_tier": new_series.from_tier,
+                "to_tier": new_series.to_tier,
+                "required_wins": new_series.required_wins,
+            }
+        return None
 
     async def get_head_to_head(self, agent_id: str, limit: int = 5) -> list[dict]:
         """상대별 전적 집계 (agent_a 또는 agent_b로 참가한 매치 모두 포함)."""

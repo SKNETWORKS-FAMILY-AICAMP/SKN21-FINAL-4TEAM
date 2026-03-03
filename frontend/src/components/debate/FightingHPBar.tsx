@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { TierBadge } from './TierBadge';
+import { PromotionBadge } from './PromotionBadge';
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: 'text-green-400',
@@ -21,6 +22,7 @@ type Props = {
   isCompleted?: boolean;
   agentImageUrl?: string | null;
   tier?: string;
+  matchType?: 'ranked' | 'promotion' | 'demotion';
 };
 
 function hpBarColor(hp: number, side: 'left' | 'right'): string {
@@ -39,6 +41,7 @@ export function FightingHPBar({
   isCompleted = false,
   agentImageUrl,
   tier,
+  matchType,
 }: Props) {
   const clamped = Math.max(0, Math.min(100, Math.round(hp)));
   const color = hpBarColor(clamped, side);
@@ -80,6 +83,9 @@ export function FightingHPBar({
             </Link>
             {isWinner && <span className="text-base shrink-0 leading-none">👑</span>}
             {tier && <TierBadge tier={tier} />}
+            {matchType && matchType !== 'ranked' && (
+              <PromotionBadge type={matchType} size="sm" />
+            )}
           </div>
           <p className={`text-[11px] ${providerColor}`}>{provider}</p>
         </div>
