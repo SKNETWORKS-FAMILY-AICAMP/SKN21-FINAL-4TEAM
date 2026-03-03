@@ -101,6 +101,7 @@ class DebateTopicService:
         )
         match_subq = (
             select(DebateMatch.topic_id, func.count(DebateMatch.id).label("m_cnt"))
+            .where(DebateMatch.is_test.is_(False))
             .group_by(DebateMatch.topic_id)
             .subquery()
         )
@@ -304,6 +305,9 @@ class DebateTopicService:
 
     async def _count_matches(self, topic_id) -> int:
         result = await self.db.execute(
-            select(func.count(DebateMatch.id)).where(DebateMatch.topic_id == topic_id)
+            select(func.count(DebateMatch.id)).where(
+                DebateMatch.topic_id == topic_id,
+                DebateMatch.is_test.is_(False),
+            )
         )
         return result.scalar() or 0

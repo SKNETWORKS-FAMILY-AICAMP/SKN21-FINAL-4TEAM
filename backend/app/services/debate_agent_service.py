@@ -397,6 +397,7 @@ class DebateAgentService:
             )
             .where(DebateMatch.agent_a_id == agent_uuid)
             .where(DebateMatch.status == "completed")
+            .where(DebateMatch.is_test.is_(False))
             .group_by(DebateMatch.agent_b_id)
         )
 
@@ -415,6 +416,7 @@ class DebateAgentService:
             )
             .where(DebateMatch.agent_b_id == agent_uuid)
             .where(DebateMatch.status == "completed")
+            .where(DebateMatch.is_test.is_(False))
             .group_by(DebateMatch.agent_a_id)
         )
 
