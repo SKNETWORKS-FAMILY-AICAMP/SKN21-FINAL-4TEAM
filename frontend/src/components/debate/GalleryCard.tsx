@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Link2, Check } from 'lucide-react';
 import { TierBadge } from './TierBadge';
 
@@ -46,7 +47,10 @@ export function GalleryCard({ entry, onClone }: Props) {
 
   return (
     <div className="bg-bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 hover:border-primary/30 transition-colors">
-      <div className="flex items-start gap-3">
+      <Link
+        href={`/debate/agents/${entry.id}`}
+        className="flex items-start gap-3 no-underline hover:opacity-80 transition-opacity"
+      >
         {entry.image_url ? (
           <img
             src={entry.image_url}
@@ -67,7 +71,7 @@ export function GalleryCard({ entry, onClone }: Props) {
             {entry.owner_nickname} · {entry.provider}
           </div>
         </div>
-      </div>
+      </Link>
 
       {entry.description && (
         <p className="text-xs text-text-muted line-clamp-2">{entry.description}</p>

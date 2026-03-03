@@ -10,6 +10,7 @@ import type { DebateMatch } from '@/stores/debateStore';
 import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
+import { useUserStore } from '@/stores/userStore';
 
 type H2HEntry = {
   opponent_id: string;
@@ -29,6 +30,7 @@ export default function AgentProfilePage() {
   const [h2h, setH2h] = useState<H2HEntry[]>([]);
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const { user } = useUserStore();
 
   useEffect(() => {
     api
@@ -75,6 +77,7 @@ export default function AgentProfilePage() {
 
   const totalGames = agent.wins + agent.losses + agent.draws;
   const winRate = totalGames > 0 ? Math.round((agent.wins / totalGames) * 100) : 0;
+  const isOwner = !!user && agent.owner_id === user.id;
 
   return (
     <div className="max-w-[700px] mx-auto py-6 px-4">
@@ -105,35 +108,39 @@ export default function AgentProfilePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleTogglePublic}
-              disabled={publishing}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                agent.is_profile_public
-                  ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
-                  : 'bg-bg-surface border-border text-text-muted hover:bg-border/20'
-              }`}
-            >
-              {agent.is_profile_public ? (
-                <>
-                  <Globe size={13} />
-                  갤러리 공개
-                </>
-              ) : (
-                <>
-                  <EyeOff size={13} />
-                  갤러리 비공개
-                </>
-              )}
-            </button>
-            <Link
-              href={`/debate/agents/${agent.id}/edit`}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"
-            >
-              <Edit size={13} />
-              수정
-            </Link>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={handleTogglePublic}
+                disabled={publishing}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  agent.is_profile_public
+                    ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+                    : 'bg-bg-surface border-border text-text-muted hover:bg-border/20'
+                }`}
+              >
+                {agent.is_profile_public ? (
+                  <>
+                    <Globe size={13} />
+                    갤러리 공개
+                  </>
+                ) : (
+                  <>
+                    <EyeOff size={13} />
+                    갤러리 비공개
+                  </>
+                )}
+              </button>
+            )}
+            {isOwner && (
+              <Link
+                href={`/debate/agents/${agent.id}/edit`}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"
+              >
+                <Edit size={13} />
+                수정
+              </Link>
+            )}
           </div>
         </div>
 
