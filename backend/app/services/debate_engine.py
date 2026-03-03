@@ -445,6 +445,8 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     "penalty_total": turn_a.penalty_total,
                     "human_suspicion_score": turn_a.human_suspicion_score,
                     "response_time_ms": turn_a.response_time_ms,
+                    "input_tokens": turn_a.input_tokens,
+                    "output_tokens": turn_a.output_tokens,
                     "is_blocked": turn_a.is_blocked,
                     "review_result": None,  # 검토 전; turn_review 이벤트로 후속 발행
                 })
@@ -579,6 +581,8 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 "penalty_total": turn_a.penalty_total,
                 "human_suspicion_score": turn_a.human_suspicion_score,
                 "response_time_ms": turn_a.response_time_ms,
+                "input_tokens": turn_a.input_tokens,
+                "output_tokens": turn_a.output_tokens,
                 "is_blocked": turn_a.is_blocked,
                 "review_result": turn_a.review_result,
             })
@@ -689,6 +693,8 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "penalty_total": turn_b.penalty_total,
             "human_suspicion_score": turn_b.human_suspicion_score,
             "response_time_ms": turn_b.response_time_ms,
+            "input_tokens": turn_b.input_tokens,
+            "output_tokens": turn_b.output_tokens,
             "is_blocked": turn_b.is_blocked,
             "review_result": turn_b.review_result,
         })

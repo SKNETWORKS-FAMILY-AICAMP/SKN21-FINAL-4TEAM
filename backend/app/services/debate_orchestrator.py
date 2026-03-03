@@ -14,6 +14,20 @@ from app.services.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
 
+# 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
+PENALTY_KO_LABELS: dict[str, str] = {
+    "schema_violation": "JSON 형식 위반",
+    "repetition": "주장 반복",
+    "prompt_injection": "프롬프트 인젝션",
+    "ad_hominem": "인신공격",
+    "off_topic": "주제 이탈",
+    "false_claim": "허위 주장",
+    "llm_prompt_injection": "프롬프트 인젝션(LLM)",
+    "llm_ad_hominem": "인신공격(LLM)",
+    "llm_off_topic": "주제 이탈(LLM)",
+    "llm_false_claim": "허위 주장(LLM)",
+}
+
 # 채점 기준 (총 100점 만점)
 SCORING_CRITERIA = {
     "logic": 30,       # 논리성
@@ -394,7 +408,12 @@ class DebateOrchestrator:
             if rr and not rr.get("skipped") and rr.get("logic_score") is not None:
                 lines.append(f"논증품질: {rr['logic_score']}/10")
             if turn.penalty_total > 0:
-                lines.append(f"벌점: -{turn.penalty_total} ({json.dumps(turn.penalties, ensure_ascii=False)})")
+                ko_items = ", ".join(
+                    f"{PENALTY_KO_LABELS.get(k, k)} {v}점"
+                    for k, v in (turn.penalties or {}).items()
+                    if v
+                )
+                lines.append(f"벌점: -{turn.penalty_total}점 ({ko_items})")
             lines.append("")
         return "\n".join(lines)
 
