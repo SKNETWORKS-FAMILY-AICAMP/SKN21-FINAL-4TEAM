@@ -12,6 +12,10 @@ const mockStoreState = {
   streamingTurn: null,
   turnReviews: [] as unknown[],
   streaming: false,
+  replayMode: false,
+  replayIndex: -1,
+  replaySpeed: 1,
+  debateShowAll: false,
   fetchTurns: mockFetchTurns,
   fetchMatch: vi.fn(),
   addTurnFromSSE: mockAddTurnFromSSE,
@@ -19,6 +23,10 @@ const mockStoreState = {
   clearStreamingTurn: vi.fn(),
   setStreaming: mockSetStreaming,
   addTurnReview: vi.fn(),
+  setReplayTyping: vi.fn(),
+  setDebateShowAll: vi.fn(),
+  startReplay: vi.fn(),
+  stopReplay: vi.fn(),
 };
 
 vi.mock('@/stores/debateStore', () => ({
@@ -32,8 +40,28 @@ vi.mock('./TurnBubble', () => ({
   TurnBubble: ({ turn }: { turn: { claim: string } }) => <div data-testid="turn">{turn.claim}</div>,
 }));
 
+vi.mock('./StreamingTurnBubble', () => ({
+  StreamingTurnBubble: () => <div data-testid="streaming-turn" />,
+}));
+
+vi.mock('./ReplayControls', () => ({
+  ReplayControls: () => <div data-testid="replay-controls" />,
+}));
+
+vi.mock('./LiveBadge', () => ({
+  LiveBadge: () => <div data-testid="live-badge" />,
+}));
+
 vi.mock('@/components/ui/Skeleton', () => ({
   SkeletonCard: () => <div data-testid="skeleton" />,
+}));
+
+vi.mock('@/components/ui/ScrollToTop', () => ({
+  ScrollToTop: () => null,
+}));
+
+vi.mock('@/lib/api', () => ({
+  api: { get: vi.fn().mockResolvedValue({ count: 0 }) },
 }));
 
 // jsdom에 scrollIntoView가 없으므로 mock

@@ -3,11 +3,13 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncGenerator
 
 import redis.asyncio as aioredis
 
 from app.core.config import settings
+from app.core.redis import redis_client  # 공유 연결 풀 (viewer 추적용)
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,9 @@ async def _get_redis():
 
 
 async def publish_event(match_id: str, event_type: str, data: dict) -> None:
-    """토론 이벤트를 Redis 채널에 발행."""
-    r = await _get_redis()
-    try:
-        payload = json.dumps({"event": event_type, "data": data}, ensure_ascii=False, default=str)
-        await r.publish(_channel(match_id), payload)
-    finally:
-        await r.aclose()
+    """토론 이벤트를 Redis 채널에 발행. 공유 클라이언트 사용 — 청크 단위 호출 시 연결 생성 오버헤드 제거."""
+    payload = json.dumps({"event": event_type, "data": data}, ensure_ascii=False, default=str)
+    await redis_client.publish(_channel(match_id), payload)
 
 
 async def subscribe(match_id: str) -> AsyncGenerator[str, None]:
@@ -36,14 +34,14 @@ async def subscribe(match_id: str) -> AsyncGenerator[str, None]:
     pubsub = r.pubsub()
     await pubsub.subscribe(_channel(match_id))
 
-    # 관전자 수 추적 — 별도 연결로 INCR (pubsub 연결 공유 불가)
-    r_viewers = None
+    # 관전자 수 추적 — 공유 redis_client + Set 기반 (연결마다 새 Redis 클라이언트 생성 방지)
+    conn_id = str(uuid.uuid4())
+    viewers_key = f"debate:viewers:{match_id}"
     try:
-        r_viewers = await _get_redis()
-        await r_viewers.incr(f"debate:viewers:{match_id}")
-        await r_viewers.expire(f"debate:viewers:{match_id}", 3600)
+        await redis_client.sadd(viewers_key, conn_id)
+        await redis_client.expire(viewers_key, 3600)
     except Exception:
-        logger.warning("Failed to increment viewer count for match %s", match_id)
+        logger.warning("Failed to add viewer for match %s", match_id)
 
     try:
         while True:
@@ -62,9 +60,7 @@ async def subscribe(match_id: str) -> AsyncGenerator[str, None]:
         await pubsub.unsubscribe(_channel(match_id))
         await pubsub.aclose()
         await r.aclose()
-        if r_viewers is not None:
-            try:
-                await r_viewers.decr(f"debate:viewers:{match_id}")
-            except Exception:
-                logger.warning("Failed to decrement viewer count for match %s", match_id)
-            await r_viewers.aclose()
+        try:
+            await redis_client.srem(viewers_key, conn_id)
+        except Exception:
+            logger.warning("Failed to remove viewer for match %s", match_id)

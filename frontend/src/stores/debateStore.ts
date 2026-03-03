@@ -228,19 +228,24 @@ export const useDebateStore = create<DebateState>((set, get) => ({
     }
   },
   fetchMatch: async (matchId) => {
-    // 새 매치 로드 전 이전 턴·리플레이 상태 초기화
-    // replayMode/replayPlaying을 리셋하지 않으면 다른 매치로 이동 시 자동 재생 버그 발생
+    // 동일 매치 로딩 중 중복 호출 방지 (빠른 새로고침 시 DB 커넥션 풀 고갈 방지)
+    if (get().matchLoading) return;
+    // 새 매치 로드 시에만 상태 초기화 — 동일 매치 재조회(SSE finished, 폴링)는 기존 상태 유지
+    // 동일 매치 리셋 시 debateShowAll이 false로 돌아가 completed 상태에서 결과창이 비워지는 버그 방지
+    const isSameMatch = get().currentMatch?.id === matchId;
     set({
       matchLoading: true,
-      turns: [],
-      streamingTurn: null,
-      pendingStreamingTurn: null,
-      turnReviews: [],
-      replayMode: false,
-      replayPlaying: false,
-      replayIndex: -1,
-      replayTyping: false,
-      debateShowAll: false,
+      ...(!isSameMatch && {
+        turns: [],
+        streamingTurn: null,
+        pendingStreamingTurn: null,
+        turnReviews: [],
+        replayMode: false,
+        replayPlaying: false,
+        replayIndex: -1,
+        replayTyping: false,
+        debateShowAll: false,
+      }),
     });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);

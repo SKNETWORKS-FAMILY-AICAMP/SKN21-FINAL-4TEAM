@@ -96,11 +96,14 @@ class DebateMatchService:
             select(DebateMatch, DebateTopic.title)
             .join(DebateTopic, DebateMatch.topic_id == DebateTopic.id)
             .join(DebateAgent, DebateMatch.agent_a_id == DebateAgent.id, isouter=True)
+            # 관리자 테스트 매치는 사용자 목록에서 제외 (ELO 미반영 매치)
+            .where(DebateMatch.is_test.is_(False))
         )
         count_query = (
             select(func.count(DebateMatch.id))
             .join(DebateTopic, DebateMatch.topic_id == DebateTopic.id)
             .join(DebateAgent, DebateMatch.agent_a_id == DebateAgent.id, isouter=True)
+            .where(DebateMatch.is_test.is_(False))
         )
 
         if topic_id:

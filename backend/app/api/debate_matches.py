@@ -29,17 +29,11 @@ async def get_viewer_count(
     match_id: str,
     user: User = Depends(get_current_user),
 ):
-    """현재 관전자 수 조회. Redis debate:viewers:{match_id}"""
-    import redis.asyncio as aioredis
+    """현재 관전자 수 조회. Redis Set debate:viewers:{match_id}"""
+    from app.core.redis import redis_client
 
-    from app.core.config import settings
-
-    r = aioredis.from_url(settings.redis_url, decode_responses=True)
-    try:
-        count_str = await r.get(f"debate:viewers:{match_id}")
-        return {"count": int(count_str) if count_str else 0}
-    finally:
-        await r.aclose()
+    count = await redis_client.scard(f"debate:viewers:{match_id}")
+    return {"count": count}
 
 
 @router.post("/{match_id}/predictions", status_code=status.HTTP_201_CREATED)

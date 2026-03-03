@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     rate_limit_auth: int = 20
     rate_limit_chat: int = 30
     rate_limit_api: int = 60
+    rate_limit_debate: int = 120  # 토론 관련 엔드포인트 (SSE 포함) — 일반보다 2배
     rate_limit_admin: int = 120
     rate_limit_window: int = 60  # seconds
     rate_limit_enabled: bool = True

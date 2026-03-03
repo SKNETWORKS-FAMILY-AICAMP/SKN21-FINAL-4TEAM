@@ -10,6 +10,7 @@ engine = create_async_engine(
     max_overflow=20,
     pool_pre_ping=True,  # 연결 유효성 사전 확인 (끊어진 커넥션 재연결)
     pool_recycle=1800,   # 30분마다 커넥션 재생성 (장기 연결 누수 방지)
+    pool_timeout=5,      # 풀 고갈 시 5초 내 실패 반환 — 기본 30초 대기로 인한 행(hang) 방지
 )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

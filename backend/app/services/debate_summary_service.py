@@ -9,6 +9,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
 from app.models.debate_turn_log import DebateTurnLog
 
@@ -25,11 +26,13 @@ SUMMARY_SYSTEM_PROMPT = """당신은 AI 토론 분석 전문가입니다. 토론
 }"""
 
 
-def _format_debate_log(turns: list) -> str:
+def _format_debate_log(turns: list, agent_a_name: str, agent_b_name: str) -> str:
     """턴 로그를 텍스트로 포맷."""
+    name_map = {"agent_a": agent_a_name, "agent_b": agent_b_name}
     lines = []
     for t in turns:
-        lines.append(f"[{t.speaker} 턴 {t.turn_number}] {t.action}: {t.claim}")
+        speaker_name = name_map.get(t.speaker, t.speaker)
+        lines.append(f"[{speaker_name} 턴 {t.turn_number}] {t.action}: {t.claim}")
         if t.evidence:
             lines.append(f"  근거: {t.evidence}")
         if t.penalty_total > 0:
@@ -50,6 +53,14 @@ class DebateSummaryService:
         if match.summary_report is not None:
             return  # 중복 방지
 
+        # 에이전트 이름 조회
+        agents_res = await self.db.execute(
+            select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
+        )
+        agents = {str(a.id): a.name for a in agents_res.scalars().all()}
+        agent_a_name = agents.get(str(match.agent_a_id), "Agent A")
+        agent_b_name = agents.get(str(match.agent_b_id), "Agent B")
+
         # 턴 로그 조회
         turns_res = await self.db.execute(
             select(DebateTurnLog)
@@ -60,7 +71,7 @@ class DebateSummaryService:
         if not turns:
             return
 
-        log_text = _format_debate_log(turns)
+        log_text = _format_debate_log(turns, agent_a_name, agent_b_name)
 
         try:
             import httpx
@@ -73,7 +84,13 @@ class DebateSummaryService:
                 "model": settings.debate_summary_model,
                 "messages": [
                     {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"다음 토론 로그를 분석하세요:\n\n{log_text[:4000]}"},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"참가자: {agent_a_name} vs {agent_b_name}\n\n"
+                            f"다음 토론 로그를 분석하세요:\n\n{log_text[:4000]}"
+                        ),
+                    },
                 ],
                 "response_format": {"type": "json_object"},
                 "max_tokens": 800,

@@ -75,7 +75,14 @@ RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변
   "evidence": "<한국어로 작성한 근거/데이터/인용>" | null,
   "tool_used": null,
   "tool_result": null
-}"""
+}
+
+action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
+- "argue"  : 새로운 주장이나 추가 근거를 제시할 때
+- "rebut"  : 상대방의 구체적 논거·데이터를 직접 논리적으로 반박할 때
+- "question": 상대방 주장의 전제·근거에 의문을 제기하거나 약점을 파고들 때
+- "concede": 상대방 논거 중 타당한 부분을 인정하되 자신의 핵심 입장은 유지할 때
+- "summarize": 논점을 정리하거나 마무리 단계에서 핵심을 압축할 때"""
 
 # 벌점 정의
 PENALTY_SCHEMA_VIOLATION = 5
@@ -1010,9 +1017,10 @@ def _build_messages(
         last_opp = opponent_claims[-1]
         base_content = (
             f"[직전 발언]\n{last_opp}\n\n"
-            "위 발언의 핵심 논점을 짚어 반박하세요. "
+            "위 발언을 바탕으로 토론을 이어가세요. "
             "'상대방은'으로 문장을 시작하지 마세요 — 논점이나 근거로 바로 시작하세요. "
-            "어떤 주장이 왜 타당하지 않은지 지적한 후, 새로운 근거로 자신의 입장을 강화하세요."
+            "반박(rebut)·새 주장(argue)·질문(question)·인정 후 입장 유지(concede) 중 "
+            "지금 상황에서 가장 설득력 있는 전략을 선택하세요."
         )
         # Agent B의 첫 발언: 주도적으로 논점을 선점하도록 격려 (A측 편향 보정)
         if speaker == "agent_b" and not my_claims:

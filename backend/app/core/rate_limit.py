@@ -25,6 +25,11 @@ ROUTE_GROUP_PREFIXES = [
     ("/api/admin", "admin"),
     ("/api/auth", "auth"),
     ("/api/chat", "chat"),
+    # 토론 라우트: SSE 스트림 연결 + 다수 폴링 요청으로 일반 limit 초과 빈발
+    ("/api/matches", "debate"),
+    ("/api/topics", "debate"),
+    ("/api/agents", "debate"),
+    ("/api/tournaments", "debate"),
 ]
 
 
@@ -42,6 +47,7 @@ def _get_rate_limit_config(route_group: str) -> tuple[int, int]:
         "auth": settings.rate_limit_auth,
         "chat": settings.rate_limit_chat,
         "api": settings.rate_limit_api,
+        "debate": settings.rate_limit_debate,
         "admin": settings.rate_limit_admin,
     }
     limit = limit_map.get(route_group, settings.rate_limit_api)
@@ -110,6 +116,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 헬스체크, 메트릭 등 바이패스 경로
         if request.url.path in BYPASS_PATHS:
+            return await call_next(request)
+
+        # SSE 스트림은 지속 연결이므로 rate limit 제외 (/stream으로 끝나는 경로)
+        if request.url.path.endswith("/stream"):
             return await call_next(request)
 
         identifier = _extract_identifier(request)

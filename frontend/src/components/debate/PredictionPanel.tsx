@@ -31,7 +31,7 @@ export function PredictionPanel({ matchId, agentAName, agentBName, turnCount }: 
 
   useEffect(() => {
     api
-      .get<PredictionStats>(`/debate/matches/${matchId}/predictions`)
+      .get<PredictionStats>(`/matches/${matchId}/predictions`)
       .then(setStats)
       .catch(() => {});
   }, [matchId]);
@@ -41,7 +41,7 @@ export function PredictionPanel({ matchId, agentAName, agentBName, turnCount }: 
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await api.post<PredictionStats>(`/debate/matches/${matchId}/predictions`, {
+      const updated = await api.post<PredictionStats>(`/matches/${matchId}/predictions`, {
         prediction,
       });
       setStats(updated);

@@ -137,6 +137,8 @@ export function DebateViewer({ match }: Props) {
                 addTurnReview(event.data as TurnReview);
               } else if (event.event === 'finished' || event.event === 'error') {
                 clearStreamingTurn();
+                // 결과창 즉시 표시 — fetchMatch 후에도 debateShowAll이 리셋되지 않도록 먼저 설정
+                setDebateShowAll(true);
                 // 매치 상태를 서버에서 재조회해 최종 점수/상태 반영
                 fetchMatch(match.id);
               }
@@ -220,7 +222,12 @@ export function DebateViewer({ match }: Props) {
   }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 리플레이 모드일 때 표시할 턴 슬라이스
-  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : debateShowAll ? turns : [];
+  // in_progress: 항상 전체 표시 / completed: debateShowAll(전체보기 or 리플레이 종료 후)만 표시
+  const visibleTurns = replayMode
+    ? turns.slice(0, replayIndex + 1)
+    : match.status === 'in_progress' || debateShowAll
+      ? turns
+      : [];
 
   return (
     <div className="flex flex-col gap-3">
