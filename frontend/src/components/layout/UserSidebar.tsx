@@ -19,6 +19,7 @@ import {
   Swords,
   Images,
   Trophy,
+  ShieldCheck,
 } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -75,7 +76,7 @@ function NavItem({ item, active, onClick }: { item: MenuItem; active: boolean; o
 export const UserSidebar = memo(function UserSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useUserStore();
+  const { user, logout, isAdmin } = useUserStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
   const { isEnabled } = useFeatureFlagStore();
 
@@ -151,6 +152,19 @@ export const UserSidebar = memo(function UserSidebar() {
             <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
           ))}
         </nav>
+
+        {isAdmin() && (
+          <div className="px-3 py-2 border-t border-border">
+            <Link
+              href="/admin"
+              onClick={closeSidebar}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors no-underline font-medium"
+            >
+              <ShieldCheck size={16} />
+              <span>관리자 페이지</span>
+            </Link>
+          </div>
+        )}
 
         <div className="px-5 py-4 border-t border-border">
           {user && (
