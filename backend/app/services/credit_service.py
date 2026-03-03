@@ -98,7 +98,7 @@ class CreditService:
                 type_="credit",
                 title=f"일일 대화석 {amount}개 충전!",
                 body="오늘의 무료 대화석이 충전되었습니다.",
-                link="/mypage?tab=usage",
+                link="/mypage",
             )
         except Exception:
             logger.warning("grant_daily_credits: 알림 생성 실패 (user_id=%s)", user_id)

@@ -24,6 +24,7 @@ import {
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { CreditBadge } from '@/components/credits/CreditBadge';
 
 type MenuItem = { href: string; label: string; icon: typeof Home; flagKey?: string };
@@ -55,7 +56,17 @@ function GroupLabel({ label }: { label: string }) {
   );
 }
 
-function NavItem({ item, active, onClick }: { item: MenuItem; active: boolean; onClick?: () => void }) {
+function NavItem({
+  item,
+  active,
+  onClick,
+  badge,
+}: {
+  item: MenuItem;
+  active: boolean;
+  onClick?: () => void;
+  badge?: number;
+}) {
   const Icon = item.icon;
   return (
     <Link
@@ -68,7 +79,12 @@ function NavItem({ item, active, onClick }: { item: MenuItem; active: boolean; o
       }`}
     >
       <Icon size={20} />
-      <span>{item.label}</span>
+      <span className="flex-1">{item.label}</span>
+      {badge != null && badge > 0 && (
+        <span className="min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -79,6 +95,7 @@ export const UserSidebar = memo(function UserSidebar() {
   const { user, logout, isAdmin } = useUserStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
   const { isEnabled } = useFeatureFlagStore();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
@@ -149,7 +166,13 @@ export const UserSidebar = memo(function UserSidebar() {
 
           <GroupLabel label="내 계정" />
           {visibleAccountItems.map((item) => (
-            <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
+            <NavItem
+              key={item.href}
+              item={item}
+              active={isActive(item.href)}
+              onClick={closeSidebar}
+              badge={item.href === '/notifications' ? unreadCount : undefined}
+            />
           ))}
         </nav>
 
