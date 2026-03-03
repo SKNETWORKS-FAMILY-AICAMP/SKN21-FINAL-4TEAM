@@ -200,8 +200,8 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
     setReplayTyped({ turnIdx: currentTurnIdx, text: '' });
     setReplayTyping(true);
 
-    // replaySpeed에 비례하여 타이핑 속도 조절 (기본 6자/30ms ≈ 200자/초)
-    const charsPerTick = Math.max(1, Math.round(6 * replaySpeed));
+    // replaySpeed에 비례하여 타이핑 속도 조절 (기본 3자/30ms ≈ 100자/초)
+    const charsPerTick = Math.max(1, Math.round(3 * replaySpeed));
     let typed = '';
     typingIntervalRef.current = setInterval(() => {
       if (typed.length >= fullText.length) {

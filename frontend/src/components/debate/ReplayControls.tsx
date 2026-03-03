@@ -21,7 +21,7 @@ export function ReplayControls() {
     if (replayPlaying) {
       intervalRef.current = setInterval(() => {
         tickReplay();
-      }, 500 / replaySpeed);
+      }, 1000 / replaySpeed);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
