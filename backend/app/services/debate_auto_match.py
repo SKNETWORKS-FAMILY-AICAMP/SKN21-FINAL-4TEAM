@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -54,12 +54,39 @@ class DebateAutoMatcher:
         logger.info("DebateAutoMatcher stopped")
 
     async def _loop(self) -> None:
+        # 시작 직후 한 번 즉시 정리 (서버 재시작 후 잔류 상태 초기화)
+        try:
+            await self._check_stale_entries()
+            await self._check_stuck_matches()
+        except Exception:
+            logger.exception("DebateAutoMatcher startup cleanup error")
+
         while self._running:
             try:
                 await self._check_stale_entries()
+                await self._check_stuck_matches()
             except Exception:
                 logger.exception("DebateAutoMatcher loop error")
             await asyncio.sleep(_CHECK_INTERVAL)
+
+    async def _check_stuck_matches(self) -> None:
+        """pending/waiting_agent 상태로 오래 머문 매치를 error로 처리."""
+        timeout = getattr(settings, "debate_pending_timeout_seconds", 600)
+        cutoff = datetime.now(UTC) - timedelta(seconds=timeout)
+        async with async_session() as db:
+            result = await db.execute(
+                update(DebateMatch)
+                .where(
+                    DebateMatch.status.in_(["pending", "waiting_agent"]),
+                    DebateMatch.created_at < cutoff,
+                )
+                .values(status="error")
+                .returning(DebateMatch.id)
+            )
+            rows = result.fetchall()
+            if rows:
+                logger.warning("Cleaned up %d stuck matches → error", len(rows))
+            await db.commit()
 
     async def _check_stale_entries(self) -> None:
         cutoff = datetime.now(UTC) - timedelta(seconds=settings.debate_queue_timeout_seconds)

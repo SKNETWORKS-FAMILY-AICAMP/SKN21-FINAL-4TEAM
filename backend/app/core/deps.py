@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import decode_access_token, is_token_blacklisted
+from app.core.auth import decode_access_token, get_user_session_jti, is_token_blacklisted
 from app.core.database import get_db
 from app.models.user import User
 
@@ -34,6 +34,18 @@ async def get_current_user(
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    # 단일 세션 강제: jti가 있으면 Redis에 저장된 현재 세션 JTI와 비교
+    jti = payload.get("jti")
+    if jti:
+        current_jti = await get_user_session_jti(user_id)
+        # current_jti가 None이면 Redis 장애 → fail-open (서비스 중단 방지)
+        if current_jti is not None and current_jti != jti:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired: logged in from another device",
+                headers={"X-Error-Code": "AUTH_SESSION_REPLACED"},
+            )
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

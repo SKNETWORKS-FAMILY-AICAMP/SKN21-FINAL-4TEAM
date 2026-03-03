@@ -630,6 +630,43 @@ async def create_tournament(
     return {"id": str(t.id)}
 
 
+@router.post("/cleanup", status_code=status.HTTP_200_OK)
+async def cleanup_debate_state(
+    admin: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """대기 큐 및 묶인 매치를 즉시 정리 (superadmin 전용).
+
+    - debate_match_queue 전체 삭제
+    - pending/waiting_agent 상태 매치 → error 처리
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import delete
+    from sqlalchemy import update as sa_update
+
+    from app.models.debate_match_queue import DebateMatchQueue
+
+    # 1. 큐 엔트리 전체 삭제
+    queue_result = await db.execute(delete(DebateMatchQueue))
+    deleted_queue = queue_result.rowcount
+
+    # 2. 묶인 매치 → error
+    match_result = await db.execute(
+        sa_update(DebateMatch)
+        .where(DebateMatch.status.in_(["pending", "waiting_agent"]))
+        .values(status="error", finished_at=datetime.now(UTC))
+        .returning(DebateMatch.id)
+    )
+    fixed_matches = len(match_result.fetchall())
+
+    await db.commit()
+    return {
+        "deleted_queue_entries": deleted_queue,
+        "fixed_stuck_matches": fixed_matches,
+    }
+
+
 @router.post("/tournaments/{tournament_id}/start")
 async def start_tournament(
     tournament_id: str,

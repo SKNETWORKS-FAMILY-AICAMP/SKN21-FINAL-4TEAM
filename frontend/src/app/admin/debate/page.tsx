@@ -19,6 +19,9 @@ import {
   Search,
   Zap,
   ExternalLink,
+  Calendar,
+  Play,
+  Eraser,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -136,6 +139,37 @@ function toLocalDatetime(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+type Season = {
+  id: string;
+  season_number: number;
+  title: string;
+  start_at: string;
+  end_at: string;
+  status: string;
+};
+
+type Tournament = {
+  id: string;
+  title: string;
+  status: string;
+  bracket_size: number;
+  current_round: number;
+  created_at: string;
+};
+
+const SEASON_STATUS_LABELS: Record<string, string> = {
+  upcoming: '예정',
+  active: '진행 중',
+  completed: '종료',
+};
+
+const TOURNAMENT_STATUS_LABELS: Record<string, string> = {
+  registration: '등록 중',
+  in_progress: '진행 중',
+  completed: '완료',
+  cancelled: '취소',
+};
+
 export default function AdminDebatePage() {
   const router = useRouter();
 
@@ -177,6 +211,35 @@ export default function AdminDebatePage() {
   const [forceMatching, setForceMatching] = useState(false);
   const [forceMatchError, setForceMatchError] = useState<string | null>(null);
 
+  // 시즌 관리 상태
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [showSeasonForm, setShowSeasonForm] = useState(false);
+  const [seasonForm, setSeasonForm] = useState({
+    season_number: 1,
+    title: '',
+    start_at: '',
+    end_at: '',
+  });
+  const [seasonSubmitting, setSeasonSubmitting] = useState(false);
+  const [seasonClosingId, setSeasonClosingId] = useState<string | null>(null);
+  const [seasonError, setSeasonError] = useState<string | null>(null);
+
+  // 토너먼트 관리 상태
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [showTournamentForm, setShowTournamentForm] = useState(false);
+  const [tournamentForm, setTournamentForm] = useState({
+    title: '',
+    topic_id: '',
+    bracket_size: 8,
+  });
+  const [tournamentSubmitting, setTournamentSubmitting] = useState(false);
+  const [tournamentStartingId, setTournamentStartingId] = useState<string | null>(null);
+  const [tournamentError, setTournamentError] = useState<string | null>(null);
+
+  // 대기 정리 상태
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ deleted_queue_entries: number; fixed_stuck_matches: number } | null>(null);
+
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -216,6 +279,9 @@ export default function AdminDebatePage() {
         setMatchesTotal(r.total);
       })
       .catch(() => {});
+
+    api.get<Season>('/agents/season/current').then((s) => setSeasons(s ? [s] : [])).catch(() => {});
+    api.get<{ items: Tournament[] }>('/tournaments?limit=20').then((r) => setTournaments(r.items)).catch(() => {});
   };
 
   const handleOpenDebug = async (matchId: string) => {
@@ -354,12 +420,111 @@ export default function AdminDebatePage() {
     }
   };
 
+  const handleSeasonCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSeasonError(null);
+    setSeasonSubmitting(true);
+    try {
+      await api.post('/admin/debate/seasons', {
+        season_number: seasonForm.season_number,
+        title: seasonForm.title,
+        start_at: new Date(seasonForm.start_at).toISOString(),
+        end_at: new Date(seasonForm.end_at).toISOString(),
+      });
+      setShowSeasonForm(false);
+      setSeasonForm({ season_number: 1, title: '', start_at: '', end_at: '' });
+      fetchData();
+    } catch (err: unknown) {
+      setSeasonError(err instanceof Error ? err.message : '생성 실패');
+    } finally {
+      setSeasonSubmitting(false);
+    }
+  };
+
+  const handleSeasonClose = async (seasonId: string) => {
+    if (!confirm('시즌을 종료하면 결산·보상·ELO 리셋이 즉시 실행됩니다. 계속하시겠습니까?')) return;
+    setSeasonClosingId(seasonId);
+    try {
+      await api.post(`/admin/debate/seasons/${seasonId}/close`);
+      fetchData();
+    } catch (err: unknown) {
+      setSeasonError(err instanceof Error ? err.message : '종료 실패');
+    } finally {
+      setSeasonClosingId(null);
+    }
+  };
+
+  const handleTournamentCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTournamentError(null);
+    setTournamentSubmitting(true);
+    try {
+      await api.post('/admin/debate/tournaments', {
+        title: tournamentForm.title,
+        topic_id: tournamentForm.topic_id,
+        bracket_size: tournamentForm.bracket_size,
+      });
+      setShowTournamentForm(false);
+      setTournamentForm({ title: '', topic_id: '', bracket_size: 8 });
+      fetchData();
+    } catch (err: unknown) {
+      setTournamentError(err instanceof Error ? err.message : '생성 실패');
+    } finally {
+      setTournamentSubmitting(false);
+    }
+  };
+
+  const handleCleanup = async () => {
+    if (!confirm('대기 중인 모든 큐 항목을 삭제하고, pending/waiting_agent 매치를 error로 처리합니다. 계속하시겠습니까?')) return;
+    setCleaning(true);
+    setCleanupResult(null);
+    try {
+      const result = await api.post<{ deleted_queue_entries: number; fixed_stuck_matches: number }>('/admin/debate/cleanup');
+      setCleanupResult(result);
+      fetchData();
+      setTimeout(() => setCleanupResult(null), 5000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : '정리 실패');
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const handleTournamentStart = async (tournamentId: string) => {
+    setTournamentStartingId(tournamentId);
+    try {
+      await api.post(`/admin/debate/tournaments/${tournamentId}/start`);
+      fetchData();
+    } catch (err: unknown) {
+      setTournamentError(err instanceof Error ? err.message : '시작 실패');
+    } finally {
+      setTournamentStartingId(null);
+    }
+  };
+
   return (
     <div>
-      <h1 className="text-xl font-bold text-text mb-5 flex items-center gap-2">
-        <Swords size={22} className="text-primary" />
-        AI 토론 관리
-      </h1>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-bold text-text flex items-center gap-2">
+          <Swords size={22} className="text-primary" />
+          AI 토론 관리
+        </h1>
+        <div className="flex items-center gap-2">
+          {cleanupResult && (
+            <span className="text-xs text-green-400">
+              큐 {cleanupResult.deleted_queue_entries}건 삭제, 매치 {cleanupResult.fixed_stuck_matches}건 정리 완료
+            </span>
+          )}
+          <button
+            onClick={handleCleanup}
+            disabled={cleaning}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-semibold disabled:opacity-50 transition-colors"
+          >
+            {cleaning ? <Loader2 size={13} className="animate-spin" /> : <Eraser size={13} />}
+            대기 정리
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard title="에이전트" value={stats?.agents_count ?? 0} icon={<Bot size={18} />} />
@@ -1022,6 +1187,205 @@ export default function AdminDebatePage() {
           </div>
         </div>
       )}
+
+      {/* 시즌 관리 */}
+      <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-text flex items-center gap-2">
+            <Calendar size={16} className="text-primary" />
+            시즌 관리
+          </h2>
+          <button
+            onClick={() => { setShowSeasonForm(!showSeasonForm); setSeasonError(null); }}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+          >
+            {showSeasonForm ? <X size={15} /> : <Plus size={15} />}
+            {showSeasonForm ? '닫기' : '새 시즌 생성'}
+          </button>
+        </div>
+
+        {seasonError && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">{seasonError}</p>
+        )}
+
+        {showSeasonForm && (
+          <form onSubmit={handleSeasonCreate} className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-text-muted mb-1">시즌 번호</label>
+                <input type="number" min={1} required value={seasonForm.season_number}
+                  onChange={(e) => setSeasonForm({ ...seasonForm, season_number: Number(e.target.value) })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">시즌 제목</label>
+                <input type="text" required maxLength={100} placeholder="예: Season 1" value={seasonForm.title}
+                  onChange={(e) => setSeasonForm({ ...seasonForm, title: e.target.value })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">시작일</label>
+                <input type="datetime-local" required value={seasonForm.start_at}
+                  onChange={(e) => setSeasonForm({ ...seasonForm, start_at: e.target.value })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">종료일</label>
+                <input type="datetime-local" required value={seasonForm.end_at}
+                  onChange={(e) => setSeasonForm({ ...seasonForm, end_at: e.target.value })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowSeasonForm(false)}
+                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors">
+                취소
+              </button>
+              <button type="submit" disabled={seasonSubmitting}
+                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                {seasonSubmitting ? '생성 중...' : '시즌 생성'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {seasons.length === 0 ? (
+          <p className="text-sm text-text-muted text-center py-4">활성 시즌이 없습니다.</p>
+        ) : (
+          <div className="space-y-2">
+            {seasons.map((s) => (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg">
+                <div>
+                  <span className="text-sm font-semibold text-text">S{s.season_number} — {s.title}</span>
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    s.status === 'active' ? 'bg-green-500/10 text-green-500' :
+                    s.status === 'upcoming' ? 'bg-blue-500/10 text-blue-400' :
+                    'bg-text-muted/10 text-text-muted'
+                  }`}>{SEASON_STATUS_LABELS[s.status] ?? s.status}</span>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    {new Date(s.start_at).toLocaleDateString('ko-KR')} ~ {new Date(s.end_at).toLocaleDateString('ko-KR')}
+                  </p>
+                </div>
+                {s.status !== 'completed' && (
+                  <button
+                    onClick={() => handleSeasonClose(s.id)}
+                    disabled={seasonClosingId === s.id}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors"
+                  >
+                    {seasonClosingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <StopCircle size={12} />}
+                    시즌 종료
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 토너먼트 관리 */}
+      <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-text flex items-center gap-2">
+            <Trophy size={16} className="text-primary" />
+            토너먼트 관리
+          </h2>
+          <button
+            onClick={() => { setShowTournamentForm(!showTournamentForm); setTournamentError(null); }}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+          >
+            {showTournamentForm ? <X size={15} /> : <Plus size={15} />}
+            {showTournamentForm ? '닫기' : '새 토너먼트 생성'}
+          </button>
+        </div>
+
+        {tournamentError && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">{tournamentError}</p>
+        )}
+
+        {showTournamentForm && (
+          <form onSubmit={handleTournamentCreate} className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3">
+            <div>
+              <label className="block text-xs text-text-muted mb-1">토너먼트 제목</label>
+              <input type="text" required maxLength={200} placeholder="예: 2025 AI 토론 챔피언십" value={tournamentForm.title}
+                onChange={(e) => setTournamentForm({ ...tournamentForm, title: e.target.value })}
+                className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-text-muted mb-1">토론 주제</label>
+                <select required value={tournamentForm.topic_id}
+                  onChange={(e) => setTournamentForm({ ...tournamentForm, topic_id: e.target.value })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                >
+                  <option value="">주제 선택...</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-text-muted mb-1">대진 규모</label>
+                <select value={tournamentForm.bracket_size}
+                  onChange={(e) => setTournamentForm({ ...tournamentForm, bracket_size: Number(e.target.value) })}
+                  className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                >
+                  <option value={4}>4강</option>
+                  <option value={8}>8강</option>
+                  <option value={16}>16강</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowTournamentForm(false)}
+                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors">
+                취소
+              </button>
+              <button type="submit" disabled={tournamentSubmitting}
+                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                {tournamentSubmitting ? '생성 중...' : '토너먼트 생성'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {tournaments.length === 0 ? (
+          <p className="text-sm text-text-muted text-center py-4">생성된 토너먼트가 없습니다.</p>
+        ) : (
+          <div className="space-y-2">
+            {tournaments.map((t) => (
+              <div key={t.id} className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg">
+                <div>
+                  <span className="text-sm font-semibold text-text">{t.title}</span>
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    t.status === 'in_progress' ? 'bg-yellow-500/10 text-yellow-500' :
+                    t.status === 'registration' ? 'bg-blue-500/10 text-blue-400' :
+                    t.status === 'completed' ? 'bg-green-500/10 text-green-500' :
+                    'bg-text-muted/10 text-text-muted'
+                  }`}>{TOURNAMENT_STATUS_LABELS[t.status] ?? t.status}</span>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    {t.bracket_size}강 · {t.current_round > 0 ? `${t.current_round}라운드 진행 중` : '라운드 시작 전'}
+                  </p>
+                </div>
+                {t.status === 'registration' && (
+                  <button
+                    onClick={() => handleTournamentStart(t.id)}
+                    disabled={tournamentStartingId === t.id}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
+                  >
+                    {tournamentStartingId === t.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                    토너먼트 시작
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* 토픽 삭제 확인 다이얼로그 */}
       <ConfirmDialog

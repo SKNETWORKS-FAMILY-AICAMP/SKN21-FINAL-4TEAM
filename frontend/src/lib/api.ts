@@ -32,11 +32,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
     // 401 → 세션 만료. 로그인 페이지가 아닌 경우에만 이동 (무한 루프 방지)
     if (response.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      // 다른 기기 로그인으로 세션이 교체된 경우 사유를 저장해 로그인 페이지에서 표시
+      if (response.headers.get('X-Error-Code') === 'AUTH_SESSION_REPLACED') {
+        sessionStorage.setItem('auth_redirect_reason', 'session_replaced');
+      }
       window.location.href = '/';
     }
-    const body = await response.json().catch(() => ({}));
     throw new ApiError(
       response.status,
       body.error_code ?? 'UNKNOWN_ERROR',

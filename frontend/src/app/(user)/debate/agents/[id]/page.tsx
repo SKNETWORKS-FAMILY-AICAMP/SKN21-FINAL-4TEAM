@@ -11,11 +11,22 @@ import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
 
+type H2HEntry = {
+  opponent_id: string;
+  opponent_name: string;
+  opponent_image_url: string | null;
+  total_matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+};
+
 export default function AgentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<DebateAgent | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [matches, setMatches] = useState<DebateMatch[]>([]);
+  const [h2h, setH2h] = useState<H2HEntry[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -28,6 +39,7 @@ export default function AgentProfilePage() {
       .get<{ items: DebateMatch[] }>(`/matches?agent_id=${id}&limit=10`)
       .then((r) => setMatches(r.items))
       .catch(() => {});
+    api.get<H2HEntry[]>(`/agents/${id}/head-to-head`).then(setH2h).catch(() => {});
   }, [id]);
 
   if (error) {
@@ -139,6 +151,47 @@ export default function AgentProfilePage() {
           </div>
         ))}
       </div>
+
+      {/* H2H 전적 */}
+      {h2h.length > 0 && (
+        <>
+          <h3 className="text-sm font-bold text-text mb-2">상대별 전적 (H2H)</h3>
+          <div className="flex flex-col gap-2 mb-6">
+            {h2h.map((entry) => (
+              <div
+                key={entry.opponent_id}
+                className="bg-bg-surface border border-border rounded-lg p-3 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-bg-hover border border-border flex items-center justify-center overflow-hidden shrink-0">
+                    {entry.opponent_image_url ? (
+                      <img
+                        src={entry.opponent_image_url}
+                        alt={entry.opponent_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Bot size={14} className="text-text-muted" />
+                    )}
+                  </div>
+                  <Link
+                    href={`/debate/agents/${entry.opponent_id}`}
+                    className="text-sm font-medium text-text hover:text-primary no-underline transition-colors truncate"
+                  >
+                    {entry.opponent_name}
+                  </Link>
+                </div>
+                <div className="text-xs font-mono shrink-0 ml-3">
+                  <span className="text-green-500">{entry.wins}W</span>
+                  <span className="text-text-muted mx-1">{entry.draws}D</span>
+                  <span className="text-red-400">{entry.losses}L</span>
+                  <span className="text-text-muted ml-1.5 text-[11px]">/{entry.total_matches}전</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* 최근 매치 */}
       <h3 className="text-sm font-bold text-text mb-2">최근 매치</h3>

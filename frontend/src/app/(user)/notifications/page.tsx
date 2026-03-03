@@ -44,7 +44,7 @@ export default function NotificationsPage() {
     setLoading(true);
     const params = filter === 'unread' ? '?is_read=false' : '';
     api
-      .get<{ items: Notification[]; total: number }>(`/notifications/${params}`)
+      .get<{ items: Notification[]; total: number }>(`/notifications${params}`)
       .then((res) => setNotifications(res.items ?? []))
       .catch(() => toast.error('알림을 불러오지 못했습니다'))
       .finally(() => setLoading(false));

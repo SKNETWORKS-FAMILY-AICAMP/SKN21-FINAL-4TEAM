@@ -79,3 +79,42 @@ async def blacklist_all_user_tokens(user_id: str) -> None:
         await redis_client.set(f"user_token_revoked:{user_id}", str(datetime.now(UTC).timestamp()))
     except Exception:
         logger.warning("Failed to revoke user tokens (Redis unavailable)")
+
+
+# --- 단일 세션 관리 (Redis 기반) ---
+
+_SESSION_PREFIX = "user_session:"
+
+
+async def set_user_session(user_id: str, jti: str, ttl_seconds: int) -> None:
+    """사용자 현재 세션 JTI를 Redis에 저장. 새 로그인 시 이전 세션 자동 무효화."""
+    from app.core.redis import redis_client
+
+    try:
+        await redis_client.setex(f"{_SESSION_PREFIX}{user_id}", ttl_seconds, jti)
+    except Exception:
+        logger.warning("Failed to set user session (Redis unavailable)")
+
+
+async def get_user_session_jti(user_id: str) -> str | None:
+    """저장된 사용자 세션 JTI 조회. Redis 장애 시 None 반환(fail-open)."""
+    from app.core.redis import redis_client
+
+    try:
+        val = await redis_client.get(f"{_SESSION_PREFIX}{user_id}")
+        if val is None:
+            return None
+        return val.decode() if isinstance(val, bytes) else val
+    except Exception:
+        logger.warning("Failed to get user session JTI (Redis unavailable)")
+        return None
+
+
+async def clear_user_session(user_id: str) -> None:
+    """로그아웃 시 세션 JTI 삭제."""
+    from app.core.redis import redis_client
+
+    try:
+        await redis_client.delete(f"{_SESSION_PREFIX}{user_id}")
+    except Exception:
+        logger.warning("Failed to clear user session (Redis unavailable)")

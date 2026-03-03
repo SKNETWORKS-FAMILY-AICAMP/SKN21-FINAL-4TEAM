@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     debate_agent_connect_timeout: int = 30  # 로컬 에이전트 접속 대기 (초)
     debate_ws_heartbeat_interval: int = 15  # WebSocket 핑 간격 (초)
     debate_queue_timeout_seconds: int = 120  # 대기 큐 자동 매칭 타임아웃 (초)
+    debate_pending_timeout_seconds: int = 600  # pending/waiting_agent 매치 자동 error 처리 (초)
     debate_daily_topic_limit: int = 5  # 사용자 일일 토픽 등록 한도
     debate_credit_cost: int = 5  # 매치 참가 시 차감 크레딧
     debate_turn_review_enabled: bool = True   # 턴 검토 기능 ON/OFF

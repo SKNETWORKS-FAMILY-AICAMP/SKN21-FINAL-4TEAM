@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog, TurnReview } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
@@ -23,6 +24,7 @@ export function DebateViewer({ match }: Props) {
   const streaming = useDebateStore((s) => s.streaming);
   const replayMode = useDebateStore((s) => s.replayMode);
   const replayIndex = useDebateStore((s) => s.replayIndex);
+  const startReplay = useDebateStore((s) => s.startReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
   const fetchMatch = useDebateStore((s) => s.fetchMatch);
   const addTurnFromSSE = useDebateStore((s) => s.addTurnFromSSE);
@@ -153,6 +155,23 @@ export function DebateViewer({ match }: Props) {
       {match.status === 'in_progress' && viewerCount > 0 && (
         <div className="flex justify-end">
           <LiveBadge count={viewerCount} />
+        </div>
+      )}
+
+      {/* 완료된 매치 — 리플레이 시작 버튼 (replayMode 아닐 때만 표시) */}
+      {match.status === 'completed' && !replayMode && turns.length > 0 && (
+        <div className="flex justify-center mb-2">
+          <button
+            type="button"
+            onClick={() => {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              startReplay();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-sm font-semibold transition-colors"
+          >
+            <Play size={14} />
+            리플레이 시작
+          </button>
         </div>
       )}
 

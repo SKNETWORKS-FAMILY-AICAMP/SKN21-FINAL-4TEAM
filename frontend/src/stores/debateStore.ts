@@ -131,6 +131,8 @@ type DebateState = {
   currentMatch: DebateMatch | null;
   turns: TurnLog[];
   streamingTurn: StreamingTurn | null;
+  // 최적화 모드에서 A 검토 중 B가 동시 스트리밍될 때 B 청크를 버퍼링
+  pendingStreamingTurn: StreamingTurn | null;
   turnReviews: TurnReview[];
   ranking: RankingEntry[];
   featuredMatches: DebateMatch[];
@@ -175,6 +177,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   currentMatch: null,
   turns: [],
   streamingTurn: null,
+  pendingStreamingTurn: null,
   turnReviews: [],
   ranking: [],
   featuredMatches: [],
@@ -218,7 +221,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   },
   fetchMatch: async (matchId) => {
     // 새 매치 로드 전 이전 턴 초기화 — 같은 상대와의 이전 매치 내용이 잔류하지 않도록
-    set({ matchLoading: true, turns: [], streamingTurn: null, turnReviews: [] });
+    set({ matchLoading: true, turns: [], streamingTurn: null, pendingStreamingTurn: null, turnReviews: [] });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
       set({ currentMatch: data });
@@ -299,15 +302,27 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       const exists = s.turns.some(
         (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
       );
+      // 완료된 턴과 동일한 화자일 때만 streamingTurn 제거 — 다른 화자(병렬 스트리밍)는 유지
+      const isCurrentStreaming =
+        s.streamingTurn?.turn_number === turn.turn_number &&
+        s.streamingTurn?.speaker === turn.speaker;
+      const nextStreaming = isCurrentStreaming ? s.pendingStreamingTurn : s.streamingTurn;
+      const nextPending = isCurrentStreaming ? null : s.pendingStreamingTurn;
+
       if (exists) {
         return {
           turns: s.turns.map((t) =>
             t.turn_number === turn.turn_number && t.speaker === turn.speaker ? turn : t,
           ),
-          streamingTurn: null,
+          streamingTurn: nextStreaming,
+          pendingStreamingTurn: nextPending,
         };
       }
-      return { turns: [...s.turns, turn], streamingTurn: null };
+      return {
+        turns: [...s.turns, turn],
+        streamingTurn: nextStreaming,
+        pendingStreamingTurn: nextPending,
+      };
     });
   },
   addTurnReview: (review) => {
@@ -327,16 +342,26 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   },
   appendChunk: (turn_number, speaker, chunk) => {
     set((s) => {
-      if (s.streamingTurn && s.streamingTurn.turn_number === turn_number && s.streamingTurn.speaker === speaker) {
+      // 현재 스트리밍 중인 화자와 같은 턴이면 이어 붙이기
+      if (s.streamingTurn?.turn_number === turn_number && s.streamingTurn?.speaker === speaker) {
         return { streamingTurn: { ...s.streamingTurn, raw: s.streamingTurn.raw + chunk } };
       }
+      // 다른 화자의 chunk가 왔고 현재 streamingTurn이 활성 상태 — pending 버퍼에 쌓기
+      if (s.streamingTurn) {
+        if (s.pendingStreamingTurn?.turn_number === turn_number && s.pendingStreamingTurn?.speaker === speaker) {
+          return { pendingStreamingTurn: { ...s.pendingStreamingTurn, raw: s.pendingStreamingTurn.raw + chunk } };
+        }
+        return { pendingStreamingTurn: { turn_number, speaker, raw: chunk } };
+      }
+      // streamingTurn 없음 — 바로 활성화
       return { streamingTurn: { turn_number, speaker, raw: chunk } };
     });
   },
-  clearStreamingTurn: () => set({ streamingTurn: null }),
+  clearStreamingTurn: () => set({ streamingTurn: null, pendingStreamingTurn: null }),
   setStreaming: (v) => set({ streaming: v }),
-  startReplay: () => set({ replayMode: true, replayIndex: 0, replayPlaying: true }),
-  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: 0 }),
+  // replayIndex -1: 재생 시작 시 0턴도 아직 안 보임. 첫 tick에서 0으로 올라가 첫 턴 등장
+  startReplay: () => set({ replayMode: true, replayIndex: -1, replayPlaying: true }),
+  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: -1 }),
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   tickReplay: () => {
     const { replayIndex, turns } = get();

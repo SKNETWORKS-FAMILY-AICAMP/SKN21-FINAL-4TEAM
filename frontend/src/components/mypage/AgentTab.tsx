@@ -32,7 +32,7 @@ export function AgentTab() {
   return (
     <section className="card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="section-title flex items-center gap-2">
+        <h2 className="section-title flex items-center gap-2 m-0">
           <Bot size={20} className="text-primary" />
           내 에이전트
         </h2>
@@ -66,7 +66,7 @@ export function AgentTab() {
             return (
               <div
                 key={agent.id}
-                className="border border-border rounded-xl p-4 bg-bg hover:border-primary/30 transition-colors"
+                className="border border-border rounded-xl p-4 bg-bg-hover hover:border-primary/30 transition-colors"
               >
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-lg border border-border bg-bg-surface overflow-hidden shrink-0 flex items-center justify-center text-2xl">

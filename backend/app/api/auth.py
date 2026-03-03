@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
@@ -6,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import blacklist_token, create_access_token
+from app.core.auth import blacklist_token, clear_user_session, create_access_token, decode_access_token, set_user_session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
@@ -72,14 +73,16 @@ async def register(data: UserCreate, response: Response, db: AsyncSession = Depe
             status_code=status.HTTP_409_CONFLICT,
             detail="Nickname already taken",
         ) from None
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    jti = str(uuid.uuid4())
+    token = create_access_token({"sub": str(user.id), "role": user.role, "jti": jti})
+    await set_user_session(str(user.id), jti, settings.access_token_expire_minutes * 60)
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token)
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
-    """로그인 → JWT 발급 + HttpOnly 쿠키 설정."""
+    """로그인 → JWT 발급 + HttpOnly 쿠키 설정. 이전 세션은 자동 무효화(단일 세션)."""
     service = UserService(db)
     user = await service.authenticate(data)
     if user is None:
@@ -87,7 +90,10 @@ async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    jti = str(uuid.uuid4())
+    token = create_access_token({"sub": str(user.id), "role": user.role, "jti": jti})
+    # 새 JTI로 덮어쓰면 이전 기기 세션은 다음 요청 시 AUTH_SESSION_REPLACED로 차단됨
+    await set_user_session(str(user.id), jti, settings.access_token_expire_minutes * 60)
     _set_auth_cookie(response, token)
     return TokenResponse(access_token=token)
 
@@ -98,10 +104,13 @@ async def logout(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     access_token: Optional[str] = Cookie(default=None),
 ):
-    """로그아웃. 현재 토큰을 블랙리스트에 추가하고 쿠키를 삭제."""
+    """로그아웃. 현재 토큰을 블랙리스트에 추가하고 세션을 삭제한다."""
     token = credentials.credentials if credentials else access_token
     if token:
         await blacklist_token(token)
+        payload = decode_access_token(token)
+        if payload and payload.get("sub"):
+            await clear_user_session(payload["sub"])
     _clear_auth_cookie(response)
     return {"message": "Logged out successfully"}
 
@@ -157,8 +166,10 @@ async def change_password(
     old_token = credentials.credentials if credentials else access_token
     if old_token:
         await blacklist_token(old_token)
-    # 새 토큰 발급 + 쿠키 갱신
-    new_token = create_access_token({"sub": str(user.id), "role": user.role})
+    # 새 토큰 발급 + 쿠키 갱신 (새 JTI로 세션 갱신)
+    jti = str(uuid.uuid4())
+    new_token = create_access_token({"sub": str(user.id), "role": user.role, "jti": jti})
+    await set_user_session(str(user.id), jti, settings.access_token_expire_minutes * 60)
     _set_auth_cookie(response, new_token)
     return {"message": "Password changed successfully", "access_token": new_token}
 

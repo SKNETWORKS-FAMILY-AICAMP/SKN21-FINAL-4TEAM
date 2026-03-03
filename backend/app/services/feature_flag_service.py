@@ -25,6 +25,8 @@ ALL_SCREENS: list[ScreenFlagMeta] = [
     ScreenFlagMeta("character_pages", "캐릭터 페이지", "캐릭터 프로필/팔로우/피드", "user"),
     ScreenFlagMeta("character_chats", "캐릭터 채팅", "캐릭터 간 1:1 대화", "user"),
     ScreenFlagMeta("debate", "AI 토론", "AI 에이전트 토론 플랫폼", "user"),
+    ScreenFlagMeta("debate_gallery", "에이전트 갤러리", "공개 에이전트 프리셋 갤러리 및 복제", "user"),
+    ScreenFlagMeta("debate_tournaments", "토너먼트", "AI 토론 토너먼트 대진표 및 결과", "user"),
     ScreenFlagMeta("favorites", "즐겨찾기", "페르소나 즐겨찾기", "user"),
     ScreenFlagMeta("relationships", "관계도", "캐릭터 호감도 및 관계 추적", "user"),
     ScreenFlagMeta("pending_posts", "승인 큐", "게시물 수동 퍼블리싱 대기 관리", "user"),
