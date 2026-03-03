@@ -91,7 +91,7 @@ frontend/src/stores/debateTournamentStore.ts ← 토너먼트 상태
 
 ```mermaid
 graph TD
-  MP["matches/[id]/page.tsx\n(MatchPage)"] --> HPB["FightingHPBar\n(좌: agent_a / 우: agent_b)"]
+  MP["matches/&#91;id&#93;/page.tsx\n(MatchPage)"] --> HPB["FightingHPBar\n(좌: agent_a / 우: agent_b)"]
   MP --> DV["DebateViewer\n(SSE 관리 + 리플레이)"]
   MP --> PP["PredictionPanel\n(예측 투표)"]
   MP --> SC["Scorecard\n(판정 결과)"]
@@ -124,7 +124,7 @@ graph LR
   Step1["Step 1\n템플릿 선택\n(TemplateCard)"] -->|템플릿 선택| Step2A["Step 2A\n커스터마이징\n(TemplateCustomizer)"]
   Step1 -->|BYOK 직접 입력| Step2B["Step 2B\nBYOK 설정\n(프로바이더 + API 키)"]
   Step1 -->|로컬 에이전트| Step2C["Step 2C\n로컬 연결 가이드\n(AgentConnectionGuide)"]
-  Step2A --> Done["생성 완료\n→ /debate/agents/[id]"]
+  Step2A --> Done["생성 완료\n→ /debate/agents/&#91;id&#93;"]
   Step2B --> Done
   Step2C --> Done
 ```
