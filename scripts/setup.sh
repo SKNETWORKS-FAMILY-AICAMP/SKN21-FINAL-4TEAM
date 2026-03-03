@@ -265,6 +265,18 @@ _run_migrations() {
     _green "마이그레이션 완료"
 }
 
+# ── Admin 계정 생성 ──────────────────────────────────────────
+_create_admin() {
+    _step "Admin 계정 생성 (admin / admin123)"
+    cd "$BACKEND_DIR"
+    local exit_code=0
+    "$VENV_PYTHON" ../scripts/create_test_admin.py --env-file .env || exit_code=$?
+    cd "$PROJECT_ROOT"
+    if [ $exit_code -ne 0 ]; then
+        _yellow "Admin 계정 생성 실패 — 로그를 확인하세요."
+    fi
+}
+
 # ── 시드 데이터 ─────────────────────────────────────────────
 _run_seed() {
     _step "시드 데이터 삽입"
@@ -338,7 +350,7 @@ _print_done() {
     printf '    API 문서:    http://localhost:8000/docs\n'
     echo ""
     printf '  \033[1m테스트 계정\033[0m\n'
-    printf '    admin     / Admin123!  (superadmin)\n'
+    printf '    admin     / admin123   (superadmin)\n'
     printf '    moderator / Mod123!    (admin)\n'
     printf '    user1     / User123!   (user)\n'
     echo ""
@@ -367,6 +379,7 @@ main() {
     _setup_env_files       # .env / .env.test 파일 생성 (이미 있으면 스킵)
     _start_infra           # docker compose up -d db redis + 헬스체크
     _run_migrations        # alembic upgrade head
+    _create_admin          # admin / admin123 superadmin 계정 (idempotent)
     _run_seed              # seed_data.py (idempotent)
     _start_servers         # uvicorn --reload + npm run dev (백그라운드)
     _print_done
