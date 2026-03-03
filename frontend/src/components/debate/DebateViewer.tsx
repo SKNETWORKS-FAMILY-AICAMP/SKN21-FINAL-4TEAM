@@ -35,7 +35,9 @@ export function DebateViewer({ match }: Props) {
   const setStreaming = useDebateStore((s) => s.setStreaming);
   const addTurnReview = useDebateStore((s) => s.addTurnReview);
   const [showAll, setShowAll] = useState(false);
-  const [replayTypedText, setReplayTypedText] = useState('');
+  // turnIdx: 현재 타이핑 중인 replayIndex, text: 타이핑된 부분 텍스트
+  // turnIdx가 replayIndex와 다를 때 displayClaim을 적용하지 않아 stale text 방지
+  const [replayTyped, setReplayTyped] = useState<{ turnIdx: number; text: string }>({ turnIdx: -1, text: '' });
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastTurnRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -176,18 +178,20 @@ export function DebateViewer({ match }: Props) {
     }
 
     if (!replayMode || replayIndex < 0) {
-      setReplayTypedText('');
+      setReplayTyped({ turnIdx: -1, text: '' });
       return;
     }
 
     const lastTurn = turns[replayIndex];
     if (!lastTurn?.claim) {
-      setReplayTypedText('');
+      setReplayTyped({ turnIdx: replayIndex, text: '' });
       return;
     }
 
     const fullText = lastTurn.claim;
-    setReplayTypedText('');
+    const currentTurnIdx = replayIndex;
+    // turnIdx와 text를 동시에 초기화 — stale text가 다음 턴에 잠깐 보이는 버그 방지
+    setReplayTyped({ turnIdx: currentTurnIdx, text: '' });
     setReplayTyping(true);
 
     // replaySpeed에 비례하여 타이핑 속도 조절 (기본 6자/30ms ≈ 200자/초)
@@ -197,12 +201,12 @@ export function DebateViewer({ match }: Props) {
       if (typed.length >= fullText.length) {
         clearInterval(typingIntervalRef.current!);
         typingIntervalRef.current = null;
-        setReplayTypedText(fullText);
+        setReplayTyped({ turnIdx: currentTurnIdx, text: fullText });
         setReplayTyping(false);
         return;
       }
       typed = fullText.slice(0, typed.length + charsPerTick);
-      setReplayTypedText(typed);
+      setReplayTyped({ turnIdx: currentTurnIdx, text: typed });
     }, 30);
 
     return () => {
@@ -212,7 +216,7 @@ export function DebateViewer({ match }: Props) {
       }
       setReplayTyping(false);
     };
-  }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]);
+  }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 리플레이 모드일 때 표시할 턴 슬라이스
   const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : showAll ? turns : [];
@@ -289,10 +293,11 @@ export function DebateViewer({ match }: Props) {
           turn.review_result ??
           null;
         const isLastTurn = idx === visibleTurns.length - 1;
-        // 리플레이 마지막 턴: 타이핑 애니메이션 진행 중이면 부분 텍스트 전달
+        // 리플레이 마지막 턴: turnIdx가 현재 replayIndex와 일치할 때만 부분 텍스트 전달
+        // (불일치 시 stale text가 다른 턴에 잠깐 보이는 버그 방지)
         const displayClaim =
-          replayMode && isLastTurn && replayTypedText !== turn.claim
-            ? replayTypedText
+          replayMode && isLastTurn && replayTyped.turnIdx === replayIndex && replayTyped.text !== turn.claim
+            ? replayTyped.text
             : undefined;
         return (
           <div
