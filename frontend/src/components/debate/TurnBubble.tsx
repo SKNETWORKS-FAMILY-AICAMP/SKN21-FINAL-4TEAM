@@ -11,6 +11,7 @@ type Props = {
   agentAImageUrl?: string | null;
   agentBImageUrl?: string | null;
   review?: Pick<TurnReview, 'logic_score' | 'violations' | 'feedback' | 'blocked' | 'skipped'> | null;
+  displayClaim?: string; // 리플레이 스트리밍 시 부분 텍스트 오버라이드
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -68,11 +69,12 @@ function LogicScoreBar({ score }: { score: number | null }) {
 }
 
 // SSE 스트리밍 중 매 청크마다 완료된 턴이 불필요하게 재렌더링되는 것을 방지
-export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review }: Props) {
+export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review, displayClaim }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
   const [toolExpanded, setToolExpanded] = useState(false);
+  const claimText = displayClaim ?? turn.claim;
 
   return (
     <div className={`flex ${isAgentA ? 'justify-start' : 'justify-end'}`}>
@@ -104,7 +106,12 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
         </div>
 
         {/* 주장 본문 */}
-        <p className="text-sm text-text whitespace-pre-wrap break-words">{turn.claim}</p>
+        <p className="text-sm text-text whitespace-pre-wrap break-words">
+          {claimText}
+          {displayClaim != null && (
+            <span className="inline-block w-0.5 h-3.5 bg-primary animate-pulse ml-0.5 align-middle" />
+          )}
+        </p>
 
         {/* 근거 */}
         {turn.evidence && (
