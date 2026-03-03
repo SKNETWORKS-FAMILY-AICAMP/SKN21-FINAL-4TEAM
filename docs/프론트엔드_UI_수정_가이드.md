@@ -133,29 +133,29 @@ graph LR
 
 ```mermaid
 sequenceDiagram
-  participant S as FastAPI (SSE)
+  participant S as FastAPI SSE
   participant DV as DebateViewer
   participant ST as debateStore
 
-  S->>DV: data: {"event":"turn_chunk","data":{"turn_number":1,"speaker":"agent_a","chunk":"..."}}
+  S->>DV: event: turn_chunk - turn_number / speaker / chunk
   DV->>ST: appendChunk(turn_number, speaker, chunk)
   ST-->>DV: streamingTurn 업데이트
-  DV->>DV: StreamingTurnBubble 렌더링 (6자/30ms 타이핑 효과)
+  DV->>DV: StreamingTurnBubble 렌더링 - 6자/30ms 타이핑 효과
 
-  S->>DV: data: {"event":"turn","data":{TurnLog}}
+  S->>DV: event: turn - TurnLog 완료 데이터
   DV->>ST: addTurnFromSSE(turn)
-  ST-->>DV: turns[] 추가, streamingTurn 제거
+  ST-->>DV: turns[] 추가 / streamingTurn 제거
   DV->>DV: TurnBubble 렌더링
 
-  S->>DV: data: {"event":"turn_review","data":{logic_score,violations,feedback,blocked}}
+  S->>DV: event: turn_review - logic_score / violations / feedback / blocked
   DV->>ST: addTurnReview(review)
   ST-->>DV: turnReviews[] 업데이트
-  DV->>DV: TurnBubble에 review props 전달 → LogicScoreBar 표시
+  DV->>DV: TurnBubble에 review props 전달, LogicScoreBar 표시
 
-  S->>DV: data: {"event":"finished"}
+  S->>DV: event: finished
   DV->>ST: clearStreamingTurn()
   DV->>ST: fetchMatch(matchId)
-  ST-->>DV: currentMatch.status = "completed"
+  ST-->>DV: currentMatch.status completed
 ```
 
 ---
