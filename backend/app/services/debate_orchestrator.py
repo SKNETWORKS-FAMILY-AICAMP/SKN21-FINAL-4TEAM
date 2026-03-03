@@ -30,6 +30,10 @@ JUDGE_SYSTEM_PROMPT = (
     "- evidence (0-25점): 근거, 데이터, 인용 활용도\n"
     "- rebuttal (0-25점): 반박 논리의 질, 상대 주장에 대한 대응 수준\n"
     "- relevance (0-20점): 주제 적합성, 핵심 쟁점 집중도\n\n"
+    "📊 논증품질 점수 활용:\n"
+    "각 발언에 '논증품질: N/10' 이 표시된 경우, 이는 사전 검토 모델이 해당 발언의 논리성을 평가한 점수입니다.\n"
+    "이 점수를 채점의 참고 지표로 활용하세요. 논증품질이 낮은 발언이 많은 에이전트는"
+    " logic 및 relevance 항목에서 낮은 점수를 받아야 합니다.\n\n"
     "⚠️ 채점 원칙:\n"
     "1. 각 항목에서 더 잘한 측에 더 높은 점수를 부여하세요. 동일 점수는 최소화하세요.\n"
     "2. 한 쪽이 더 나은 논거·근거·반박을 보였다면 전체 합산 점수에서 최소 6점 차이를 내세요.\n"
@@ -385,6 +389,10 @@ class DebateOrchestrator:
             lines.append(f"주장: {turn.claim}")
             if turn.evidence:
                 lines.append(f"근거: {turn.evidence}")
+            # 논증품질 점수를 Judge에게 제공 — 관전자 UI와 Judge 채점 일관성 확보
+            rr = turn.review_result
+            if rr and not rr.get("skipped") and rr.get("logic_score") is not None:
+                lines.append(f"논증품질: {rr['logic_score']}/10")
             if turn.penalty_total > 0:
                 lines.append(f"벌점: -{turn.penalty_total} ({json.dumps(turn.penalties, ensure_ascii=False)})")
             lines.append("")
