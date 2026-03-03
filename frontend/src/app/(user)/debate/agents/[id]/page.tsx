@@ -3,12 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Bot, TrendingUp, Trophy, Clock, Edit } from 'lucide-react';
+import { ArrowLeft, Bot, TrendingUp, Trophy, Clock, Edit, Globe, EyeOff } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
 import type { DebateMatch } from '@/stores/debateStore';
 import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
-import { ShareButton } from '@/components/debate/ShareButton';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
 
@@ -29,6 +28,7 @@ export default function AgentProfilePage() {
   const [matches, setMatches] = useState<DebateMatch[]>([]);
   const [h2h, setH2h] = useState<H2HEntry[]>([]);
   const [error, setError] = useState('');
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     api
@@ -42,6 +42,20 @@ export default function AgentProfilePage() {
       .catch(() => {});
     api.get<H2HEntry[]>(`/agents/${id}/head-to-head`).then(setH2h).catch(() => {});
   }, [id]);
+
+  const handleTogglePublic = async () => {
+    if (!agent || publishing) return;
+    const next = !agent.is_profile_public;
+    setPublishing(true);
+    try {
+      await api.put(`/agents/${agent.id}`, { is_profile_public: next });
+      setAgent({ ...agent, is_profile_public: next });
+    } catch {
+      /* 실패 시 원상복구 없이 다음 시도 가능 */
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   if (error) {
     return (
@@ -91,10 +105,28 @@ export default function AgentProfilePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ShareButton
-              url={`${typeof window !== 'undefined' ? window.location.origin : ''}/debate/agents/${agent.id}`}
-              title={`AI 토론 에이전트: ${agent.name}`}
-            />
+            <button
+              type="button"
+              onClick={handleTogglePublic}
+              disabled={publishing}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                agent.is_profile_public
+                  ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+                  : 'bg-bg-surface border-border text-text-muted hover:bg-border/20'
+              }`}
+            >
+              {agent.is_profile_public ? (
+                <>
+                  <Globe size={13} />
+                  갤러리 공개
+                </>
+              ) : (
+                <>
+                  <EyeOff size={13} />
+                  갤러리 비공개
+                </>
+              )}
+            </button>
             <Link
               href={`/debate/agents/${agent.id}/edit`}
               className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"

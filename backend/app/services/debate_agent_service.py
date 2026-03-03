@@ -459,10 +459,9 @@ class DebateAgentService:
         return result
 
     async def get_gallery(self, sort: str = "elo", skip: int = 0, limit: int = 20) -> tuple[list, int]:
-        """갤러리: is_system_prompt_public=True AND is_active=True AND is_profile_public=True."""
+        """갤러리: is_profile_public=True AND is_active=True. (시스템프롬프트 공개 여부와 무관)"""
         base_cond = (
-            (DebateAgent.is_system_prompt_public == True)  # noqa: E712
-            & (DebateAgent.is_active == True)  # noqa: E712
+            (DebateAgent.is_active == True)  # noqa: E712
             & (DebateAgent.is_profile_public == True)  # noqa: E712
         )
 
