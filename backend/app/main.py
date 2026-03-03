@@ -210,11 +210,8 @@ os.makedirs(settings.upload_dir, exist_ok=True)
 
 
 @app.get("/uploads/{path:path}")
-async def serve_upload_file(
-    path: str,
-    user=Depends(get_current_user),
-):
-    """업로드 파일 서빙. 인증 필수 (Authorization 헤더 또는 쿠키)."""
+async def serve_upload_file(path: str):
+    """업로드 파일 서빙 (인증 불필요 — 프로필 이미지는 공개 자원)."""
     upload_dir = Path(settings.upload_dir).resolve()
     file_path = (upload_dir / path).resolve()
 

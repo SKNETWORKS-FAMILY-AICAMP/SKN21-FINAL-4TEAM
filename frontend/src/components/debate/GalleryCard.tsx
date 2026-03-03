@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { Link2, Check } from 'lucide-react';
 import { TierBadge } from './TierBadge';
 
@@ -49,12 +48,10 @@ export function GalleryCard({ entry, onClone }: Props) {
     <div className="bg-bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 hover:border-primary/30 transition-colors">
       <div className="flex items-start gap-3">
         {entry.image_url ? (
-          <Image
+          <img
             src={entry.image_url}
             alt={entry.name}
-            width={40}
-            height={40}
-            className="rounded-lg object-cover"
+            className="w-10 h-10 rounded-lg object-cover shrink-0"
           />
         ) : (
           <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
