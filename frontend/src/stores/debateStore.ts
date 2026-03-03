@@ -146,6 +146,9 @@ type DebateState = {
   replaySpeed: number; // 0.5 | 1 | 2
   replayPlaying: boolean;
   replayTyping: boolean; // 타이핑 애니메이션 진행 중 여부 (true이면 tick 대기)
+  // 완료된 매치 전체 보기 여부 — false: 턴 숨김(기본), true: 전체 표시
+  // Scorecard/SummaryReport 노출 제어에도 사용
+  debateShowAll: boolean;
   fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
   fetchMatch: (matchId: string) => Promise<void>;
@@ -169,6 +172,7 @@ type DebateState = {
   setReplaySpeed: (speed: number) => void;
   tickReplay: () => void;
   setReplayTyping: (v: boolean) => void;
+  setDebateShowAll: (v: boolean) => void;
 };
 
 export const useDebateStore = create<DebateState>((set, get) => ({
@@ -192,6 +196,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   replaySpeed: 1,
   replayPlaying: false,
   replayTyping: false,
+  debateShowAll: false,
   fetchTopics: async (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => {
     set({ topicsLoading: true });
     try {
@@ -235,6 +240,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       replayPlaying: false,
       replayIndex: -1,
       replayTyping: false,
+      debateShowAll: false,
     });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
@@ -374,8 +380,8 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   clearStreamingTurn: () => set({ streamingTurn: null, pendingStreamingTurn: null }),
   setStreaming: (v) => set({ streaming: v }),
   // replayIndex -1: 재생 시작 시 0턴도 아직 안 보임. 첫 tick에서 0으로 올라가 첫 턴 등장
-  startReplay: () => set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false }),
-  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false }),
+  startReplay: () => set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false, debateShowAll: false }),
+  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false, debateShowAll: true }),
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   tickReplay: () => {
     const { replayIndex, turns, replayTyping } = get();
@@ -389,6 +395,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
     }
   },
   setReplayTyping: (v) => set({ replayTyping: v }),
+  setDebateShowAll: (v) => set({ debateShowAll: v }),
 }));
 
 export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload };

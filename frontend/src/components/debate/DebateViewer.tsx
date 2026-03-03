@@ -26,6 +26,8 @@ export function DebateViewer({ match }: Props) {
   const replayIndex = useDebateStore((s) => s.replayIndex);
   const replaySpeed = useDebateStore((s) => s.replaySpeed);
   const setReplayTyping = useDebateStore((s) => s.setReplayTyping);
+  const debateShowAll = useDebateStore((s) => s.debateShowAll);
+  const setDebateShowAll = useDebateStore((s) => s.setDebateShowAll);
   const startReplay = useDebateStore((s) => s.startReplay);
   const stopReplay = useDebateStore((s) => s.stopReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
@@ -35,14 +37,12 @@ export function DebateViewer({ match }: Props) {
   const clearStreamingTurn = useDebateStore((s) => s.clearStreamingTurn);
   const setStreaming = useDebateStore((s) => s.setStreaming);
   const addTurnReview = useDebateStore((s) => s.addTurnReview);
-  const [showAll, setShowAll] = useState(false);
   // turnIdx: 현재 타이핑 중인 replayIndex, text: 타이핑된 부분 텍스트
   // turnIdx가 replayIndex와 다를 때 displayClaim을 적용하지 않아 stale text 방지
   const [replayTyped, setReplayTyped] = useState<{ turnIdx: number; text: string }>({ turnIdx: -1, text: '' });
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastTurnRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
-  const prevReplayModeRef = useRef(false);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 관전자 수 (in_progress 매치만)
@@ -163,13 +163,6 @@ export function DebateViewer({ match }: Props) {
     }
   }, [turns.length]);
 
-  // 리플레이 종료 시 전체 턴 표시
-  useEffect(() => {
-    if (prevReplayModeRef.current && !replayMode) {
-      setShowAll(true);
-    }
-    prevReplayModeRef.current = replayMode;
-  }, [replayMode]);
 
   // 리플레이 진행 시 현재 턴으로 자동 스크롤
   useEffect(() => {
@@ -227,7 +220,7 @@ export function DebateViewer({ match }: Props) {
   }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 리플레이 모드일 때 표시할 턴 슬라이스
-  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : showAll ? turns : [];
+  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : debateShowAll ? turns : [];
 
   return (
     <div className="flex flex-col gap-3">
@@ -244,7 +237,7 @@ export function DebateViewer({ match }: Props) {
           <button
             type="button"
             onClick={() => {
-              setShowAll(false);
+              setDebateShowAll(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
               startReplay();
             }}
@@ -253,10 +246,10 @@ export function DebateViewer({ match }: Props) {
             <Play size={14} />
             리플레이 시작
           </button>
-          {!showAll && (
+          {!debateShowAll && (
             <button
               type="button"
-              onClick={() => setShowAll(true)}
+              onClick={() => setDebateShowAll(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-surface border border-border text-text-muted hover:text-text hover:bg-border/20 text-sm font-semibold transition-colors"
             >
               <Eye size={14} />

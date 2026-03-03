@@ -33,7 +33,7 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
-  const { currentMatch, turns, fetchMatch, replayMode } = useDebateStore();
+  const { currentMatch, turns, fetchMatch, debateShowAll } = useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
 
@@ -259,8 +259,8 @@ export default function MatchPage() {
           </div>
         )}
 
-        {/* 스코어카드 (완료된 매치, 리플레이 중 숨김) */}
-        {currentMatch.status === 'completed' && !replayMode && (
+        {/* 스코어카드 (완료된 매치, 전체 보기/리플레이 종료 후에만 표시) */}
+        {currentMatch.status === 'completed' && debateShowAll && (
           <div ref={scorecardRef}>
             <Scorecard
               matchId={currentMatch.id}
