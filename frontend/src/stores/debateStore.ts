@@ -223,8 +223,19 @@ export const useDebateStore = create<DebateState>((set, get) => ({
     }
   },
   fetchMatch: async (matchId) => {
-    // 새 매치 로드 전 이전 턴 초기화 — 같은 상대와의 이전 매치 내용이 잔류하지 않도록
-    set({ matchLoading: true, turns: [], streamingTurn: null, pendingStreamingTurn: null, turnReviews: [] });
+    // 새 매치 로드 전 이전 턴·리플레이 상태 초기화
+    // replayMode/replayPlaying을 리셋하지 않으면 다른 매치로 이동 시 자동 재생 버그 발생
+    set({
+      matchLoading: true,
+      turns: [],
+      streamingTurn: null,
+      pendingStreamingTurn: null,
+      turnReviews: [],
+      replayMode: false,
+      replayPlaying: false,
+      replayIndex: -1,
+      replayTyping: false,
+    });
     try {
       const data = await api.get<DebateMatch>(`/matches/${matchId}`);
       set({ currentMatch: data });

@@ -27,6 +27,7 @@ export function DebateViewer({ match }: Props) {
   const replaySpeed = useDebateStore((s) => s.replaySpeed);
   const setReplayTyping = useDebateStore((s) => s.setReplayTyping);
   const startReplay = useDebateStore((s) => s.startReplay);
+  const stopReplay = useDebateStore((s) => s.stopReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
   const fetchMatch = useDebateStore((s) => s.fetchMatch);
   const addTurnFromSSE = useDebateStore((s) => s.addTurnFromSSE);
@@ -50,6 +51,13 @@ export function DebateViewer({ match }: Props) {
   useEffect(() => {
     fetchTurns(match.id);
   }, [match.id, fetchTurns]);
+
+  // 컴포넌트 언마운트(페이지 이동) 시 리플레이 상태 초기화
+  useEffect(() => {
+    return () => {
+      stopReplay();
+    };
+  }, [stopReplay]);
 
   // 관전자 수 폴링 (in_progress 매치, 30초 간격)
   useEffect(() => {
