@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Play } from 'lucide-react';
+import { Eye, Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog, TurnReview } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
@@ -32,8 +32,11 @@ export function DebateViewer({ match }: Props) {
   const clearStreamingTurn = useDebateStore((s) => s.clearStreamingTurn);
   const setStreaming = useDebateStore((s) => s.setStreaming);
   const addTurnReview = useDebateStore((s) => s.addTurnReview);
+  const [showAll, setShowAll] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastTurnRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const prevReplayModeRef = useRef(false);
 
   // 관전자 수 (in_progress 매치만)
   const [viewerCount, setViewerCount] = useState(0);
@@ -146,8 +149,23 @@ export function DebateViewer({ match }: Props) {
     }
   }, [turns.length]);
 
+  // 리플레이 종료 시 전체 턴 표시
+  useEffect(() => {
+    if (prevReplayModeRef.current && !replayMode) {
+      setShowAll(true);
+    }
+    prevReplayModeRef.current = replayMode;
+  }, [replayMode]);
+
+  // 리플레이 진행 시 현재 턴으로 자동 스크롤
+  useEffect(() => {
+    if (replayMode && lastTurnRef.current) {
+      lastTurnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [replayIndex, replayMode]);
+
   // 리플레이 모드일 때 표시할 턴 슬라이스
-  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : turns;
+  const visibleTurns = replayMode ? turns.slice(0, replayIndex + 1) : showAll ? turns : [];
 
   return (
     <div className="flex flex-col gap-3">
@@ -158,12 +176,13 @@ export function DebateViewer({ match }: Props) {
         </div>
       )}
 
-      {/* 완료된 매치 — 리플레이 시작 버튼 (replayMode 아닐 때만 표시) */}
+      {/* 완료된 매치 — 리플레이/전체보기 버튼 */}
       {match.status === 'completed' && !replayMode && turns.length > 0 && (
-        <div className="flex justify-center mb-2">
+        <div className="flex justify-center gap-2 mb-2">
           <button
             type="button"
             onClick={() => {
+              setShowAll(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
               startReplay();
             }}
@@ -172,6 +191,16 @@ export function DebateViewer({ match }: Props) {
             <Play size={14} />
             리플레이 시작
           </button>
+          {!showAll && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-surface border border-border text-text-muted hover:text-text hover:bg-border/20 text-sm font-semibold transition-colors"
+            >
+              <Eye size={14} />
+              전체 보기
+            </button>
+          )}
         </div>
       )}
 
@@ -214,6 +243,7 @@ export function DebateViewer({ match }: Props) {
         return (
           <div
             key={turn.id || `${turn.turn_number}-${turn.speaker}`}
+            ref={idx === visibleTurns.length - 1 ? lastTurnRef : undefined}
             className={isLast ? 'animate-pulse' : undefined}
           >
             <TurnBubble
