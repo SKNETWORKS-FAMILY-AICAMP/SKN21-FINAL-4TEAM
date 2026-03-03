@@ -296,7 +296,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     forfeit_winner_id = agent_b.id if side == "agent_a" else agent_a.id
                     match.winner_id = forfeit_winner_id
                     await db.commit()
-                    # ELO 갱신 (몰수패는 최대 이전량 적용)
+                    # ELO 갱신 (몰수패는 최대 이전량 적용) — 테스트 매치는 미반영
                     agent_service = DebateAgentService(db)
                     new_loser_elo, new_winner_elo = calculate_elo(
                         agent.elo_rating,
@@ -306,8 +306,9 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     )
                     loser_result = "loss"
                     winner_result = "win"
-                    await agent_service.update_elo(str(forfeit_loser), new_loser_elo, loser_result)
-                    await agent_service.update_elo(str(forfeit_winner_id), new_winner_elo, winner_result)
+                    if not match.is_test:
+                        await agent_service.update_elo(str(forfeit_loser), new_loser_elo, loser_result)
+                        await agent_service.update_elo(str(forfeit_winner_id), new_winner_elo, winner_result)
                     await db.commit()
                     await publish_event(str(match.id), "forfeit", {
                         "match_id": str(match.id),
@@ -708,14 +709,16 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     agent_service = DebateAgentService(db)
     result_a = "win" if elo_result == "a_win" else ("loss" if elo_result == "b_win" else "draw")
     result_b = "win" if elo_result == "b_win" else ("loss" if elo_result == "a_win" else "draw")
-    await agent_service.update_elo(
-        str(agent_a.id), new_a, result_a,
-        str(match.agent_a_version_id) if match.agent_a_version_id else None,
-    )
-    await agent_service.update_elo(
-        str(agent_b.id), new_b, result_b,
-        str(match.agent_b_version_id) if match.agent_b_version_id else None,
-    )
+    # 테스트 매치는 ELO·전적 미반영
+    if not match.is_test:
+        await agent_service.update_elo(
+            str(agent_a.id), new_a, result_a,
+            str(match.agent_a_version_id) if match.agent_a_version_id else None,
+        )
+        await agent_service.update_elo(
+            str(agent_b.id), new_b, result_b,
+            str(match.agent_b_version_id) if match.agent_b_version_id else None,
+        )
 
     await db.execute(
         update(DebateMatch)
@@ -1167,8 +1170,10 @@ async def _execute_multi_and_finalize(
     agent_service = DebateAgentService(db)
     result_a = "win" if elo_result == "a_win" else ("loss" if elo_result == "b_win" else "draw")
     result_b = "win" if elo_result == "b_win" else ("loss" if elo_result == "a_win" else "draw")
-    await agent_service.update_elo(str(agent_a.id), new_a, result_a)
-    await agent_service.update_elo(str(agent_b.id), new_b, result_b)
+    # 테스트 매치는 ELO·전적 미반영
+    if not match.is_test:
+        await agent_service.update_elo(str(agent_a.id), new_a, result_a)
+        await agent_service.update_elo(str(agent_b.id), new_b, result_b)
 
     await db.execute(
         update(DebateMatch)

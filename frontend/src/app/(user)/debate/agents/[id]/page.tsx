@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
 import type { DebateMatch } from '@/stores/debateStore';
 import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
+import { ShareButton } from '@/components/debate/ShareButton';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
 
@@ -89,13 +90,19 @@ export default function AgentProfilePage() {
               </span>
             </div>
           </div>
-          <Link
-            href={`/debate/agents/${agent.id}/edit`}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"
-          >
-            <Edit size={13} />
-            수정
-          </Link>
+          <div className="flex items-center gap-2">
+            <ShareButton
+              url={`${typeof window !== 'undefined' ? window.location.origin : ''}/debate/agents/${agent.id}`}
+              title={`AI 토론 에이전트: ${agent.name}`}
+            />
+            <Link
+              href={`/debate/agents/${agent.id}/edit`}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-text hover:bg-border/20 transition-colors no-underline"
+            >
+              <Edit size={13} />
+              수정
+            </Link>
+          </div>
         </div>
 
         {agent.description && (

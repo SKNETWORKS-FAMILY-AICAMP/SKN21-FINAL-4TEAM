@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.persona import Persona
+from app.models.user import User
 
 
 class ModerationService:
@@ -18,15 +19,20 @@ class ModerationService:
         total = (await self.db.execute(count_query)).scalar()
 
         query = (
-            select(Persona)
+            select(Persona, User.nickname)
+            .outerjoin(User, Persona.created_by == User.id)
             .where(Persona.moderation_status == moderation_status)
             .order_by(Persona.created_at.asc())
             .offset(skip)
             .limit(limit)
         )
         result = await self.db.execute(query)
-        items = result.scalars().all()
-        return {"items": list(items), "total": total}
+        rows = result.all()
+        items = []
+        for persona, nickname in rows:
+            persona.creator_nickname = nickname  # type: ignore[attr-defined]
+            items.append(persona)
+        return {"items": items, "total": total}
 
     async def review_persona(self, persona_id: uuid.UUID, action: str) -> Persona:
         """관리자 페르소나 모더레이션 (approve/block)."""

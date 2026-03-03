@@ -13,6 +13,7 @@ type AdminPersona = {
   visibility: string;
   moderation_status: string;
   created_by: string;
+  creator_nickname: string | null;
 };
 
 export default function AdminPersonasPage() {
@@ -56,7 +57,11 @@ export default function AdminPersonasPage() {
 
   const columns = [
     { key: 'display_name' as const, label: '이름' },
-    { key: 'created_by' as const, label: '생성자' },
+    {
+      key: 'creator_nickname' as const,
+      label: '생성자',
+      render: (val: unknown) => <span>{val != null ? String(val) : '-'}</span>,
+    },
     {
       key: 'age_rating' as const,
       label: '등급',

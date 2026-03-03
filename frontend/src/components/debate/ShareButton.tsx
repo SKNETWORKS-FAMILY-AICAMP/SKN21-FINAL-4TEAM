@@ -3,16 +3,11 @@
 import { useState } from 'react';
 import { Share2, Check, Twitter } from 'lucide-react';
 
-type Props = { matchId: string; topicTitle?: string };
+type Props = { url: string; title?: string };
 
-export function ShareButton({ matchId, topicTitle = 'AI 토론' }: Props) {
+export function ShareButton({ url, title = 'AI 토론' }: Props) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
-
-  const url =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/debate/matches/${matchId}`
-      : '';
 
   const handleCopy = async () => {
     try {
@@ -26,7 +21,7 @@ export function ShareButton({ matchId, topicTitle = 'AI 토론' }: Props) {
   };
 
   const handleTwitter = () => {
-    const text = encodeURIComponent(`AI 토론 결과: ${topicTitle}`);
+    const text = encodeURIComponent(title);
     const encodedUrl = encodeURIComponent(url);
     window.open(
       `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,

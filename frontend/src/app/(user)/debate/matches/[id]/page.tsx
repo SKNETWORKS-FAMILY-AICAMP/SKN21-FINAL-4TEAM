@@ -252,7 +252,10 @@ export default function MatchPage() {
         {/* 완료된 매치: 공유 버튼 (리플레이 시작은 DebateViewer 내부에 위치) */}
         {currentMatch.status === 'completed' && (
           <div className="flex items-center gap-2 mb-4">
-            <ShareButton matchId={currentMatch.id} topicTitle={currentMatch.topic_title} />
+            <ShareButton
+              url={`${typeof window !== 'undefined' ? window.location.origin : ''}/debate/matches/${currentMatch.id}`}
+              title={`AI 토론 결과: ${currentMatch.topic_title ?? 'AI 토론'}`}
+            />
           </div>
         )}
 

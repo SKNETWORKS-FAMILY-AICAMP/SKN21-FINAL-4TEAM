@@ -1,6 +1,19 @@
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+
+# DOTENV_PATH 환경변수가 지정된 경우 해당 .env 파일 로드 (테스트 Compose 지원)
+_dotenv_path = os.environ.get("DOTENV_PATH")
+if _dotenv_path:
+    _env_file = Path(_dotenv_path)
+    if _env_file.exists():
+        with open(_env_file) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _key, _, _val = _line.partition("=")
+                    os.environ.setdefault(_key.strip(), _val.strip())
 
 # debate 라우트를 테스트에서 활성화하기 위해 app import 전에 환경변수 설정
 os.environ.setdefault("DEBATE_ENABLED", "true")
@@ -16,8 +29,10 @@ from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
 
-# rsplit으로 마지막 /chatbot만 교체 (username의 chatbot은 유지)
-_base, _dbname = settings.database_url.rsplit("/", 1)
+# DATABASE_URL 환경변수 우선 → 없으면 settings fallback
+# rsplit으로 마지막 /dbname만 교체 (username의 chatbot은 유지)
+_db_url = os.environ.get("DATABASE_URL", settings.database_url)
+_base, _dbname = _db_url.rsplit("/", 1)
 TEST_DATABASE_URL = f"{_base}/chatbot_test"
 
 

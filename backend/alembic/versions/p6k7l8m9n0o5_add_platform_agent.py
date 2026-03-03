@@ -21,9 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "debate_agents",
-        sa.Column("is_platform", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    # IF NOT EXISTS: 수동으로 컬럼이 이미 추가된 환경에서도 안전하게 실행
+    op.execute(
+        "ALTER TABLE debate_agents ADD COLUMN IF NOT EXISTS is_platform BOOLEAN NOT NULL DEFAULT false"
     )
 
 

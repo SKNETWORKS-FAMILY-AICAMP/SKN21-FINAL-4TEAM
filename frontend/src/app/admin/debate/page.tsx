@@ -254,7 +254,7 @@ export default function AdminDebatePage() {
   const fetchData = () => {
     api.get<DebateStats>('/admin/debate/stats').then(setStats).catch(() => {});
     api
-      .get<{ items: Topic[]; total: number }>('/topics?limit=50')
+      .get<{ items: Topic[]; total: number }>('/topics?page_size=100')
       .then((r) => setTopics(r.items))
       .catch(() => {});
 
