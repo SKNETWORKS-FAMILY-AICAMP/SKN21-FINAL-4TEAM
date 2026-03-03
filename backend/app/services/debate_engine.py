@@ -429,6 +429,26 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 # B가 참조할 수 있도록 A 발언을 먼저 큐에 등록 (검토 전 원본)
                 claims_a.append(turn_a.claim)
 
+                # ★ gather 전에 A turn 이벤트 먼저 발행 — B 스트리밍이 pendingStreamingTurn
+                # 없이 바로 streamingTurn으로 표시되도록 순서 보장.
+                # review_result는 gather 후 turn_review 이벤트로 별도 발행한다.
+                if turn_a.response_time_ms is not None:
+                    elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
+                    length_history_a.append(len(turn_a.claim))
+                await publish_event(str(match.id), "turn", {
+                    "turn_number": turn_num,
+                    "speaker": "agent_a",
+                    "action": turn_a.action,
+                    "claim": turn_a.claim,
+                    "evidence": turn_a.evidence,
+                    "penalties": turn_a.penalties,
+                    "penalty_total": turn_a.penalty_total,
+                    "human_suspicion_score": turn_a.human_suspicion_score,
+                    "response_time_ms": turn_a.response_time_ms,
+                    "is_blocked": turn_a.is_blocked,
+                    "review_result": None,  # 검토 전; turn_review 이벤트로 후속 발행
+                })
+
                 opt_orch: OptimizedDebateOrchestrator = orchestrator  # type: ignore[assignment]
                 review_start = time.monotonic()
 
@@ -480,6 +500,16 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     review_a["input_tokens"], review_a["output_tokens"],
                 )
 
+                # A turn_review 이벤트 별도 발행 (gather 완료 후 검토 결과 확정)
+                await publish_event(str(match.id), "turn_review", {
+                    "turn_number": turn_num,
+                    "speaker": "agent_a",
+                    "logic_score": review_a["logic_score"],
+                    "violations": review_a["violations"],
+                    "feedback": review_a["feedback"],
+                    "blocked": review_a["block"],
+                })
+
                 # B 턴 집계 (gather에서 이미 실행 완료)
                 total_penalty_b += turn_b.penalty_total
 
@@ -530,33 +560,35 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             review_a = None
             claims_a.append(turn_a.claim)
 
-        if turn_a.response_time_ms is not None:
-            elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
-            length_history_a.append(len(turn_a.claim))
+        # 최적화 모드에서는 gather 전에 이미 turn 이벤트와 turn_review 이벤트를 발행했으므로 skip
+        if not (settings.debate_turn_review_enabled and use_optimized):
+            if turn_a.response_time_ms is not None:
+                elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
+                length_history_a.append(len(turn_a.claim))
 
-        await publish_event(str(match.id), "turn", {
-            "turn_number": turn_num,
-            "speaker": "agent_a",
-            "action": turn_a.action,
-            "claim": turn_a.claim,
-            "evidence": turn_a.evidence,
-            "penalties": turn_a.penalties,
-            "penalty_total": turn_a.penalty_total,
-            "human_suspicion_score": turn_a.human_suspicion_score,
-            "response_time_ms": turn_a.response_time_ms,
-            "is_blocked": turn_a.is_blocked,
-            "review_result": turn_a.review_result,
-        })
-
-        if review_a is not None:
-            await publish_event(str(match.id), "turn_review", {
+            await publish_event(str(match.id), "turn", {
                 "turn_number": turn_num,
                 "speaker": "agent_a",
-                "logic_score": review_a["logic_score"],
-                "violations": review_a["violations"],
-                "feedback": review_a["feedback"],
-                "blocked": review_a["block"],
+                "action": turn_a.action,
+                "claim": turn_a.claim,
+                "evidence": turn_a.evidence,
+                "penalties": turn_a.penalties,
+                "penalty_total": turn_a.penalty_total,
+                "human_suspicion_score": turn_a.human_suspicion_score,
+                "response_time_ms": turn_a.response_time_ms,
+                "is_blocked": turn_a.is_blocked,
+                "review_result": turn_a.review_result,
             })
+
+            if review_a is not None:
+                await publish_event(str(match.id), "turn_review", {
+                    "turn_number": turn_num,
+                    "speaker": "agent_a",
+                    "logic_score": review_a["logic_score"],
+                    "violations": review_a["violations"],
+                    "feedback": review_a["feedback"],
+                    "blocked": review_a["block"],
+                })
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 최적화 모드: B는 이미 gather에서 실행 완료
