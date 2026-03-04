@@ -91,7 +91,7 @@ frontend/src/stores/debateTournamentStore.ts ← 토너먼트 상태
 
 ```mermaid
 graph TD
-  MP["matches/&#91;id&#93;/page.tsx\n(MatchPage)"] --> HPB["FightingHPBar\n(좌: agent_a / 우: agent_b)"]
+  MP["matches/[id]/page.tsx\n(MatchPage)"] --> HPB["FightingHPBar\n(좌: agent_a / 우: agent_b)"]
   MP --> DV["DebateViewer\n(SSE 관리 + 리플레이)"]
   MP --> PP["PredictionPanel\n(예측 투표)"]
   MP --> SC["Scorecard\n(판정 결과)"]
@@ -103,6 +103,8 @@ graph TD
   DV --> LB["LiveBadge\n(관전자 수 — 30초 폴링)"]
   TB --> LSB["LogicScoreBar\n(논리 점수 바, TurnBubble 내부)"]
 ```
+
+
 
 ### 다이어그램 2: 토픽 목록 페이지 컴포넌트 트리
 
@@ -117,6 +119,8 @@ graph TD
   AF --> TCZ["TemplateCustomizer\n(슬라이더/셀렉트 커스터마이징)"]
 ```
 
+
+
 ### 다이어그램 3: 에이전트 생성 폼 단계 흐름
 
 ```mermaid
@@ -124,10 +128,12 @@ graph LR
   Step1["Step 1\n템플릿 선택\n(TemplateCard)"] -->|템플릿 선택| Step2A["Step 2A\n커스터마이징\n(TemplateCustomizer)"]
   Step1 -->|BYOK 직접 입력| Step2B["Step 2B\nBYOK 설정\n(프로바이더 + API 키)"]
   Step1 -->|로컬 에이전트| Step2C["Step 2C\n로컬 연결 가이드\n(AgentConnectionGuide)"]
-  Step2A --> Done["생성 완료\n→ /debate/agents/&#91;id&#93;"]
+  Step2A --> Done["생성 완료\n→ /debate/agents/[id]"]
   Step2B --> Done
   Step2C --> Done
 ```
+
+
 
 ### 다이어그램 4: SSE 스트리밍 데이터 흐름
 
@@ -158,63 +164,77 @@ sequenceDiagram
   ST-->>DV: currentMatch.status completed
 ```
 
+
+
 ---
 
 ## 3. 컴포넌트 레퍼런스
 
 ### 3-1. 핵심 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `DebateViewer` | `components/debate/DebateViewer.tsx` | `{ match: DebateMatch }` | SSE 구독 (fetch + ReadableStream), 리플레이 모드 전환, 관전자 수 30초 폴링 |
-| `TurnBubble` | `components/debate/TurnBubble.tsx` | `{ turn: TurnLog, agentAName, agentBName, agentAImageUrl?, agentBImageUrl?, review? }` | 완료 턴 버블. `memo`로 감싸 스트리밍 중 불필요한 재렌더링 방지. 액션 배지, 벌점 목록, 인간의심 경보, LogicScoreBar 포함 |
-| `StreamingTurnBubble` | `components/debate/StreamingTurnBubble.tsx` | `{ turn: StreamingTurn, agentAName, agentBName, agentAImageUrl?, agentBImageUrl? }` | 부분 JSON에서 `"claim"` 필드를 파싱해 6자/30ms 타이핑 효과로 표시. 텍스트 없으면 3점 애니메이션 |
-| `ReplayControls` | `components/debate/ReplayControls.tsx` | 없음 (store 직접 구독) | 재생/일시정지/정지 버튼, 진행 바, 0.5x/1x/2x 속도 선택. `replayMode=false`이면 `null` 반환 |
-| `FightingHPBar` | `components/debate/FightingHPBar.tsx` | `{ agentId, agentName, provider, hp: number(0-100), side: 'left'\|'right', isWinner?, isCompleted?, agentImageUrl?, tier? }` | HP 바. 색상: `hp<=20` 빨강, `hp<=45` 노랑, 그 이상 좌파랑/우주황. 패배 시 `opacity-50 grayscale`. 승리 시 왕관+황금링 |
+
+| 컴포넌트                  | 파일                                          | Props                                                                                                                       | 주요 기능                                                                                      |
+| --------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `DebateViewer`        | `components/debate/DebateViewer.tsx`        | `{ match: DebateMatch }`                                                                                                    | SSE 구독 (fetch + ReadableStream), 리플레이 모드 전환, 관전자 수 30초 폴링                                  |
+| `TurnBubble`          | `components/debate/TurnBubble.tsx`          | `{ turn: TurnLog, agentAName, agentBName, agentAImageUrl?, agentBImageUrl?, review? }`                                      | 완료 턴 버블. `memo`로 감싸 스트리밍 중 불필요한 재렌더링 방지. 액션 배지, 벌점 목록, 인간의심 경보, LogicScoreBar 포함           |
+| `StreamingTurnBubble` | `components/debate/StreamingTurnBubble.tsx` | `{ turn: StreamingTurn, agentAName, agentBName, agentAImageUrl?, agentBImageUrl? }`                                         | 부분 JSON에서 `"claim"` 필드를 파싱해 6자/30ms 타이핑 효과로 표시. 텍스트 없으면 3점 애니메이션                           |
+| `ReplayControls`      | `components/debate/ReplayControls.tsx`      | 없음 (store 직접 구독)                                                                                                            | 재생/일시정지/정지 버튼, 진행 바, 0.5x/1x/2x 속도 선택. `replayMode=false`이면 `null` 반환                      |
+| `FightingHPBar`       | `components/debate/FightingHPBar.tsx`       | `{ agentId, agentName, provider, hp: number(0-100), side: 'left'|'right', isWinner?, isCompleted?, agentImageUrl?, tier? }` | HP 바. 색상: `hp<=20` 빨강, `hp<=45` 노랑, 그 이상 좌파랑/우주황. 패배 시 `opacity-50 grayscale`. 승리 시 왕관+황금링 |
+
 
 ### 3-2. 매치 보조 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `Scorecard` | `components/debate/Scorecard.tsx` | `{ matchId, agentA: AgentSummary, agentB: AgentSummary, penaltyA: number, penaltyB: number }` | 기준별 점수(논리성30/근거활용25/반박력25/주제적합성20), 벌점 차감, 최종 점수. 완료된 매치에만 표시 |
-| `PredictionPanel` | `components/debate/PredictionPanel.tsx` | `{ matchId, agentAName, agentBName, turnCount: number }` | 예측 투표. `turnCount <= 2`일 때만 투표 가능. 통계 바 표시 |
-| `SummaryReport` | `components/debate/SummaryReport.tsx` | `{ matchId }` | AI 요약 보고서. `status: 'generating'`이면 5초 간격 폴링. `ready` 또는 `unavailable` 시 정지 |
-| `ShareButton` | `components/debate/ShareButton.tsx` | `{ matchId, topicTitle?: string }` | 드롭다운 메뉴. 링크 복사(클립보드) + 트위터 공유 |
-| `LiveBadge` | `components/debate/LiveBadge.tsx` | `{ count: number, className?: string }` | 빨간 점 + "LIVE N명 관전" 배지. `DebateViewer` 내부에서 `count > 0`일 때만 렌더링 |
+
+| 컴포넌트              | 파일                                      | Props                                                                                         | 주요 기능                                                                       |
+| ----------------- | --------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `Scorecard`       | `components/debate/Scorecard.tsx`       | `{ matchId, agentA: AgentSummary, agentB: AgentSummary, penaltyA: number, penaltyB: number }` | 기준별 점수(논리성30/근거활용25/반박력25/주제적합성20), 벌점 차감, 최종 점수. 완료된 매치에만 표시               |
+| `PredictionPanel` | `components/debate/PredictionPanel.tsx` | `{ matchId, agentAName, agentBName, turnCount: number }`                                      | 예측 투표. `turnCount <= 2`일 때만 투표 가능. 통계 바 표시                                  |
+| `SummaryReport`   | `components/debate/SummaryReport.tsx`   | `{ matchId }`                                                                                 | AI 요약 보고서. `status: 'generating'`이면 5초 간격 폴링. `ready` 또는 `unavailable` 시 정지 |
+| `ShareButton`     | `components/debate/ShareButton.tsx`     | `{ matchId, topicTitle?: string }`                                                            | 드롭다운 메뉴. 링크 복사(클립보드) + 트위터 공유                                               |
+| `LiveBadge`       | `components/debate/LiveBadge.tsx`       | `{ count: number, className?: string }`                                                       | 빨간 점 + "LIVE N명 관전" 배지. `DebateViewer` 내부에서 `count > 0`일 때만 렌더링             |
+
 
 ### 3-3. 에이전트 관련 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `AgentCard` | `components/debate/AgentCard.tsx` | `{ agent: DebateAgent }` | 에이전트 카드. `/debate/agents/[id]`로 링크. ELO, 전적, 승률, 연결 상태(로컬) 표시 |
-| `AgentForm` | `components/debate/AgentForm.tsx` | `{ initialData?, isEdit?: boolean }` | 2단계 폼. Step 1: 템플릿/BYOK/로컬 선택. Step 2: 커스터마이징 또는 API 키 입력. `use_platform_credits` 토글 포함 |
-| `AgentProfilePanel` | `components/debate/AgentProfilePanel.tsx` | `{ agent: Agent\|null, side: 'left'\|'right', isRevealing?: boolean }` | 대기실/VS 화면용 에이전트 프로필 패널. `side`에 따라 색상(좌파랑/우주황) 분기 |
-| `AgentConnectionGuide` | `components/debate/AgentConnectionGuide.tsx` | `{ agentId: string, isConnected: boolean }` | 로컬 에이전트 WebSocket 연결 안내. 복사 가능한 설치 명령어 블록 포함 |
-| `GalleryCard` | `components/debate/GalleryCard.tsx` | `{ entry: GalleryEntry, onClone: (id, name) => Promise<void> }` | 갤러리 카드. 링크 복사(공유) + 복제 모달(이름 수정 후 복제). `GalleryEntry` 타입도 동 파일에서 export |
+
+| 컴포넌트                   | 파일                                           | Props                                                                | 주요 기능                                                                                   |
+| ---------------------- | -------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `AgentCard`            | `components/debate/AgentCard.tsx`            | `{ agent: DebateAgent }`                                             | 에이전트 카드. `/debate/agents/[id]`로 링크. ELO, 전적, 승률, 연결 상태(로컬) 표시                           |
+| `AgentForm`            | `components/debate/AgentForm.tsx`            | `{ initialData?, isEdit?: boolean }`                                 | 2단계 폼. Step 1: 템플릿/BYOK/로컬 선택. Step 2: 커스터마이징 또는 API 키 입력. `use_platform_credits` 토글 포함 |
+| `AgentProfilePanel`    | `components/debate/AgentProfilePanel.tsx`    | `{ agent: Agent|null, side: 'left'|'right', isRevealing?: boolean }` | 대기실/VS 화면용 에이전트 프로필 패널. `side`에 따라 색상(좌파랑/우주황) 분기                                       |
+| `AgentConnectionGuide` | `components/debate/AgentConnectionGuide.tsx` | `{ agentId: string, isConnected: boolean }`                          | 로컬 에이전트 WebSocket 연결 안내. 복사 가능한 설치 명령어 블록 포함                                            |
+| `GalleryCard`          | `components/debate/GalleryCard.tsx`          | `{ entry: GalleryEntry, onClone: (id, name) => Promise<void> }`      | 갤러리 카드. 링크 복사(공유) + 복제 모달(이름 수정 후 복제). `GalleryEntry` 타입도 동 파일에서 export                 |
+
 
 ### 3-4. 목록/배너/배지 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `HighlightBanner` | `components/debate/HighlightBanner.tsx` | 없음 (store 구독) | `debateStore.featuredMatches` 기반 가로 스크롤 캐러셀. 매치가 없으면 `null` 반환 |
-| `SeasonBanner` | `components/debate/SeasonBanner.tsx` | 없음 (내부 fetch) | 마운트 시 `GET /api/agents/season/current` 호출. 시즌이 없으면 `null` 반환. 종료까지 일수 표시 |
-| `TopicCard` | `components/debate/TopicCard.tsx` | `{ topic: DebateTopic, currentUserId?, onEdit?, onDelete? }` | 토픽 카드. 상태 배지(예정/참가가능/진행중/종료), 모드, 대기열 수, 매치 수 표시 |
-| `RankingTable` | `components/debate/RankingTable.tsx` | 없음 (store 구독) | `debateStore.ranking` 기반 ELO 랭킹 테이블 |
-| `TierBadge` | `components/debate/TierBadge.tsx` | `{ tier: string, size?: 'sm'\|'md' }` | Iron/Bronze/Silver/Gold/Platinum/Diamond/Master 배지. 색상/아이콘은 `lib/tierUtils.ts`의 `getTierInfo()` 참조 |
+
+| 컴포넌트              | 파일                                      | Props                                                        | 주요 기능                                                                                              |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `HighlightBanner` | `components/debate/HighlightBanner.tsx` | 없음 (store 구독)                                                | `debateStore.featuredMatches` 기반 가로 스크롤 캐러셀. 매치가 없으면 `null` 반환                                     |
+| `SeasonBanner`    | `components/debate/SeasonBanner.tsx`    | 없음 (내부 fetch)                                                | 마운트 시 `GET /api/agents/season/current` 호출. 시즌이 없으면 `null` 반환. 종료까지 일수 표시                           |
+| `TopicCard`       | `components/debate/TopicCard.tsx`       | `{ topic: DebateTopic, currentUserId?, onEdit?, onDelete? }` | 토픽 카드. 상태 배지(예정/참가가능/진행중/종료), 모드, 대기열 수, 매치 수 표시                                                   |
+| `RankingTable`    | `components/debate/RankingTable.tsx`    | 없음 (store 구독)                                                | `debateStore.ranking` 기반 ELO 랭킹 테이블                                                                |
+| `TierBadge`       | `components/debate/TierBadge.tsx`       | `{ tier: string, size?: 'sm'|'md' }`                         | Iron/Bronze/Silver/Gold/Platinum/Diamond/Master 배지. 색상/아이콘은 `lib/tierUtils.ts`의 `getTierInfo()` 참조 |
+
 
 ### 3-5. 폼 보조 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `TemplateCard` | `components/debate/TemplateCard.tsx` | `{ template: AgentTemplate, selected: boolean, onSelect: (template) => void }` | 템플릿 선택 카드. 아이콘 slug를 이모지로 변환 표시 |
+
+| 컴포넌트                 | 파일                                         | Props                                                                                          | 주요 기능                                      |
+| -------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `TemplateCard`       | `components/debate/TemplateCard.tsx`       | `{ template: AgentTemplate, selected: boolean, onSelect: (template) => void }`                 | 템플릿 선택 카드. 아이콘 slug를 이모지로 변환 표시            |
 | `TemplateCustomizer` | `components/debate/TemplateCustomizer.tsx` | `{ template: AgentTemplate, values: Record<string, unknown>, onChange: (key, value) => void }` | 슬라이더(SliderField)와 셀렉트(SelectField) 동적 렌더링 |
+
 
 ### 3-6. 대기실/토너먼트 컴포넌트
 
-| 컴포넌트 | 파일 | Props | 주요 기능 |
-|---|---|---|---|
-| `WaitingRoomVS` | `components/debate/WaitingRoomVS.tsx` | `{ topicTitle, myAgent, opponent, startedAt, isMatched, isAutoMatched, isRevealing, isReady, opponentReady, countdown, onReady, readying, onCancel, cancelling }` | VS 대기실 전체 화면. 매칭 전/후 상태별 UI 분기, 카운트다운, 준비 완료/취소 버튼 |
-| `TournamentBracket` | `components/debate/TournamentBracket.tsx` | `{ entries: {agent_id, agent_name, seed}[], matches: MatchEntry[], rounds: number }` | 토너먼트 라운드별 대진표. 진행되지 않은 라운드가 없으면 안내 메시지 표시 |
+
+| 컴포넌트                | 파일                                        | Props                                                                                                                                                             | 주요 기능                                              |
+| ------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `WaitingRoomVS`     | `components/debate/WaitingRoomVS.tsx`     | `{ topicTitle, myAgent, opponent, startedAt, isMatched, isAutoMatched, isRevealing, isReady, opponentReady, countdown, onReady, readying, onCancel, cancelling }` | VS 대기실 전체 화면. 매칭 전/후 상태별 UI 분기, 카운트다운, 준비 완료/취소 버튼 |
+| `TournamentBracket` | `components/debate/TournamentBracket.tsx` | `{ entries: {agent_id, agent_name, seed}[], matches: MatchEntry[], rounds: number }`                                                                              | 토너먼트 라운드별 대진표. 진행되지 않은 라운드가 없으면 안내 메시지 표시          |
+
 
 ---
 
@@ -405,6 +425,7 @@ try {
 ```
 
 인증 관련 동작:
+
 - 401 응답 시 `api.ts`가 자동으로 `/`(로그인 페이지)로 이동
 - 세션이 다른 기기에서 교체된 경우 `sessionStorage`에 사유를 저장 후 이동
 - 컴포넌트에서 별도 처리 불필요
@@ -509,17 +530,19 @@ try {
 
 프로젝트 Tailwind 커스텀 색상:
 
-| 클래스 | 용도 |
-|---|---|
-| `bg-bg` | 페이지 배경 |
-| `bg-bg-surface` | 카드/패널 배경 |
-| `border-border` | 기본 테두리 |
-| `text-text` | 주 텍스트 |
-| `text-text-muted` | 보조 텍스트 (흐린) |
-| `text-text-secondary` | 부 텍스트 |
-| `bg-primary` | 주요 액션 버튼 배경 |
-| `text-primary` | 주요 액션 텍스트 |
-| `bg-primary/10` | 주요 색상 10% 불투명 |
+
+| 클래스                   | 용도            |
+| --------------------- | ------------- |
+| `bg-bg`               | 페이지 배경        |
+| `bg-bg-surface`       | 카드/패널 배경      |
+| `border-border`       | 기본 테두리        |
+| `text-text`           | 주 텍스트         |
+| `text-text-muted`     | 보조 텍스트 (흐린)   |
+| `text-text-secondary` | 부 텍스트         |
+| `bg-primary`          | 주요 액션 버튼 배경   |
+| `text-primary`        | 주요 액션 텍스트     |
+| `bg-primary/10`       | 주요 색상 10% 불투명 |
+
 
 ### 5-7. 모달 패턴
 
@@ -580,13 +603,15 @@ const response = await fetch(`/api/matches/${match.id}/stream`, {
 
 모든 이벤트는 `data: {"event":"이벤트명","data":{...}}` 형식으로 전달된다.
 
-| 이벤트명 | data 구조 | 처리 액션 |
-|---|---|---|
-| `turn_chunk` | `{ turn_number: number, speaker: string, chunk: string }` | `appendChunk(turn_number, speaker, chunk)` |
-| `turn` | `TurnLog` (완료된 턴 전체) | `addTurnFromSSE(turn)` |
-| `turn_review` | `TurnReview` (LLM 검토 결과) | `addTurnReview(review)` |
-| `finished` | `{}` (빈 객체) | `clearStreamingTurn()` + `fetchMatch(matchId)` |
-| `error` | `{}` | `clearStreamingTurn()` + `fetchMatch(matchId)` |
+
+| 이벤트명          | data 구조                                                   | 처리 액션                                          |
+| ------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| `turn_chunk`  | `{ turn_number: number, speaker: string, chunk: string }` | `appendChunk(turn_number, speaker, chunk)`     |
+| `turn`        | `TurnLog` (완료된 턴 전체)                                      | `addTurnFromSSE(turn)`                         |
+| `turn_review` | `TurnReview` (LLM 검토 결과)                                  | `addTurnReview(review)`                        |
+| `finished`    | `{}` (빈 객체)                                               | `clearStreamingTurn()` + `fetchMatch(matchId)` |
+| `error`       | `{}`                                                      | `clearStreamingTurn()` + `fetchMatch(matchId)` |
+
 
 ### 새 SSE 이벤트 핸들러 추가
 
@@ -646,15 +671,17 @@ frontend/src/app/admin/debate/page.tsx
 
 ### 관리자 전용 API 엔드포인트
 
-| 기능 | 메서드 | 엔드포인트 |
-|---|---|---|
-| 매치 강제 종료 | PATCH | `/api/admin/debate/matches/{id}/force-end` |
-| 대기 큐 정리 | POST | `/api/admin/debate/cleanup` |
-| 하이라이트 지정/해제 | PATCH | `/api/admin/debate/matches/{id}/feature` |
-| 시즌 목록 조회 | GET | `/api/admin/debate/seasons` |
-| 시즌 생성 | POST | `/api/admin/debate/seasons` |
-| 토너먼트 목록 조회 | GET | `/api/admin/debate/tournaments` |
-| 토너먼트 생성 | POST | `/api/admin/debate/tournaments` |
+
+| 기능          | 메서드   | 엔드포인트                                      |
+| ----------- | ----- | ------------------------------------------ |
+| 매치 강제 종료    | PATCH | `/api/admin/debate/matches/{id}/force-end` |
+| 대기 큐 정리     | POST  | `/api/admin/debate/cleanup`                |
+| 하이라이트 지정/해제 | PATCH | `/api/admin/debate/matches/{id}/feature`   |
+| 시즌 목록 조회    | GET   | `/api/admin/debate/seasons`                |
+| 시즌 생성       | POST  | `/api/admin/debate/seasons`                |
+| 토너먼트 목록 조회  | GET   | `/api/admin/debate/tournaments`            |
+| 토너먼트 생성     | POST  | `/api/admin/debate/tournaments`            |
+
 
 ### 관리자 페이지 수정 시 주의사항
 
@@ -718,44 +745,47 @@ UI 수정 후 PR 전에 아래 항목을 모두 확인한다.
 
 ### TypeScript
 
-- [ ] Props 타입은 `type` 키워드로 선언 (`interface` 사용 금지 — 컴포넌트 로컬 타입)
-- [ ] `any` 타입 사용 금지 — 타입을 모를 경우 `unknown` 사용 후 좁히기
-- [ ] 컴포넌트명과 파일명이 동일한지 확인 (PascalCase)
+- Props 타입은 `type` 키워드로 선언 (`interface` 사용 금지 — 컴포넌트 로컬 타입)
+- `any` 타입 사용 금지 — 타입을 모를 경우 `unknown` 사용 후 좁히기
+- 컴포넌트명과 파일명이 동일한지 확인 (PascalCase)
 
 ### 스타일
 
-- [ ] Tailwind CSS만 사용 (`styled-components`, `emotion`, CSS Module 사용 금지)
-- [ ] 인라인 `style` 속성은 수치 계산(`width: pct%`)이 필요한 경우에만 허용
-- [ ] 필터/정렬 활성 버튼: `bg-primary text-white` 패턴 준수
-- [ ] 토글 스위치: `inline-flex items-center` + `inline-block translate-x` 패턴 준수
+- Tailwind CSS만 사용 (`styled-components`, `emotion`, CSS Module 사용 금지)
+- 인라인 `style` 속성은 수치 계산(`width: pct%`)이 필요한 경우에만 허용
+- 필터/정렬 활성 버튼: `bg-primary text-white` 패턴 준수
+- 토글 스위치: `inline-flex items-center` + `inline-block translate-x` 패턴 준수
 
 ### 텍스트/레이아웃
 
-- [ ] 카드 내 긴 텍스트: `truncate` 또는 `line-clamp-N` 적용
-- [ ] 이름+배지 조합: 부모에 `min-w-0` 추가
+- 카드 내 긴 텍스트: `truncate` 또는 `line-clamp-N` 적용
+- 이름+배지 조합: 부모에 `min-w-0` 추가
 
 ### API/상태
 
-- [ ] `fetch` 직접 호출 금지 — `api.ts` 래퍼만 사용
-- [ ] 컴포넌트 내 전역 상태 직접 선언 금지 — `stores/` 디렉토리에 위치해야 함
-- [ ] 에러 처리: `ApiError { status, code, message }` 구조 사용
+- `fetch` 직접 호출 금지 — `api.ts` 래퍼만 사용
+- 컴포넌트 내 전역 상태 직접 선언 금지 — `stores/` 디렉토리에 위치해야 함
+- 에러 처리: `ApiError { status, code, message }` 구조 사용
 
 ### 접근성/UX
 
-- [ ] 모든 `button`에 `type="button"` 명시 (폼 외부에서의 의도치 않은 submit 방지)
-- [ ] 아이콘만 있는 버튼에 `aria-label` 추가
-- [ ] 파괴적 작업(삭제, 강제 종료)은 `ConfirmDialog`로 확인 절차 추가
+- 모든 `button`에 `type="button"` 명시 (폼 외부에서의 의도치 않은 submit 방지)
+- 아이콘만 있는 버튼에 `aria-label` 추가
+- 파괴적 작업(삭제, 강제 종료)은 `ConfirmDialog`로 확인 절차 추가
 
 ### 빌드
 
-- [ ] `npm run build` 성공 확인 (타입 에러 없음)
-- [ ] `npm run lint` 통과
-- [ ] `npx vitest run` 통과 (기존 테스트 깨지지 않음)
+- `npm run build` 성공 확인 (타입 에러 없음)
+- `npm run lint` 통과
+- `npx vitest run` 통과 (기존 테스트 깨지지 않음)
 
 ---
 
 ## 변경 이력
 
-| 날짜 | 버전 | 변경 내용 | 작성자 |
-|---|---|---|---|
+
+| 날짜         | 버전   | 변경 내용                                      | 작성자    |
+| ---------- | ---- | ------------------------------------------ | ------ |
 | 2026-03-03 | v1.0 | 최초 작성 — 토론 UI 전체 컴포넌트 레퍼런스, SSE 흐름, 레시피 포함 | Claude |
+
+
