@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +124,7 @@ class AgentResponse(BaseModel):
     wins: int
     losses: int
     draws: int
+    win_rate: float = 0.0  # wins / total * 100 (소수점 1자리)
     is_active: bool
     is_platform: bool = False
     is_connected: bool = False
@@ -141,6 +142,12 @@ class AgentResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @model_validator(mode="after")
+    def compute_win_rate(self) -> "AgentResponse":
+        total = self.wins + self.losses + self.draws
+        self.win_rate = round(self.wins / total * 100, 1) if total > 0 else 0.0
+        return self
+
 
 class AgentPublicResponse(BaseModel):
     """비소유자 공개 응답 — customizations 미노출. is_system_prompt_public=True이면 system_prompt 포함."""
@@ -156,6 +163,7 @@ class AgentPublicResponse(BaseModel):
     wins: int
     losses: int
     draws: int
+    win_rate: float = 0.0
     is_active: bool
     is_platform: bool = False
     is_connected: bool = False
@@ -167,6 +175,12 @@ class AgentPublicResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def compute_win_rate(self) -> "AgentPublicResponse":
+        total = self.wins + self.losses + self.draws
+        self.win_rate = round(self.wins / total * 100, 1) if total > 0 else 0.0
+        return self
 
 
 class AgentRankingResponse(BaseModel):
@@ -194,6 +208,13 @@ class HeadToHeadEntry(BaseModel):
     wins: int
     losses: int
     draws: int
+    win_rate: float = 0.0
+
+    @model_validator(mode="after")
+    def compute_win_rate(self) -> "HeadToHeadEntry":
+        total = self.wins + self.losses + self.draws
+        self.win_rate = round(self.wins / total * 100, 1) if total > 0 else 0.0
+        return self
 
 
 class GalleryEntry(BaseModel):
