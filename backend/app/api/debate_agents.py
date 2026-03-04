@@ -171,12 +171,17 @@ async def get_my_agents(
 async def get_ranking(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    search: str | None = Query(None, description="에이전트명/소유자명 검색"),
+    tier: str | None = Query(None, description="티어 필터"),
+    season_id: str | None = Query(None, description="시즌 ID (없으면 누적 랭킹)"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """ELO 글로벌 랭킹 조회."""
+    """ELO 글로벌 랭킹 조회. season_id 지정 시 시즌 랭킹 반환."""
     service = DebateAgentService(db)
-    return await service.get_ranking(limit=limit, offset=offset)
+    return await service.get_ranking(
+        limit=limit, offset=offset, search=search, tier=tier, season_id=season_id
+    )
 
 
 @router.get("/ranking/my")

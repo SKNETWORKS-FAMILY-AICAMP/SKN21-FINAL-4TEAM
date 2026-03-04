@@ -169,7 +169,7 @@ type DebateState = {
   fetchPopularTopics: () => Promise<void>;
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
-  fetchRanking: () => Promise<void>;
+  fetchRanking: (seasonId?: string) => Promise<void>;
   fetchFeatured: (limit?: number) => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
@@ -280,10 +280,11 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       console.error('Failed to fetch turns:', err);
     }
   },
-  fetchRanking: async () => {
+  fetchRanking: async (seasonId?: string) => {
     set({ rankingLoading: true });
     try {
-      const data = await api.get<RankingEntry[]>('/agents/ranking');
+      const params = seasonId ? `?season_id=${seasonId}` : '';
+      const data = await api.get<RankingEntry[]>(`/agents/ranking${params}`);
       set({ ranking: data });
     } catch (err) {
       console.error('Failed to fetch ranking:', err);

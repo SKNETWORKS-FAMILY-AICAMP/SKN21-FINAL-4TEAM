@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.debate_agent import DebateAgent
+from app.models.debate_agent_season_stats import DebateAgentSeasonStats
 from app.models.debate_season import DebateSeason
 from app.models.debate_season_result import DebateSeasonResult
 from app.services.debate_agent_service import get_tier_from_elo
@@ -37,6 +38,16 @@ class DebateSeasonService:
         await self.db.refresh(season)
         return season
 
+    async def get_active_season(self) -> DebateSeason | None:
+        """status='active'인 시즌만 반환 (upcoming 제외)."""
+        res = await self.db.execute(
+            select(DebateSeason)
+            .where(DebateSeason.status == "active")
+            .order_by(DebateSeason.season_number.desc())
+            .limit(1)
+        )
+        return res.scalar_one_or_none()
+
     async def get_current_season(self) -> DebateSeason | None:
         # active 우선, 없으면 가장 최신 upcoming 반환
         for target_status in ("active", "upcoming"):
@@ -50,6 +61,45 @@ class DebateSeasonService:
             if season:
                 return season
         return None
+
+    async def get_or_create_season_stats(
+        self, agent_id: str, season_id: str
+    ) -> DebateAgentSeasonStats:
+        """에이전트의 시즌 통계 행을 가져오거나 생성 (ELO 1500, Iron 시작)."""
+        res = await self.db.execute(
+            select(DebateAgentSeasonStats).where(
+                DebateAgentSeasonStats.agent_id == agent_id,
+                DebateAgentSeasonStats.season_id == season_id,
+            )
+        )
+        stats = res.scalar_one_or_none()
+        if stats is None:
+            stats = DebateAgentSeasonStats(
+                agent_id=agent_id,
+                season_id=season_id,
+                elo_rating=1500,
+                tier="Iron",
+            )
+            self.db.add(stats)
+            await self.db.flush()
+        return stats
+
+    async def update_season_stats(
+        self, agent_id: str, season_id: str, new_elo: int, result_type: str
+    ) -> None:
+        """시즌 ELO/전적 갱신 + tier 재계산.
+
+        result_type: 'win' | 'loss' | 'draw'
+        """
+        stats = await self.get_or_create_season_stats(agent_id, season_id)
+        stats.elo_rating = new_elo
+        stats.tier = get_tier_from_elo(new_elo)
+        if result_type == "win":
+            stats.wins += 1
+        elif result_type == "loss":
+            stats.losses += 1
+        else:
+            stats.draws += 1
 
     async def get_season_results(self, season_id: str) -> list[dict]:
         res = await self.db.execute(
@@ -85,24 +135,29 @@ class DebateSeasonService:
         if season.status != "active":
             raise ValueError("활성 시즌만 종료할 수 있습니다")
 
-        # 활성 에이전트 ELO 내림차순 조회
-        agents_res = await self.db.execute(
-            select(DebateAgent)
-            .where(DebateAgent.is_active == True)  # noqa: E712
-            .order_by(DebateAgent.elo_rating.desc())
+        # 해당 시즌 참가 에이전트 시즌 ELO 내림차순 조회 (매치 0회 에이전트 제외)
+        stats_res = await self.db.execute(
+            select(DebateAgentSeasonStats, DebateAgent)
+            .join(DebateAgent, DebateAgentSeasonStats.agent_id == DebateAgent.id)
+            .where(
+                DebateAgentSeasonStats.season_id == season.id,
+                DebateAgent.is_active == True,  # noqa: E712
+            )
+            .order_by(DebateAgentSeasonStats.elo_rating.desc())
         )
-        agents = list(agents_res.scalars().all())
+        season_stats_rows = stats_res.all()
 
-        for rank, agent in enumerate(agents, start=1):
+        for rank, (stats, agent) in enumerate(season_stats_rows, start=1):
             reward = SEASON_REWARDS.get(rank, RANK_4_10_REWARD if rank <= 10 else 0)
             result = DebateSeasonResult(
                 season_id=season.id,
                 agent_id=agent.id,
-                final_elo=agent.elo_rating,
-                final_tier=get_tier_from_elo(agent.elo_rating),
-                wins=agent.wins,
-                losses=agent.losses,
-                draws=agent.draws,
+                # 시즌 전적/ELO 기준으로 결과 저장
+                final_elo=stats.elo_rating,
+                final_tier=stats.tier,
+                wins=stats.wins,
+                losses=stats.losses,
+                draws=stats.draws,
                 rank=rank,
                 reward_credits=reward,
             )
@@ -120,11 +175,11 @@ class DebateSeasonService:
                 )
                 self.db.add(ledger)
 
-            # ELO soft reset: (elo + 1500) // 2
+            # 누적 ELO soft reset: (누적 elo + 1500) // 2
             new_elo = (agent.elo_rating + 1500) // 2
             agent.elo_rating = new_elo
             agent.tier = get_tier_from_elo(new_elo)
 
         season.status = "completed"
         await self.db.commit()
-        logger.info("Season %s closed, %d agents ranked", season_id, len(agents))
+        logger.info("Season %s closed, %d agents ranked", season_id, len(season_stats_rows))

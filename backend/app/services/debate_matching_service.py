@@ -194,6 +194,13 @@ class DebateMatchingService:
             status="pending",
         )
 
+        # 활성 시즌이 있으면 season_id 태깅
+        from app.services.debate_season_service import DebateSeasonService
+        season_svc = DebateSeasonService(self.db)
+        active_season = await season_svc.get_active_season()
+        if active_season:
+            match.season_id = active_season.id
+
         # 시리즈 소속 매치인 경우 match_type / series_id 태깅 (첫 번째 시리즈 기준)
         from app.services.debate_promotion_service import DebatePromotionService
         promo_svc = DebatePromotionService(self.db)

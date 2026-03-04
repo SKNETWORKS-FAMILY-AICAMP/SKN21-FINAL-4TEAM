@@ -3,6 +3,7 @@ from app.models.debate_agent import DebateAgent
 from app.models.debate_agent_template import DebateAgentTemplate
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.debate_match import DebateMatch
+from app.models.debate_agent_season_stats import DebateAgentSeasonStats
 from app.models.debate_promotion_series import DebatePromotionSeries
 from app.models.debate_season import DebateSeason
 from app.models.debate_season_result import DebateSeasonResult
@@ -93,6 +94,7 @@ __all__ = [
     "DebateMatchQueue",
     "DebateTopic",
     "DebateTurnLog",
+    "DebateAgentSeasonStats",
     "DebatePromotionSeries",
     "DebateSeason",
     "DebateSeasonResult",

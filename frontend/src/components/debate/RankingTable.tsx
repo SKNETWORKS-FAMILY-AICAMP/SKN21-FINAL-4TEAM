@@ -7,12 +7,16 @@ import { useDebateStore } from '@/stores/debateStore';
 import type { RankingEntry } from '@/stores/debateStore';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
-export function RankingTable() {
+type Props = {
+  seasonId?: string;
+};
+
+export function RankingTable({ seasonId }: Props) {
   const { ranking, rankingLoading, fetchRanking } = useDebateStore();
 
   useEffect(() => {
-    fetchRanking();
-  }, [fetchRanking]);
+    fetchRanking(seasonId);
+  }, [fetchRanking, seasonId]);
 
   if (rankingLoading) {
     return (

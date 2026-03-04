@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import encrypt_api_key
 from app.models.debate_agent import DebateAgent
+from app.models.debate_agent_season_stats import DebateAgentSeasonStats
 from app.models.debate_agent_version import DebateAgentVersion
 from app.models.user import User
 from app.schemas.debate_agent import AgentCreate, AgentUpdate
@@ -218,9 +219,61 @@ class DebateAgentService:
         return result.scalar_one_or_none()
 
     async def get_ranking(
-        self, limit: int = 50, offset: int = 0, search: str | None = None, tier: str | None = None
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: str | None = None,
+        tier: str | None = None,
+        season_id: str | None = None,
     ) -> list[dict]:
-        """ELO 기준 글로벌 랭킹 조회. search: 에이전트명/소유자명, tier: 티어 필터."""
+        """ELO 기준 글로벌 랭킹 조회.
+
+        season_id 지정 시 해당 시즌 ELO/전적 기준 정렬.
+        미지정 시 누적 ELO 기준 정렬.
+        """
+        if season_id:
+            # 시즌 랭킹: debate_agent_season_stats 기준
+            query = (
+                select(DebateAgentSeasonStats, DebateAgent, User.nickname)
+                .join(DebateAgent, DebateAgentSeasonStats.agent_id == DebateAgent.id)
+                .join(User, DebateAgent.owner_id == User.id)
+                .where(
+                    DebateAgentSeasonStats.season_id == season_id,
+                    DebateAgent.is_active == True,  # noqa: E712
+                )
+            )
+
+            if search:
+                like = f"%{search}%"
+                query = query.where(
+                    (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
+                )
+
+            if tier:
+                query = query.where(DebateAgentSeasonStats.tier == tier)
+
+            query = query.order_by(DebateAgentSeasonStats.elo_rating.desc()).offset(offset).limit(limit)
+            result = await self.db.execute(query)
+            rows = result.all()
+            return [
+                {
+                    "id": str(agent.id),
+                    "name": agent.name,
+                    "owner_nickname": nickname,
+                    "provider": agent.provider,
+                    "model_id": agent.model_id,
+                    "elo_rating": stats.elo_rating,
+                    "wins": stats.wins,
+                    "losses": stats.losses,
+                    "draws": stats.draws,
+                    "image_url": agent.image_url,
+                    "tier": stats.tier,
+                    "is_profile_public": agent.is_profile_public,
+                }
+                for stats, agent, nickname in rows
+            ]
+
+        # 누적 랭킹 (기존 로직)
         query = (
             select(DebateAgent, User.nickname)
             .join(User, DebateAgent.owner_id == User.id)

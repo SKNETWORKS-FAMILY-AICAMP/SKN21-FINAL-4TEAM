@@ -57,6 +57,12 @@ class DebateMatch(Base):
     format: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'1v1'"))
     # 기능 11: 토론 요약 리포트
     summary_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 시즌 매치: 활성 시즌 진행 중일 때 자동 태깅
+    season_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("debate_seasons.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     # 승급전/강등전 시스템
     match_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ranked")
     series_id: Mapped[uuid.UUID | None] = mapped_column(

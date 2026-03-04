@@ -316,6 +316,29 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     if not match.is_test:
                         await agent_service.update_elo(str(forfeit_loser), new_loser_elo, loser_result)
                         await agent_service.update_elo(str(forfeit_winner_id), new_winner_elo, winner_result)
+                        # 시즌 ELO 갱신 (몰수패)
+                        if match.season_id:
+                            from app.services.debate_season_service import DebateSeasonService
+                            season_svc = DebateSeasonService(db)
+                            winner_agent = agent_b if side == "agent_a" else agent_a
+                            stats_loser = await season_svc.get_or_create_season_stats(
+                                str(forfeit_loser), str(match.season_id)
+                            )
+                            stats_winner = await season_svc.get_or_create_season_stats(
+                                str(forfeit_winner_id), str(match.season_id)
+                            )
+                            s_loser_new, s_winner_new = calculate_elo(
+                                stats_loser.elo_rating,
+                                stats_winner.elo_rating,
+                                "b_win" if side == "agent_a" else "a_win",
+                                score_diff=settings.debate_elo_forfeit_score_diff,
+                            )
+                            await season_svc.update_season_stats(
+                                str(forfeit_loser), str(match.season_id), s_loser_new, loser_result
+                            )
+                            await season_svc.update_season_stats(
+                                str(forfeit_winner_id), str(match.season_id), s_winner_new, winner_result
+                            )
                     await db.commit()
                     await publish_event(str(match.id), "forfeit", {
                         "match_id": str(match.id),
@@ -767,6 +790,18 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             str(agent_b.id), new_b, result_b,
             str(match.agent_b_version_id) if match.agent_b_version_id else None,
         )
+
+        # 시즌 매치이면 시즌 ELO/전적 별도 계산·갱신
+        if match.season_id:
+            from app.services.debate_season_service import DebateSeasonService
+            season_svc = DebateSeasonService(db)
+            stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
+            stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
+            season_new_a, season_new_b = calculate_elo(
+                stats_a.elo_rating, stats_b.elo_rating, elo_result, score_diff=score_diff
+            )
+            await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), season_new_a, result_a)
+            await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), season_new_b, result_b)
 
         # 승급전/강등전 시리즈 결과 기록 (테스트 매치 제외)
         from app.services.debate_promotion_service import DebatePromotionService
@@ -1243,6 +1278,17 @@ async def _execute_multi_and_finalize(
     if not match.is_test:
         await agent_service.update_elo(str(agent_a.id), new_a, result_a)
         await agent_service.update_elo(str(agent_b.id), new_b, result_b)
+        # 시즌 매치이면 시즌 ELO/전적 별도 갱신
+        if match.season_id:
+            from app.services.debate_season_service import DebateSeasonService
+            season_svc = DebateSeasonService(db)
+            stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
+            stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
+            season_new_a, season_new_b = calculate_elo(
+                stats_a.elo_rating, stats_b.elo_rating, elo_result, score_diff=score_diff
+            )
+            await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), season_new_a, result_a)
+            await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), season_new_b, result_b)
 
     await db.execute(
         update(DebateMatch)
