@@ -35,6 +35,19 @@ type QuotaEntry = {
   monthly_token_limit: number;
 };
 
+type LLMModel = {
+  id: string;
+  provider: string;
+  model_id: string;
+  display_name: string;
+  input_cost_per_1m: number;
+  output_cost_per_1m: number;
+  max_context_length: number;
+  is_active: boolean;
+  tier: string;
+  credit_per_1k_tokens: number;
+};
+
 type UserSearchResult = {
   id: string;
   nickname: string;
@@ -140,6 +153,7 @@ export default function AdminUsagePage() {
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [quotas, setQuotas] = useState<QuotaEntry[]>([]);
+  const [models, setModels] = useState<LLMModel[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ daily_token_limit: 0, monthly_token_limit: 0 });
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -153,6 +167,7 @@ export default function AdminUsagePage() {
       .catch(() => {})
       .finally(() => setLoading(false));
     api.get<QuotaEntry[]>('/admin/usage/quotas').then(setQuotas).catch(() => {});
+    api.get<{ items: LLMModel[] }>('/admin/models').then((r) => setModels(r.items)).catch(() => {});
   }, []);
 
   const startEdit = (q: QuotaEntry) => {
@@ -262,6 +277,49 @@ export default function AdminUsagePage() {
           <h2 className="section-title">모델별 사용량</h2>
           <div className="card">
             <DataTable columns={modelColumns} data={summary.by_model} />
+          </div>
+        </section>
+      )}
+
+      {/* 등록된 전체 모델 목록 */}
+      {models.length > 0 && (
+        <section className="mb-6">
+          <h2 className="section-title">등록된 LLM 모델 ({models.length}개)</h2>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="border-b border-border text-text-muted text-left">
+                  <th className="pb-2 pr-4 font-medium">모델명</th>
+                  <th className="pb-2 pr-4 font-medium">Provider</th>
+                  <th className="pb-2 pr-4 font-medium">Model ID</th>
+                  <th className="pb-2 pr-4 font-medium text-right">입력 단가</th>
+                  <th className="pb-2 pr-4 font-medium text-right">출력 단가</th>
+                  <th className="pb-2 pr-4 font-medium text-right">컨텍스트</th>
+                  <th className="pb-2 font-medium text-center">상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {models.map((m) => (
+                  <tr key={m.id} className="hover:bg-bg transition-colors">
+                    <td className="py-2 pr-4 font-medium text-text">{m.display_name}</td>
+                    <td className="py-2 pr-4 text-text-secondary">{m.provider}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-text-muted">{m.model_id}</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs">${m.input_cost_per_1m.toFixed(2)}/1M</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs">${m.output_cost_per_1m.toFixed(2)}/1M</td>
+                    <td className="py-2 pr-4 text-right text-xs text-text-muted">
+                      {(m.max_context_length / 1000).toFixed(0)}K
+                    </td>
+                    <td className="py-2 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                        m.is_active ? 'bg-success/10 text-success' : 'bg-border text-text-muted'
+                      }`}>
+                        {m.is_active ? '활성' : '비활성'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
