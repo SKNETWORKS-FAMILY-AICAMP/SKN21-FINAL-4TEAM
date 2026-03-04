@@ -1,9 +1,13 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.models.debate_match import DebateMatch
 from app.models.user import User
 from app.schemas.debate_match import PredictionCreate, TurnLogResponse
 from app.services.debate_broadcast import subscribe
@@ -131,16 +135,45 @@ async def get_scorecard(
 async def stream_match(
     match_id: str,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """매치 라이브 SSE 스트림."""
+    """매치 라이브 SSE 스트림.
+
+    이미 종료된 매치: 즉시 finished/error 이벤트 반환 — Redis pub/sub 이벤트 손실 방지.
+    진행 중 매치: Redis pub/sub 구독으로 실시간 스트림.
+    """
+    sse_headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
+    res = await db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+    match = res.scalar_one_or_none()
+
+    if match and match.status in ("completed", "error", "forfeit"):
+        # SSE 연결 전에 이미 종료된 매치 — 즉시 종료 이벤트를 합성해 반환
+        async def _immediate():
+            if match.status == "completed":
+                payload = json.dumps(
+                    {"event": "finished", "data": {
+                        "winner_id": str(match.winner_id) if match.winner_id else None,
+                        "score_a": match.score_a,
+                        "score_b": match.score_b,
+                    }},
+                    default=str,
+                )
+            elif match.status == "forfeit":
+                payload = json.dumps(
+                    {"event": "forfeit", "data": {"winner_id": str(match.winner_id) if match.winner_id else None}},
+                    default=str,
+                )
+            else:
+                payload = json.dumps({"event": "error", "data": {"message": "Match ended with error"}}, default=str)
+            yield f"data: {payload}\n\n"
+
+        return StreamingResponse(_immediate(), media_type="text/event-stream", headers=sse_headers)
+
     return StreamingResponse(
         subscribe(match_id),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=sse_headers,
     )
 
 

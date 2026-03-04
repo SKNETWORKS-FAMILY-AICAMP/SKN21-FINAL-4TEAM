@@ -240,6 +240,21 @@ async def run_debate(match_id: str) -> None:
     async with session_factory() as db:
         try:
             await _execute_match(db, match_id)
+        except asyncio.CancelledError:
+            # 서버 재시작/태스크 취소 — asyncio.shield로 DB 정리 후 재발생
+            logger.warning("Debate task cancelled for match %s — marking as error", match_id)
+            try:
+                await asyncio.shield(db.rollback())
+                await asyncio.shield(db.execute(
+                    update(DebateMatch)
+                    .where(DebateMatch.id == match_id)
+                    .values(status="error", finished_at=datetime.now(UTC))
+                ))
+                await asyncio.shield(db.commit())
+                await asyncio.shield(publish_event(match_id, "error", {"message": "Match cancelled by server"}))
+            except Exception:
+                pass
+            raise
         except Exception as exc:
             logger.error("Debate engine error for match %s: %s", match_id, exc, exc_info=True)
             await db.execute(

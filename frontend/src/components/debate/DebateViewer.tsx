@@ -155,6 +155,10 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
       } finally {
         clearStreamingTurn();
         setStreaming(false);
+        // SSE가 finished 이벤트 없이 종료된 경우(race condition, 엔진 크래시, 서버 재시작 등)에도
+        // 최종 매치 상태를 서버에서 재조회해 UI를 일치시킨다.
+        setDebateShowAll(true);
+        fetchMatch(match.id);
       }
     })();
 
