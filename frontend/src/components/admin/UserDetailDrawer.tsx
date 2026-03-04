@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
   X, User, Shield, ShieldCheck, CreditCard, MessageSquare, Drama, CalendarDays, Crown, Gem,
-  ShieldAlert, Check, Pencil,
+  ShieldAlert, Check, Pencil, Copy,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
@@ -250,6 +250,20 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
               </div>
 
               <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-text-muted">UUID</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[11px] text-text-secondary">{detail.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(detail.id); toast.success('UUID 복사됨'); }}
+                      className="p-1 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors border-none bg-transparent cursor-pointer"
+                      title="복사"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">역할</span>
                   {isSuperAdmin() ? (
