@@ -81,6 +81,30 @@ async def list_quotas(
     ]
 
 
+@router.get("/quotas/{user_id}", response_model=QuotaResponse | None)
+async def get_user_quota(
+    user_id: uuid.UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """특정 사용자의 쿼터 조회. 없으면 null 반환."""
+    result = await db.execute(
+        select(UsageQuota).where(UsageQuota.user_id == user_id)
+    )
+    quota = result.scalar_one_or_none()
+    if quota is None:
+        return None
+    return QuotaResponse(
+        id=quota.id,
+        user_id=quota.user_id,
+        nickname=None,
+        daily_token_limit=quota.daily_token_limit,
+        monthly_token_limit=quota.monthly_token_limit,
+        monthly_cost_limit=quota.monthly_cost_limit,
+        is_active=quota.is_active,
+    )
+
+
 @router.put("/quotas/{user_id}", response_model=QuotaResponse)
 async def set_user_quota(
     user_id: uuid.UUID,

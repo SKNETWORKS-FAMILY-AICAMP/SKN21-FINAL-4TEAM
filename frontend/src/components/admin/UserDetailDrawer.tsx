@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
   X, User, Shield, ShieldCheck, CreditCard, MessageSquare, Drama, CalendarDays, Crown, Gem,
+  ShieldAlert, Check, Pencil,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
@@ -25,6 +26,12 @@ type AdminUserDetail = {
   message_count: number;
   subscription_status: string | null;
 };
+
+type QuotaInfo = {
+  daily_token_limit: number;
+  monthly_token_limit: number;
+  is_active: boolean;
+} | null;
 
 type Props = {
   userId: string | null;
@@ -90,6 +97,13 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
   const [granting, setGranting] = useState(false);
   const [roleChanging, setRoleChanging] = useState(false);
 
+  // 쿼터
+  const [quota, setQuota] = useState<QuotaInfo>(undefined as unknown as QuotaInfo);
+  const [quotaLoaded, setQuotaLoaded] = useState(false);
+  const [editingQuota, setEditingQuota] = useState(false);
+  const [quotaForm, setQuotaForm] = useState({ daily_token_limit: 100000, monthly_token_limit: 2000000 });
+  const [savingQuota, setSavingQuota] = useState(false);
+
   const fetchDetail = useCallback(async (id: string) => {
     setLoading(true);
     try {
@@ -103,13 +117,31 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
     }
   }, [onClose]);
 
+  const fetchQuota = useCallback(async (id: string) => {
+    try {
+      const data = await api.get<QuotaInfo>(`/admin/usage/quotas/${id}`);
+      setQuota(data);
+      if (data) {
+        setQuotaForm({ daily_token_limit: data.daily_token_limit, monthly_token_limit: data.monthly_token_limit });
+      }
+    } catch {
+      setQuota(null);
+    } finally {
+      setQuotaLoaded(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (userId) {
       setDetail(null);
       setCreditAmount('');
+      setQuota(undefined as unknown as QuotaInfo);
+      setQuotaLoaded(false);
+      setEditingQuota(false);
       fetchDetail(userId);
+      fetchQuota(userId);
     }
-  }, [userId, fetchDetail]);
+  }, [userId, fetchDetail, fetchQuota]);
 
   useEffect(() => {
     if (!userId) return;
@@ -135,6 +167,24 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
       toast.error('역할 변경에 실패했습니다');
     } finally {
       setRoleChanging(false);
+    }
+  };
+
+  const handleSaveQuota = async () => {
+    if (!detail) return;
+    setSavingQuota(true);
+    try {
+      const updated = await api.put<QuotaInfo & { daily_token_limit: number; monthly_token_limit: number; is_active: boolean }>(
+        `/admin/usage/quotas/${detail.id}`,
+        quotaForm,
+      );
+      setQuota(updated);
+      setEditingQuota(false);
+      toast.success('쿼터를 저장했습니다');
+    } catch {
+      toast.error('쿼터 저장에 실패했습니다');
+    } finally {
+      setSavingQuota(false);
     }
   };
 
@@ -288,6 +338,101 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                 <StatMini icon={Crown} label="구독" value={detail.subscription_status ?? '없음'} />
               </div>
             </section>
+
+            {/* 토큰 쿼터 */}
+            {quotaLoaded && (
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-text-muted uppercase tracking-wide flex items-center gap-1.5 m-0">
+                    <ShieldAlert size={14} />
+                    토큰 쿼터
+                  </h4>
+                  {isSuperAdmin() && !editingQuota && (
+                    <button
+                      onClick={() => {
+                        if (quota) {
+                          setQuotaForm({ daily_token_limit: quota.daily_token_limit, monthly_token_limit: quota.monthly_token_limit });
+                        }
+                        setEditingQuota(true);
+                      }}
+                      className="p-1.5 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors border-none bg-transparent cursor-pointer"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {editingQuota ? (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs text-text-muted mb-1">일일 토큰 한도</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={quotaForm.daily_token_limit}
+                        onChange={(e) => setQuotaForm({ ...quotaForm, daily_token_limit: Number(e.target.value) })}
+                        className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-text-muted mb-1">월간 토큰 한도</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={quotaForm.monthly_token_limit}
+                        onChange={(e) => setQuotaForm({ ...quotaForm, monthly_token_limit: Number(e.target.value) })}
+                        className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleSaveQuota}
+                        disabled={savingQuota}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs hover:bg-primary/90 disabled:opacity-50 border-none cursor-pointer"
+                      >
+                        <Check size={12} />
+                        {savingQuota ? '저장 중...' : '저장'}
+                      </button>
+                      <button
+                        onClick={() => setEditingQuota(false)}
+                        className="px-3 py-1.5 rounded-lg text-xs text-text-muted border border-border bg-transparent hover:bg-bg-hover cursor-pointer"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : quota ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">일일 한도</span>
+                      <span className="font-mono text-text">{quota.daily_token_limit.toLocaleString()} 토큰</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">월간 한도</span>
+                      <span className="font-mono text-text">{quota.monthly_token_limit.toLocaleString()} 토큰</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-muted">상태</span>
+                      <span className={quota.is_active ? 'text-success text-xs font-semibold' : 'text-text-muted text-xs'}>
+                        {quota.is_active ? '활성' : '비활성'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-text-muted">
+                    <p className="mb-2">커스텀 쿼터 없음 (기본값 적용 중)</p>
+                    {isSuperAdmin() && (
+                      <button
+                        onClick={() => setEditingQuota(true)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-border text-text-muted hover:text-text hover:bg-bg-hover transition-colors bg-transparent cursor-pointer"
+                      >
+                        쿼터 설정
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
       </div>
