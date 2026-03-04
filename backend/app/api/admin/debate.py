@@ -590,6 +590,33 @@ async def create_season(
     return {"id": str(season.id), "status": season.status}
 
 
+@router.get("/seasons")
+async def list_seasons(
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """전체 시즌 목록 조회 (superadmin 전용)."""
+    from sqlalchemy import select
+
+    from app.models.debate_season import DebateSeason
+
+    res = await db.execute(select(DebateSeason).order_by(DebateSeason.season_number.desc()))
+    seasons = res.scalars().all()
+    return {
+        "items": [
+            {
+                "id": str(s.id),
+                "season_number": s.season_number,
+                "title": s.title,
+                "start_at": s.start_at.isoformat(),
+                "end_at": s.end_at.isoformat(),
+                "status": s.status,
+            }
+            for s in seasons
+        ]
+    }
+
+
 @router.post("/seasons/{season_id}/close")
 async def close_season(
     season_id: str,
@@ -605,6 +632,32 @@ async def close_season(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"ok": True}
+
+
+@router.delete("/seasons/{season_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_season(
+    season_id: str,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 삭제 — upcoming 상태만 가능 (superadmin 전용)."""
+    import uuid
+
+    from sqlalchemy import select
+
+    from app.models.debate_season import DebateSeason
+
+    res = await db.execute(select(DebateSeason).where(DebateSeason.id == uuid.UUID(season_id)))
+    season = res.scalar_one_or_none()
+    if season is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="시즌을 찾을 수 없습니다")
+    if season.status != "upcoming":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="upcoming 상태의 시즌만 삭제할 수 있습니다",
+        )
+    await db.delete(season)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------

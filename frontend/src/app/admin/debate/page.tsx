@@ -222,6 +222,7 @@ export default function AdminDebatePage() {
   });
   const [seasonSubmitting, setSeasonSubmitting] = useState(false);
   const [seasonClosingId, setSeasonClosingId] = useState<string | null>(null);
+  const [seasonDeletingId, setSeasonDeletingId] = useState<string | null>(null);
   const [seasonError, setSeasonError] = useState<string | null>(null);
 
   // 토너먼트 관리 상태
@@ -280,7 +281,7 @@ export default function AdminDebatePage() {
       })
       .catch(() => {});
 
-    api.get<Season>('/agents/season/current').then((s) => setSeasons(s ? [s] : [])).catch(() => {});
+    api.get<{ items: Season[] }>('/admin/debate/seasons').then((r) => setSeasons(r.items)).catch(() => {});
     api.get<{ items: Tournament[] }>('/tournaments?limit=20').then((r) => setTournaments(r.items)).catch(() => {});
   };
 
@@ -451,6 +452,19 @@ export default function AdminDebatePage() {
       setSeasonError(err instanceof Error ? err.message : '종료 실패');
     } finally {
       setSeasonClosingId(null);
+    }
+  };
+
+  const handleSeasonDelete = async (seasonId: string) => {
+    if (!confirm('이 시즌을 삭제하시겠습니까? 삭제된 시즌은 복구할 수 없습니다.')) return;
+    setSeasonDeletingId(seasonId);
+    try {
+      await api.delete(`/admin/debate/seasons/${seasonId}`);
+      fetchData();
+    } catch (err: unknown) {
+      setSeasonError(err instanceof Error ? err.message : '삭제 실패');
+    } finally {
+      setSeasonDeletingId(null);
     }
   };
 
@@ -1270,16 +1284,28 @@ export default function AdminDebatePage() {
                     {new Date(s.start_at).toLocaleDateString('ko-KR')} ~ {new Date(s.end_at).toLocaleDateString('ko-KR')}
                   </p>
                 </div>
-                {s.status !== 'completed' && (
-                  <button
-                    onClick={() => handleSeasonClose(s.id)}
-                    disabled={seasonClosingId === s.id}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors"
-                  >
-                    {seasonClosingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <StopCircle size={12} />}
-                    시즌 종료
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {s.status !== 'completed' && (
+                    <button
+                      onClick={() => handleSeasonClose(s.id)}
+                      disabled={seasonClosingId === s.id}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors"
+                    >
+                      {seasonClosingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <StopCircle size={12} />}
+                      시즌 종료
+                    </button>
+                  )}
+                  {s.status === 'upcoming' && (
+                    <button
+                      onClick={() => handleSeasonDelete(s.id)}
+                      disabled={seasonDeletingId === s.id}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-border text-text-muted hover:text-danger hover:border-danger/40 disabled:opacity-50 transition-colors"
+                    >
+                      {seasonDeletingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      삭제
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
