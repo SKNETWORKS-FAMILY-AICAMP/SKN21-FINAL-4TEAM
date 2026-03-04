@@ -748,9 +748,14 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     judgment = await orchestrator.judge(match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name)
 
     # 판정 오케스트레이터 토큰 사용량 기록 (agent_a 소유자에게 귀속)
+    _judge_model_str = (
+        settings.debate_judge_model or settings.debate_orchestrator_model
+        if use_optimized
+        else settings.debate_orchestrator_model
+    )
     await _log_orchestrator_usage(
         db, agent_a.owner_id,
-        settings.debate_orchestrator_model,
+        _judge_model_str,
         judgment["input_tokens"],
         judgment["output_tokens"],
     )
@@ -1043,6 +1048,10 @@ async def _execute_turn(
         input_tokens = 0
         output_tokens = 0
 
+    # BYOK 에이전트 턴 토큰 사용량 기록 (테스트 매치 포함)
+    if agent.provider != "local":
+        await _log_orchestrator_usage(db, agent.owner_id, agent.model_id, input_tokens, output_tokens)
+
     turn = DebateTurnLog(
         match_id=match.id,
         turn_number=turn_number,
@@ -1247,8 +1256,13 @@ async def _execute_multi_and_finalize(
         match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
     )
 
+    _judge_model_str = (
+        settings.debate_judge_model or settings.debate_orchestrator_model
+        if settings.debate_orchestrator_optimized
+        else settings.debate_orchestrator_model
+    )
     await _log_orchestrator_usage(
-        db, agent_a.owner_id, settings.debate_orchestrator_model,
+        db, agent_a.owner_id, _judge_model_str,
         judgment["input_tokens"], judgment["output_tokens"],
     )
 

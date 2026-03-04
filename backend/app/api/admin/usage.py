@@ -1,8 +1,8 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -25,6 +25,7 @@ class QuotaUpdate(BaseModel):
 class QuotaResponse(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
+    nickname: str | None = None
     daily_token_limit: int
     monthly_token_limit: int
     monthly_cost_limit: float
@@ -59,10 +60,25 @@ async def list_quotas(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """모든 사용자 할당 목록 조회 (관리자 전용)."""
-    result = await db.execute(select(UsageQuota).order_by(UsageQuota.created_at.desc()))
-    quotas = result.scalars().all()
-    return list(quotas)
+    """모든 사용자 할당 목록 조회 (닉네임 포함)."""
+    result = await db.execute(
+        select(UsageQuota, User.nickname)
+        .join(User, User.id == UsageQuota.user_id, isouter=True)
+        .order_by(UsageQuota.created_at.desc())
+    )
+    rows = result.all()
+    return [
+        QuotaResponse(
+            id=q.id,
+            user_id=q.user_id,
+            nickname=nickname,
+            daily_token_limit=q.daily_token_limit,
+            monthly_token_limit=q.monthly_token_limit,
+            monthly_cost_limit=q.monthly_cost_limit,
+            is_active=q.is_active,
+        )
+        for q, nickname in rows
+    ]
 
 
 @router.put("/quotas/{user_id}", response_model=QuotaResponse)
@@ -87,3 +103,30 @@ async def set_user_quota(
         is_active=data.is_active,
     )
     return quota
+
+
+class UserSearchResult(BaseModel):
+    id: uuid.UUID
+    nickname: str
+    login_id: str
+
+
+@router.get("/user-search", response_model=list[UserSearchResult])
+async def search_users_for_quota(
+    q: str = Query(..., min_length=1, max_length=50),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """닉네임/로그인ID로 사용자 검색 (쿼터 설정용)."""
+    result = await db.execute(
+        select(User.id, User.nickname, User.login_id)
+        .where(
+            or_(
+                User.nickname.ilike(f"%{q}%"),
+                User.login_id.ilike(f"%{q}%"),
+            )
+        )
+        .limit(10)
+    )
+    rows = result.all()
+    return [UserSearchResult(id=r.id, nickname=r.nickname, login_id=r.login_id) for r in rows]

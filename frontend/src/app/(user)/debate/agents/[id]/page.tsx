@@ -5,12 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Bot, TrendingUp, Trophy, Clock, Edit,
-  Globe, EyeOff, ChevronDown, Swords,
+  Globe, EyeOff, ChevronDown, Swords, Shield,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
-import type { DebateMatch } from '@/stores/debateStore';
+import type { DebateMatch, PromotionSeries } from '@/stores/debateStore';
 import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
+import { PromotionSeriesProgress } from '@/components/debate/PromotionSeriesProgress';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
 import { useUserStore } from '@/stores/userStore';
@@ -97,6 +98,7 @@ export default function AgentProfilePage() {
   const [matchTotal, setMatchTotal] = useState(0);
   const [matchLoading, setMatchLoading] = useState(false);
   const [h2h, setH2h] = useState<H2HEntry[]>([]);
+  const [activeSeries, setActiveSeries] = useState<PromotionSeries | null>(null);
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
   const { user } = useUserStore();
@@ -122,7 +124,12 @@ export default function AgentProfilePage() {
   useEffect(() => {
     api
       .get<DebateAgent>(`/agents/${id}`)
-      .then(setAgent)
+      .then((a) => {
+        setAgent(a);
+        if (a.active_series_id) {
+          api.get<PromotionSeries>(`/agents/${id}/series`).then(setActiveSeries).catch(() => {});
+        }
+      })
       .catch(() => setError('에이전트 정보를 불러오지 못했습니다.'));
     api.get<AgentVersion[]>(`/agents/${id}/versions`).then(setVersions).catch(() => {});
     api.get<H2HEntry[]>(`/agents/${id}/head-to-head`).then(setH2h).catch(() => {});
@@ -248,6 +255,17 @@ export default function AgentProfilePage() {
           )}
         </div>
       </div>
+
+      {/* ── 승급전/강등전 진행 상황 ── */}
+      {activeSeries && activeSeries.status === 'active' && (
+        <div className="bg-bg-surface border border-border rounded-xl p-4 mb-4">
+          <h3 className="text-sm font-bold text-text mb-3 flex items-center gap-1.5">
+            <Shield size={14} className="text-primary" />
+            {activeSeries.series_type === 'promotion' ? '승급전 진행 중' : '강등전 진행 중'}
+          </h3>
+          <PromotionSeriesProgress series={activeSeries} />
+        </div>
+      )}
 
       {/* ── 로컬 에이전트 WebSocket 연결 가이드 ── */}
       {agent.provider === 'local' && (

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 import { DataTable } from '@/components/admin/DataTable';
 import { SkeletonStat } from '@/components/ui/Skeleton';
-import { Coins, Hash, CalendarDays, ShieldAlert, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Coins, Hash, CalendarDays, ShieldAlert, Pencil, Check, X, Loader2, Search, User } from 'lucide-react';
 
 type UsagePeriod = {
   input_tokens: number;
@@ -30,9 +30,111 @@ type UsageSummaryResponse = {
 
 type QuotaEntry = {
   user_id: string;
+  nickname: string | null;
   daily_token_limit: number;
   monthly_token_limit: number;
 };
+
+type UserSearchResult = {
+  id: string;
+  nickname: string;
+  login_id: string;
+};
+
+function UserSearchInput({
+  onSelect,
+}: {
+  onSelect: (user: UserSearchResult) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<UserSearchResult | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const search = useCallback(async (q: string) => {
+    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    setSearching(true);
+    try {
+      const data = await api.get<UserSearchResult[]>(`/admin/usage/user-search?q=${encodeURIComponent(q)}`);
+      setResults(data);
+      setOpen(true);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    setSelected(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(val), 300);
+  };
+
+  const handleSelect = (u: UserSearchResult) => {
+    setSelected(u);
+    setQuery(`${u.nickname} (${u.login_id})`);
+    setOpen(false);
+    onSelect(u);
+  };
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <label className="block text-xs text-text-muted mb-1">사용자 검색 (닉네임 / 로그인ID)</label>
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="닉네임 또는 ID 입력..."
+          value={query}
+          onChange={handleChange}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          className="bg-bg-surface border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-text w-64 focus:outline-none focus:border-primary"
+        />
+        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted">
+          {searching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+        </span>
+      </div>
+      {open && results.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-64 bg-bg-surface border border-border rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+          {results.map((u) => (
+            <li key={u.id}>
+              <button
+                type="button"
+                onClick={() => handleSelect(u)}
+                className="w-full text-left px-3 py-2 hover:bg-bg-hover transition-colors flex items-center gap-2"
+              >
+                <User size={12} className="text-text-muted shrink-0" />
+                <div className="min-w-0">
+                  <span className="block text-sm font-medium text-text truncate">{u.nickname}</span>
+                  <span className="block text-[11px] text-text-muted truncate">{u.login_id}</span>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {selected && (
+        <p className="mt-1 text-[11px] text-text-muted font-mono truncate">UUID: {selected.id}</p>
+      )}
+    </div>
+  );
+}
 
 export default function AdminUsagePage() {
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
@@ -41,7 +143,7 @@ export default function AdminUsagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ daily_token_limit: 0, monthly_token_limit: 0 });
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [newQuotaUserId, setNewQuotaUserId] = useState('');
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
   useEffect(() => {
@@ -73,12 +175,15 @@ export default function AdminUsagePage() {
 
   const addQuota = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuotaUserId.trim()) return;
+    if (!selectedUser) return;
     setSavingId('new');
     try {
-      const created = await api.put<QuotaEntry>(`/admin/usage/quotas/${newQuotaUserId.trim()}`, editForm);
+      const created = await api.put<QuotaEntry>(
+        `/admin/usage/quotas/${selectedUser.id}`,
+        editForm,
+      );
       setQuotas((prev) => [...prev, created]);
-      setNewQuotaUserId('');
+      setSelectedUser(null);
       setShowAddForm(false);
       setEditForm({ daily_token_limit: 100000, monthly_token_limit: 2000000 });
     } catch {
@@ -172,6 +277,7 @@ export default function AdminUsagePage() {
             onClick={() => {
               setShowAddForm(!showAddForm);
               setEditForm({ daily_token_limit: 100000, monthly_token_limit: 2000000 });
+              setSelectedUser(null);
             }}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
           >
@@ -182,29 +288,32 @@ export default function AdminUsagePage() {
 
         {showAddForm && (
           <form onSubmit={addQuota} className="card p-4 mb-3 flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs text-text-muted mb-1">사용자 ID (UUID)</label>
-              <input type="text" required placeholder="xxxxxxxx-xxxx-..." value={newQuotaUserId}
-                onChange={(e) => setNewQuotaUserId(e.target.value)}
-                className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text w-72 focus:outline-none focus:border-primary"
-              />
-            </div>
+            <UserSearchInput onSelect={setSelectedUser} />
             <div>
               <label className="block text-xs text-text-muted mb-1">일일 토큰 한도</label>
-              <input type="number" min={0} value={editForm.daily_token_limit}
+              <input
+                type="number"
+                min={0}
+                value={editForm.daily_token_limit}
                 onChange={(e) => setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })}
                 className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text w-36 focus:outline-none focus:border-primary"
               />
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1">월간 토큰 한도</label>
-              <input type="number" min={0} value={editForm.monthly_token_limit}
+              <input
+                type="number"
+                min={0}
+                value={editForm.monthly_token_limit}
                 onChange={(e) => setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })}
                 className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text w-36 focus:outline-none focus:border-primary"
               />
             </div>
-            <button type="submit" disabled={savingId === 'new'}
-              className="px-4 py-2 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <button
+              type="submit"
+              disabled={!selectedUser || savingId === 'new'}
+              className="px-4 py-2 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
               {savingId === 'new' ? '저장 중...' : '추가'}
             </button>
           </form>
@@ -212,12 +321,14 @@ export default function AdminUsagePage() {
 
         <div className="card overflow-x-auto">
           {quotas.length === 0 ? (
-            <p className="text-sm text-text-muted text-center py-6">커스텀 쿼터 설정이 없습니다. (기본값 적용 중)</p>
+            <p className="text-sm text-text-muted text-center py-6">
+              커스텀 쿼터 설정이 없습니다. (기본값 적용 중)
+            </p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted text-left">
-                  <th className="pb-2 pr-4 font-medium">사용자 ID</th>
+                  <th className="pb-2 pr-4 font-medium">사용자</th>
                   <th className="pb-2 pr-4 font-medium text-right">일일 한도</th>
                   <th className="pb-2 pr-4 font-medium text-right">월간 한도</th>
                   <th className="pb-2 font-medium text-right">관리</th>
@@ -226,29 +337,59 @@ export default function AdminUsagePage() {
               <tbody className="divide-y divide-border">
                 {quotas.map((q) => (
                   <tr key={q.user_id} className="hover:bg-bg transition-colors">
-                    <td className="py-2 pr-4 font-mono text-xs text-text-muted">{q.user_id}</td>
+                    <td className="py-2 pr-4">
+                      {q.nickname ? (
+                        <div>
+                          <span className="font-medium text-text">{q.nickname}</span>
+                          <span className="block font-mono text-[11px] text-text-muted mt-0.5">
+                            {q.user_id}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-mono text-xs text-text-muted">{q.user_id}</span>
+                      )}
+                    </td>
                     {editingId === q.user_id ? (
                       <>
                         <td className="py-2 pr-4 text-right">
-                          <input type="number" min={0} value={editForm.daily_token_limit}
-                            onChange={(e) => setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })}
+                          <input
+                            type="number"
+                            min={0}
+                            value={editForm.daily_token_limit}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })
+                            }
                             className="w-28 bg-bg border border-primary/40 rounded px-2 py-1 text-sm text-text text-right focus:outline-none"
                           />
                         </td>
                         <td className="py-2 pr-4 text-right">
-                          <input type="number" min={0} value={editForm.monthly_token_limit}
-                            onChange={(e) => setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })}
+                          <input
+                            type="number"
+                            min={0}
+                            value={editForm.monthly_token_limit}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })
+                            }
                             className="w-32 bg-bg border border-primary/40 rounded px-2 py-1 text-sm text-text text-right focus:outline-none"
                           />
                         </td>
                         <td className="py-2 text-right">
                           <div className="flex items-center gap-1 justify-end">
-                            <button onClick={() => saveQuota(q.user_id)} disabled={savingId === q.user_id}
-                              className="p-1.5 rounded text-green-500 hover:bg-green-500/10 disabled:opacity-50 transition-colors">
-                              {savingId === q.user_id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                            <button
+                              onClick={() => saveQuota(q.user_id)}
+                              disabled={savingId === q.user_id}
+                              className="p-1.5 rounded text-green-500 hover:bg-green-500/10 disabled:opacity-50 transition-colors"
+                            >
+                              {savingId === q.user_id ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <Check size={13} />
+                              )}
                             </button>
-                            <button onClick={() => setEditingId(null)}
-                              className="p-1.5 rounded text-text-muted hover:bg-bg-hover transition-colors">
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="p-1.5 rounded text-text-muted hover:bg-bg-hover transition-colors"
+                            >
                               <X size={13} />
                             </button>
                           </div>
@@ -256,11 +397,17 @@ export default function AdminUsagePage() {
                       </>
                     ) : (
                       <>
-                        <td className="py-2 pr-4 text-right font-mono text-xs">{q.daily_token_limit.toLocaleString()}</td>
-                        <td className="py-2 pr-4 text-right font-mono text-xs">{q.monthly_token_limit.toLocaleString()}</td>
+                        <td className="py-2 pr-4 text-right font-mono text-xs">
+                          {q.daily_token_limit.toLocaleString()}
+                        </td>
+                        <td className="py-2 pr-4 text-right font-mono text-xs">
+                          {q.monthly_token_limit.toLocaleString()}
+                        </td>
                         <td className="py-2 text-right">
-                          <button onClick={() => startEdit(q)}
-                            className="p-1.5 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors">
+                          <button
+                            onClick={() => startEdit(q)}
+                            className="p-1.5 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
+                          >
                             <Pencil size={13} />
                           </button>
                         </td>
