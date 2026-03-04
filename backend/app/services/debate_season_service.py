@@ -38,13 +38,18 @@ class DebateSeasonService:
         return season
 
     async def get_current_season(self) -> DebateSeason | None:
-        res = await self.db.execute(
-            select(DebateSeason)
-            .where(DebateSeason.status == "active")
-            .order_by(DebateSeason.season_number.desc())
-            .limit(1)
-        )
-        return res.scalar_one_or_none()
+        # active 우선, 없으면 가장 최신 upcoming 반환
+        for target_status in ("active", "upcoming"):
+            res = await self.db.execute(
+                select(DebateSeason)
+                .where(DebateSeason.status == target_status)
+                .order_by(DebateSeason.season_number.desc())
+                .limit(1)
+            )
+            season = res.scalar_one_or_none()
+            if season:
+                return season
+        return None
 
     async def get_season_results(self, season_id: str) -> list[dict]:
         res = await self.db.execute(

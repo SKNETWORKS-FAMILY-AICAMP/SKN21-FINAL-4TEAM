@@ -617,6 +617,43 @@ async def list_seasons(
     }
 
 
+@router.post("/seasons/{season_id}/activate")
+async def activate_season(
+    season_id: str,
+    user: User = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 활성화 — upcoming → active (superadmin 전용)."""
+    import uuid
+
+    from sqlalchemy import select, update
+
+    from app.models.debate_season import DebateSeason
+
+    # 이미 활성 시즌이 있으면 차단
+    existing = await db.execute(
+        select(DebateSeason).where(DebateSeason.status == "active")
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 활성 시즌이 존재합니다. 먼저 현재 시즌을 종료하세요.",
+        )
+
+    res = await db.execute(select(DebateSeason).where(DebateSeason.id == uuid.UUID(season_id)))
+    season = res.scalar_one_or_none()
+    if season is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="시즌을 찾을 수 없습니다")
+    if season.status != "upcoming":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="upcoming 상태의 시즌만 활성화할 수 있습니다",
+        )
+    season.status = "active"
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/seasons/{season_id}/close")
 async def close_season(
     season_id: str,

@@ -223,6 +223,7 @@ export default function AdminDebatePage() {
   const [seasonSubmitting, setSeasonSubmitting] = useState(false);
   const [seasonClosingId, setSeasonClosingId] = useState<string | null>(null);
   const [seasonDeletingId, setSeasonDeletingId] = useState<string | null>(null);
+  const [seasonActivatingId, setSeasonActivatingId] = useState<string | null>(null);
   const [seasonError, setSeasonError] = useState<string | null>(null);
 
   // 토너먼트 관리 상태
@@ -452,6 +453,19 @@ export default function AdminDebatePage() {
       setSeasonError(err instanceof Error ? err.message : '종료 실패');
     } finally {
       setSeasonClosingId(null);
+    }
+  };
+
+  const handleSeasonActivate = async (seasonId: string) => {
+    if (!confirm('이 시즌을 활성화하면 사용자 토론 페이지에 표시됩니다. 계속하시겠습니까?')) return;
+    setSeasonActivatingId(seasonId);
+    try {
+      await api.post(`/admin/debate/seasons/${seasonId}/activate`);
+      fetchData();
+    } catch (err: unknown) {
+      setSeasonError(err instanceof Error ? err.message : '활성화 실패');
+    } finally {
+      setSeasonActivatingId(null);
     }
   };
 
@@ -1285,7 +1299,17 @@ export default function AdminDebatePage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {s.status !== 'completed' && (
+                  {s.status === 'upcoming' && (
+                    <button
+                      onClick={() => handleSeasonActivate(s.id)}
+                      disabled={seasonActivatingId === s.id}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
+                    >
+                      {seasonActivatingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                      활성화
+                    </button>
+                  )}
+                  {s.status === 'active' && (
                     <button
                       onClick={() => handleSeasonClose(s.id)}
                       disabled={seasonClosingId === s.id}
