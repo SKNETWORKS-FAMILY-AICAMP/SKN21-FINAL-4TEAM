@@ -93,6 +93,8 @@ class TestDebateEngineStreaming:
     @pytest.mark.asyncio
     async def test_byok_turn_publishes_chunk_events(self):
         """BYOK 턴 실행 시 turn_chunk 이벤트가 각 청크마다 발행된다."""
+        from decimal import Decimal
+        from app.models.llm_model import LLMModel
         from app.services.debate_engine import _execute_turn
 
         # 테스트용 mock 객체 구성
@@ -110,13 +112,25 @@ class TestDebateEngineStreaming:
         agent.provider = "openai"
         agent.model_id = "gpt-4o"
         agent.id = uuid.uuid4()
+        agent.owner_id = uuid.uuid4()
 
         version = MagicMock()
         version.system_prompt = "당신은 토론 참가자입니다."
 
+        # LLMModel mock 설정
+        mock_model = MagicMock(spec=LLMModel)
+        mock_model.id = uuid.uuid4()
+        mock_model.input_cost_per_1m = Decimal("0.003")
+        mock_model.output_cost_per_1m = Decimal("0.006")
+
+        # db.execute() 반환값: coroutine을 반환해야 함
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none = MagicMock(return_value=mock_model)
+
         db = AsyncMock()
         db.add = MagicMock()
         db.flush = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
 
         # 스트리밍 청크: JSON 형식 응답
         raw_json = '{"action":"argue","claim":"AI는 좋은 기술입니다.","evidence":null,"tool_used":null,"tool_result":null}'

@@ -30,18 +30,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    # Relationships
-    consent_logs = relationship("ConsentLog", back_populates="user", cascade="all, delete-orphan")
-    spoiler_settings = relationship("SpoilerSetting", back_populates="user", cascade="all, delete-orphan")
-    personas = relationship("Persona", back_populates="creator", foreign_keys="Persona.created_by")
-    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
-    memories = relationship("UserMemory", back_populates="user", cascade="all, delete-orphan")
+    # Relationships - only keep relationships to models that exist
     preferred_llm_model = relationship("LLMModel", foreign_keys=[preferred_llm_model_id])
-    subscriptions = relationship("UserSubscription", foreign_keys="UserSubscription.user_id", back_populates="user")
-    user_personas = relationship("UserPersona", back_populates="user", cascade="all, delete-orphan")
-    favorites = relationship("PersonaFavorite", back_populates="user", cascade="all, delete-orphan")
-    relationships = relationship("PersonaRelationship", back_populates="user", cascade="all, delete-orphan")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("role IN ('user', 'admin', 'superadmin')", name="ck_users_role"),

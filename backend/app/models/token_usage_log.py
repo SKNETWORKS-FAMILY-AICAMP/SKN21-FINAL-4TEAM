@@ -23,7 +23,6 @@ class TokenUsageLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     user = relationship("User")
-    session = relationship("ChatSession")
     llm_model = relationship("LLMModel")
 
     __table_args__ = (
