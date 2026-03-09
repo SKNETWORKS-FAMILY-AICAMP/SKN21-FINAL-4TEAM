@@ -49,7 +49,6 @@ async def db_session():
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with engine.begin() as conn:
-        await conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     async with session_factory() as session:
@@ -157,7 +156,7 @@ async def test_debate_agent(db_session: AsyncSession, test_developer):
     """토론 에이전트 fixture."""
     from app.core.encryption import encrypt_api_key
     from app.models.debate_agent import DebateAgent
-    from app.models.debate_agent_version import DebateAgentVersion
+    from app.models.debate_agent import DebateAgentVersion
 
     agent = DebateAgent(
         id=uuid.uuid4(),
@@ -186,7 +185,7 @@ async def test_debate_agent(db_session: AsyncSession, test_developer):
 async def test_local_debate_agent(db_session: AsyncSession, test_developer):
     """로컬 에이전트 fixture (provider=local, API 키 없음)."""
     from app.models.debate_agent import DebateAgent
-    from app.models.debate_agent_version import DebateAgentVersion
+    from app.models.debate_agent import DebateAgentVersion
 
     agent = DebateAgent(
         id=uuid.uuid4(),
