@@ -111,12 +111,8 @@ export default function HomePage() {
 
   const handleLoginIdChange = (value: string) => {
     setLoginId(value);
-    if (mode === 'register' && value.trim().length > 0) {
-      checkLoginIdAvailability(value.trim());
-    } else {
-      setLoginIdStatus('idle');
-      setLoginIdError(null);
-    }
+    setLoginIdStatus('idle');
+    setLoginIdError(null);
   };
 
   const checkNicknameAvailability = useCallback((value: string) => {
@@ -142,12 +138,8 @@ export default function HomePage() {
 
   const handleNicknameChange = (value: string) => {
     setNickname(value);
-    if (mode === 'register' && value.trim().length > 0) {
-      checkNicknameAvailability(value.trim());
-    } else {
-      setNicknameStatus('idle');
-      setNicknameError(null);
-    }
+    setNicknameStatus('idle');
+    setNicknameError(null);
   };
 
   useEffect(() => {
@@ -331,11 +323,11 @@ export default function HomePage() {
   // Auth form (login / register)
   return (
     <div className="flex justify-center items-center min-h-screen bg-bg">
-      <div className="bg-bg-surface rounded-2xl py-12 px-6 md:px-10 w-full max-w-[420px] mx-4 shadow-card">
+      <div className="bg-bg-surface rounded-2xl py-12 px-6 md:px-10 w-full max-w-[425px] mx-4 shadow-card">
         <div className="flex justify-center mb-3">
-          <Drama size={48} className="text-primary" />
+          <Drama size={48} className="text-nemo" />
         </div>
-        <h1 className="m-0 text-2xl text-center text-text">AI 토론 플랫폼</h1>
+        <h1 className="m-0 text-2xl text-center text-text font-bold">NEMO</h1>
         <p className="text-center text-text-secondary text-sm mb-6">LLM 에이전트 AI 토론 플랫폼</p>
 
         <div className="flex mb-6 border-b-2 border-border">
@@ -365,7 +357,7 @@ export default function HomePage() {
           {/* LoginId */}
           <div className="flex flex-col gap-1">
             <label className="text-[13px] font-semibold text-text-label">아이디</label>
-            <div className="relative">
+            <div className="relative flex gap-2">
               <input
                 type="text"
                 placeholder={mode === 'register' ? '2~30자, 영문/숫자/밑줄' : '아이디'}
@@ -373,19 +365,23 @@ export default function HomePage() {
                 onChange={(e) => handleLoginIdChange(e.target.value)}
                 required
                 maxLength={30}
-                className={`input py-3 px-4 pr-10 w-full ${
+                className={`input py-3 px-4 w-full ${
                   mode === 'register' && loginIdStatus === 'taken' ? 'border-danger' : ''
                 } ${mode === 'register' && loginIdStatus === 'available' ? 'border-success' : ''}`}
               />
-              {mode === 'register' && loginId.trim().length > 0 && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {loginIdStatus === 'checking' && (
-                    <span className="inline-block w-4 h-4 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
+              {mode === 'register' && (
+                <button
+                  type="button"
+                  onClick={() => checkLoginIdAvailability(loginId.trim())}
+                  disabled={loginId.trim().length === 0 || loginIdStatus === 'checking'}
+                  className="btn-primary py-3 px-4 shrink-0 whitespace-nowrap text-sm"
+                >
+                  {loginIdStatus === 'checking' ? (
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    '중복확인'
                   )}
-                  {loginIdStatus === 'available' && <Check size={16} className="text-success" />}
-                  {loginIdStatus === 'taken' && <X size={16} className="text-danger" />}
-                  {loginIdStatus === 'invalid' && <AlertCircle size={16} className="text-warning" />}
-                </span>
+                </button>
               )}
             </div>
             {mode === 'register' && loginIdError && (
@@ -400,7 +396,7 @@ export default function HomePage() {
           {mode === 'register' && (
             <div className="flex flex-col gap-1">
               <label className="text-[13px] font-semibold text-text-label">닉네임</label>
-              <div className="relative">
+              <div className="relative flex gap-2">
                 <input
                   type="text"
                   placeholder="2~20자, 한글/영문/숫자"
@@ -408,20 +404,22 @@ export default function HomePage() {
                   onChange={(e) => handleNicknameChange(e.target.value)}
                   required
                   maxLength={20}
-                  className={`input py-3 px-4 pr-10 w-full ${
+                  className={`input py-3 px-4 w-full ${
                     nicknameStatus === 'taken' ? 'border-danger' : ''
                   } ${nicknameStatus === 'available' ? 'border-success' : ''}`}
                 />
-                {nickname.trim().length > 0 && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {nicknameStatus === 'checking' && (
-                      <span className="inline-block w-4 h-4 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
-                    )}
-                    {nicknameStatus === 'available' && <Check size={16} className="text-success" />}
-                    {nicknameStatus === 'taken' && <X size={16} className="text-danger" />}
-                    {nicknameStatus === 'invalid' && <AlertCircle size={16} className="text-warning" />}
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => checkNicknameAvailability(nickname.trim())}
+                  disabled={nickname.trim().length === 0 || nicknameStatus === 'checking'}
+                  className="btn-primary py-3 px-4 shrink-0 whitespace-nowrap text-sm"
+                >
+                  {nicknameStatus === 'checking' ? (
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    '중복확인'
+                  )}
+                </button>
               </div>
               {nicknameError && (
                 <span className="text-danger-text text-xs">{nicknameError}</span>

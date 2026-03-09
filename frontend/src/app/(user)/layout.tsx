@@ -4,12 +4,13 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserSidebar } from '@/components/layout/UserSidebar';
 import { MobileHeader } from '@/components/layout/MobileHeader';
+import { DesktopHeader } from '@/components/layout/DesktopHeader';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { GuideProvider } from '@/components/guide/GuideProvider';
 import { useUserStore } from '@/stores/userStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 
-/** pathname prefix → feature flag key 매핑. 길이 내림차순 정렬 필요 없음, 순차 first-match. */
+/** pathname prefix → feature flag key 매핑. */
 const ROUTE_FLAG_MAP: [string, string][] = [
   ['/sessions', 'chat'],
   ['/chat/', 'chat'],
@@ -72,7 +73,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   if (!initialized || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-bg">
-        <span className="inline-block w-6 h-6 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
+        <span className="inline-block w-6 h-6 border-2 border-text-muted border-t-nemo rounded-full animate-spin" />
       </div>
     );
   }
@@ -89,6 +90,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       <UserSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader />
+        <DesktopHeader />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           <ErrorBoundary>
             <GuideProvider>{pageDisabled ? <MaintenancePage /> : children}</GuideProvider>

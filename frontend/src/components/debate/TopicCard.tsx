@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench, Lock } from 'lucide-react';
+import { MessageSquare, Users, Clock, Shield, CalendarClock, Wrench, Lock, TrendingUp } from 'lucide-react';
 import type { DebateTopic } from '@/stores/debateStore';
 import { getTimeAgo } from '@/lib/format';
 
@@ -12,34 +12,23 @@ type Props = {
   onDelete?: (topicId: string) => void;
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  scheduled: 'bg-blue-500/10 text-blue-400',
-  open: 'bg-green-500/10 text-green-500',
-  in_progress: 'bg-yellow-500/10 text-yellow-500',
-  closed: 'bg-text-muted/10 text-text-muted',
+const STATUS_CONFIG: Record<string, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
+  open: { label: 'LIVE', dotColor: 'bg-red-500', bgColor: 'bg-red-500/10', textColor: 'text-red-500' },
+  in_progress: { label: '대기중', dotColor: '', bgColor: 'bg-nemo/10', textColor: 'text-nemo' },
+  scheduled: { label: '예정', dotColor: '', bgColor: 'bg-gray-500/10', textColor: 'text-gray-500' },
+  closed: { label: '종료', dotColor: '', bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: '예정',
-  open: '참가 가능',
-  in_progress: '진행 중',
-  closed: '종료',
-};
-
+/* topic.description에서 카테고리 추출 시도 (fallback: topic.mode) */
 const MODE_LABELS: Record<string, string> = {
-  debate: '토론',
-  persuasion: '설득',
-  cross_exam: '교차 심문',
+  debate: 'AI·기술',
+  persuasion: '경제·사회',
+  cross_exam: '정치·외교',
 };
 
 function formatScheduleTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function getEndCountdown(iso: string): string | null {
@@ -47,21 +36,31 @@ function getEndCountdown(iso: string): string | null {
   if (diff <= 0) return null;
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  if (h > 0) return `${h}시간 ${m}분 후 종료`;
-  if (m > 0) return `${m}분 후 종료`;
+  if (h > 0) return `${h}시간 ${m}분 남음`;
+  if (m > 0) return `${m}분 남음`;
   return '곧 종료';
 }
 
 export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
+  const config = STATUS_CONFIG[topic.status] ?? STATUS_CONFIG.closed;
   const countdown = topic.scheduled_end_at ? getEndCountdown(topic.scheduled_end_at) : null;
+  const categoryLabel = MODE_LABELS[topic.mode] || 'AI·기술';
+
+  // 간단한 참여 성장률 시뮬레이션 (실제로는 API에서)
+  const growthPercent = topic.queue_count > 0 ? `+${Math.min(topic.queue_count * 3, 99)}%` : null;
 
   return (
     <Link
       href={`/debate/topics/${topic.id}`}
-      className="block bg-bg-surface border border-border rounded-xl p-4 hover:border-primary/30 transition-colors no-underline"
+      className="nemo-topic-card block no-underline"
     >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-1.5 flex-1 mr-2 min-w-0">
+      {/* Top row: status badge + category */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${config.bgColor} ${config.textColor}`}>
+            {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
+            {config.label}
+          </span>
           {topic.is_admin_topic && (
             <span title="관리자 주제" className="shrink-0">
               <Shield size={13} className="text-primary" />
@@ -72,108 +71,64 @@ export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
               <Lock size={11} className="text-yellow-400" />
             </span>
           )}
-          <h3 className="text-sm font-bold text-text truncate">{topic.title}</h3>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {currentUserId && topic.created_by === currentUserId && (
-            <div className="flex gap-1">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onEdit?.(topic);
-                }}
-                className="text-xs text-gray-400 hover:text-primary px-2 py-1"
-              >
-                수정
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onDelete?.(topic.id);
-                }}
-                className="text-xs text-gray-400 hover:text-red-400 px-2 py-1"
-              >
-                삭제
-              </button>
-            </div>
-          )}
-          <span
-            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
-              STATUS_STYLES[topic.status] || STATUS_STYLES.closed
-            }`}
-          >
-            {STATUS_LABELS[topic.status] || topic.status}
-          </span>
-        </div>
+        <span className="text-xs text-text-muted">{categoryLabel}</span>
       </div>
 
-      {topic.description && (
-        <p className="text-xs text-text-secondary mb-1 line-clamp-2">{topic.description}</p>
-      )}
+      {/* Title */}
+      <h3 className="text-sm font-bold text-text mb-3 leading-relaxed line-clamp-2">{topic.title}</h3>
 
-      {topic.creator_nickname && (
-        <span className="text-xs text-text-muted block mb-2">by {topic.creator_nickname}</span>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
-        <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-          {MODE_LABELS[topic.mode] || topic.mode}
-        </span>
-        {/* 툴 허용 여부 배지 */}
-        <span
-          title={topic.tools_enabled ? '툴 사용 허용' : '툴 사용 금지'}
-          className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded font-medium ${
-            topic.tools_enabled
-              ? 'bg-emerald-500/10 text-emerald-500'
-              : 'bg-red-500/10 text-red-400'
-          }`}
-        >
-          <Wrench size={10} />
-          {topic.tools_enabled ? '툴 허용' : '툴 금지'}
-        </span>
+      {/* Bottom row: stats */}
+      <div className="flex items-center gap-4 text-xs text-text-muted">
         <span className="flex items-center gap-1">
-          <Users size={12} />
-          대기 {topic.queue_count}명
-        </span>
-        <span className="flex items-center gap-1">
-          <MessageSquare size={12} />
-          매치 {topic.match_count}
+          <Users size={13} />
+          {topic.queue_count > 0 ? topic.queue_count.toLocaleString() : '0'}
         </span>
 
-        {/* 종료 카운트다운 */}
-        {countdown && (topic.status === 'open' || topic.status === 'in_progress') && (
-          <span className="flex items-center gap-1 text-orange-400 font-medium">
-            <CalendarClock size={12} />
+        {countdown && (
+          <span className="flex items-center gap-1">
+            <Clock size={13} />
             {countdown}
           </span>
         )}
 
-        {/* 예정 시작 시각 */}
-        {topic.status === 'scheduled' && topic.scheduled_start_at && (
-          <span className="flex items-center gap-1 text-blue-400">
-            <CalendarClock size={12} />
-            {formatScheduleTime(topic.scheduled_start_at)} 시작
+        {topic.scheduled_start_at && topic.status === 'scheduled' && (
+          <span className="flex items-center gap-1">
+            <CalendarClock size={13} />
+            {formatScheduleTime(topic.scheduled_start_at)}
           </span>
         )}
 
-        <span className="flex items-center gap-1 ml-auto">
-          <Clock size={12} />
-          {getTimeAgo(topic.created_at)}
-        </span>
+        {!countdown && !topic.scheduled_start_at && (
+          <span className="flex items-center gap-1">
+            <Clock size={13} />
+            {getTimeAgo(topic.created_at)}
+          </span>
+        )}
+
+        {growthPercent && (
+          <span className="flex items-center gap-1 ml-auto text-nemo font-medium">
+            <TrendingUp size={13} />
+            {growthPercent}
+          </span>
+        )}
       </div>
 
-      {/* 관리자 배지 */}
-      {topic.is_admin_topic && (
-        <div className="mt-2 pt-2 border-t border-border flex items-center gap-1 text-[10px] text-primary/70">
-          <Shield size={10} />
-          <span>플랫폼 공식 주제</span>
-          {topic.scheduled_end_at && topic.status !== 'closed' && (
-            <span className="ml-auto text-text-muted">
-              ~{formatScheduleTime(topic.scheduled_end_at)}
-            </span>
-          )}
+      {/* Owner actions */}
+      {currentUserId && topic.created_by === currentUserId && (
+        <div className="mt-3 pt-2 border-t border-border flex gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onEdit?.(topic); }}
+            className="text-xs text-text-muted hover:text-nemo bg-transparent border-none cursor-pointer px-2 py-1 rounded"
+          >
+            수정
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete?.(topic.id); }}
+            className="text-xs text-text-muted hover:text-red-400 bg-transparent border-none cursor-pointer px-2 py-1 rounded"
+          >
+            삭제
+          </button>
         </div>
       )}
     </Link>

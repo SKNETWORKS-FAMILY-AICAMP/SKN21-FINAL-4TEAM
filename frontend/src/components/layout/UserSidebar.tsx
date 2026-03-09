@@ -20,14 +20,17 @@ import {
   Images,
   Trophy,
   ShieldCheck,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useNotificationStore } from '@/stores/notificationStore';
+import { useThemeStore } from '@/stores/themeStore';
 import { CreditBadge } from '@/components/credits/CreditBadge';
 
-type MenuItem = { href: string; label: string; icon: typeof Home; flagKey?: string };
+type MenuItem = { href: string; label: string; icon: typeof MessageSquare; flagKey?: string };
 
 const PLATFORM_ITEMS: MenuItem[] = [
   { href: '/personas', label: '챗봇 탐색', icon: Home, flagKey: 'personas' },
@@ -88,7 +91,6 @@ function NavItem({
     </Link>
   );
 }
-
 export const UserSidebar = memo(function UserSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -96,6 +98,7 @@ export const UserSidebar = memo(function UserSidebar() {
   const { sidebarOpen, closeSidebar } = useUIStore();
   const { isEnabled } = useFeatureFlagStore();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const { theme, toggleTheme } = useThemeStore();
 
   // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
@@ -123,13 +126,6 @@ export const UserSidebar = memo(function UserSidebar() {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
-  const visiblePlatformItems = PLATFORM_ITEMS.filter(
-    (item) => !item.flagKey || isEnabled(item.flagKey),
-  );
-  const visibleAccountItems = ACCOUNT_ITEMS.filter(
-    (item) => !item.flagKey || isEnabled(item.flagKey),
-  );
-
   return (
     <>
       {/* 모바일 백드롭 */}
@@ -141,16 +137,16 @@ export const UserSidebar = memo(function UserSidebar() {
       )}
 
       <aside
-        className={`w-[220px] bg-bg-surface border-r border-border flex flex-col
+        className={`w-[180px] bg-bg-surface border-r border-border flex flex-col
           fixed top-0 left-0 h-full z-[80] transition-transform duration-250 ease-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           md:relative md:translate-x-0 md:z-auto md:min-h-screen`}
       >
         <div className="px-5 py-5 border-b border-border">
           <Link href="/personas" className="text-text no-underline text-base font-bold block">
-            AI 토론 플랫폼
+            Nemo
           </Link>
-          <span className="text-[11px] text-primary font-semibold uppercase tracking-wide">
+          <span className="text-[11px] text-nemo font-semibold uppercase tracking-wide">
             AI Debate
           </span>
           <div className="mt-2">
@@ -160,12 +156,12 @@ export const UserSidebar = memo(function UserSidebar() {
 
         <nav className="flex-1 flex flex-col py-1 overflow-y-auto">
           <GroupLabel label="플랫폼" />
-          {visiblePlatformItems.map((item) => (
+          {PLATFORM_ITEMS.map((item) => (
             <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
           ))}
 
           <GroupLabel label="내 계정" />
-          {visibleAccountItems.map((item) => (
+          {ACCOUNT_ITEMS.map((item) => (
             <NavItem
               key={item.href}
               item={item}
@@ -189,15 +185,20 @@ export const UserSidebar = memo(function UserSidebar() {
           </div>
         )}
 
-        <div className="px-5 py-4 border-t border-border">
+        {/* Theme Toggle + Logout */}
+        <div className="px-3 py-4 flex flex-col gap-2 border-t border-border">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm cursor-pointer border-none transition-all duration-200 bg-nemo/10 text-nemo hover:bg-nemo/20 w-full"
+          >
+            {theme === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+            <span className="font-medium">
+              {theme === 'light' ? '라이트 모드' : '다크 모드'}
+            </span>
+          </button>
           {user && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                  <User size={16} />
-                </div>
-                <span className="text-sm text-text truncate">{user.nickname}</span>
-              </div>
+            <div className="flex items-center justify-between px-2 pt-2 border-t border-border">
+              <span className="text-xs text-text-muted truncate">{user.nickname}</span>
               <button
                 onClick={handleLogout}
                 className="text-xs text-text-muted hover:text-danger bg-transparent border-none cursor-pointer"

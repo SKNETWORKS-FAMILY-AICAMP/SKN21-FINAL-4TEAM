@@ -6,15 +6,11 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#e91e63',
-          light: 'rgba(233,30,99,0.15)',
-          dark: '#c2185b',
+          DEFAULT: 'var(--color-primary)',
+          light: 'var(--color-primary-light)',
+          dark: 'var(--color-primary-dark)',
         },
         secondary: '#9c27b0',
-        dark: {
-          DEFAULT: '#121212',
-          surface: '#1e1e2e',
-        },
         success: '#4caf50',
         warning: '#ff9800',
         danger: {
@@ -23,23 +19,32 @@ const config: Config = {
           cost: '#ff7043',
         },
         text: {
-          DEFAULT: '#e0e0e0',
-          secondary: '#9e9e9e',
-          muted: '#616161',
-          label: '#bdbdbd',
+          DEFAULT: 'var(--color-text)',
+          secondary: 'var(--color-text-secondary)',
+          muted: 'var(--color-text-muted)',
+          label: 'var(--color-text-label)',
         },
         bg: {
-          DEFAULT: '#1a1a1a',
-          surface: '#262626',
-          hover: '#333333',
-          tag: '#333333',
-          input: '#1e1e1e',
-          muted: '#3a3a3a',
+          DEFAULT: 'var(--color-bg)',
+          surface: 'var(--color-bg-surface)',
+          hover: 'var(--color-bg-hover)',
+          tag: 'var(--color-bg-tag)',
+          input: 'var(--color-bg-input)',
         },
         border: {
-          DEFAULT: '#333333',
-          input: '#444444',
+          DEFAULT: 'var(--color-border)',
+          input: 'var(--color-border-input)',
           delete: '#5c2020',
+        },
+        nemo: {
+          DEFAULT: '#10B981',
+          dark: '#059669',
+          light: '#D1FAE5',
+          50: '#ECFDF5',
+          100: '#D1FAE5',
+          500: '#10B981',
+          600: '#059669',
+          700: '#047857',
         },
       },
       fontFamily: {
@@ -49,9 +54,10 @@ const config: Config = {
         badge: '10px',
       },
       boxShadow: {
-        card: '0 4px 20px rgba(0,0,0,0.4)',
-        bubble: '0 1px 4px rgba(0,0,0,0.3)',
-        glow: '0 0 15px rgba(233,30,99,0.3)',
+        card: '0 2px 12px rgba(0,0,0,0.08)',
+        'card-dark': '0 4px 20px rgba(0,0,0,0.4)',
+        bubble: '0 1px 4px rgba(0,0,0,0.1)',
+        glow: '0 0 15px rgba(16,185,129,0.3)',
       },
       keyframes: {
         'slide-in': {
