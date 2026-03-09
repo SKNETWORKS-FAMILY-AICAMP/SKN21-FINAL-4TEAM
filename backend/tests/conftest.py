@@ -81,6 +81,7 @@ async def test_user(db_session: AsyncSession):
 
     user = User(
         id=uuid.uuid4(),
+        login_id="testuser",
         nickname="testuser",
         password_hash=get_password_hash("testpass"),
         role="user",
@@ -100,6 +101,7 @@ async def test_admin(db_session: AsyncSession):
 
     admin = User(
         id=uuid.uuid4(),
+        login_id="testadmin",
         nickname="testadmin",
         password_hash=get_password_hash("adminpass"),
         role="admin",
@@ -120,6 +122,7 @@ async def test_superadmin(db_session: AsyncSession):
 
     superadmin = User(
         id=uuid.uuid4(),
+        login_id="testsuperadmin",
         nickname="testsuperadmin",
         password_hash=get_password_hash("superpass"),
         role="superadmin",
@@ -140,6 +143,7 @@ async def test_developer(db_session: AsyncSession):
 
     user = User(
         id=uuid.uuid4(),
+        login_id="testdev",
         nickname="testdev",
         password_hash=get_password_hash("devpass"),
         role="user",
@@ -239,6 +243,7 @@ async def test_adult_user(db_session: AsyncSession):
 
     user = User(
         id=uuid.uuid4(),
+        login_id="adultuser",
         nickname="adultuser",
         password_hash=get_password_hash("adultpass"),
         role="user",

@@ -82,6 +82,7 @@ async def test_join_queue_auto_match(
     # 두 번째 사용자 + 에이전트 생성
     dev2 = User(
         id=uuid.uuid4(),
+        login_id="testdev2",
         nickname="testdev2",
         password_hash=get_password_hash("devpass2"),
         role="user",

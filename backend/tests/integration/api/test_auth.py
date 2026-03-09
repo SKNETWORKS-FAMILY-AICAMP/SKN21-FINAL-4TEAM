@@ -16,6 +16,7 @@ async def test_user_2(db_session: AsyncSession):
 
     user = User(
         id=uuid.uuid4(),
+        login_id="testuser2",
         nickname="testuser2",
         password_hash=get_password_hash("testpass"),
         role="user",
@@ -35,6 +36,7 @@ async def test_user_3(db_session: AsyncSession):
 
     user = User(
         id=uuid.uuid4(),
+        login_id="testuser3",
         nickname="testuser3",
         password_hash=get_password_hash("testpass"),
         role="user",

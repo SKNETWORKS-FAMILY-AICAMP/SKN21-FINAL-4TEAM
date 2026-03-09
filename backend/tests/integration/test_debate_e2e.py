@@ -184,6 +184,7 @@ async def two_users(db_session: AsyncSession):
     """에이전트 owner로 쓸 두 사용자 생성."""
     user_a = User(
         id=uuid.uuid4(),
+        login_id="pro_debater",
         nickname="pro_debater",
         password_hash=get_password_hash("pass"),
         role="user",
@@ -191,6 +192,7 @@ async def two_users(db_session: AsyncSession):
     )
     user_b = User(
         id=uuid.uuid4(),
+        login_id="con_debater",
         nickname="con_debater",
         password_hash=get_password_hash("pass"),
         role="user",
