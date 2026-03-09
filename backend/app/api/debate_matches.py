@@ -171,7 +171,7 @@ async def stream_match(
         return StreamingResponse(_immediate(), media_type="text/event-stream", headers=sse_headers)
 
     return StreamingResponse(
-        subscribe(match_id),
+        subscribe(match_id, user_id=str(user.id)),
         media_type="text/event-stream",
         headers=sse_headers,
     )

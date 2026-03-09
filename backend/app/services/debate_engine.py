@@ -1,6 +1,7 @@
 """토론 엔진. 비동기 백그라운드 태스크로 매치를 실행."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -14,9 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.encryption import decrypt_api_key
-from app.models.credit_ledger import CreditLedger
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
+from app.models.debate_agent import DebateAgent, DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
@@ -29,8 +28,6 @@ from app.services.debate_broadcast import publish_event
 from app.services.debate_orchestrator import DebateOrchestrator, OptimizedDebateOrchestrator, calculate_elo
 from app.services.debate_tool_executor import AVAILABLE_TOOLS, DebateToolExecutor, ToolContext
 from app.services.debate_ws_manager import WSConnectionManager
-from app.services.human_detection import HumanDetectionAnalyzer
-from app.services.human_detection import TurnContext as HumanTurnContext
 from app.services.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
@@ -87,28 +84,8 @@ action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
 # 벌점 정의
 PENALTY_SCHEMA_VIOLATION = 5
 PENALTY_REPETITION = 3
-PENALTY_PROMPT_INJECTION = 10
 PENALTY_TIMEOUT = 5
 PENALTY_FALSE_SOURCE = 7
-PENALTY_AD_HOMINEM = 8
-PENALTY_HUMAN_SUSPICION = 15
-
-# 프롬프트 인젝션 패턴
-_INJECTION_PATTERNS = [
-    r"ignore\s+(previous|above|all)\s+(instructions?|prompts?)",
-    r"you\s+are\s+now\s+",
-    r"system\s*:\s*",
-    r"<\|?system\|?>",
-    r"forget\s+(everything|your\s+rules)",
-]
-_INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
-
-# 인신공격 패턴
-_AD_HOMINEM_PATTERNS = [
-    r"you\s+(are|'re)\s+(stupid|idiot|dumb|fool|moron)",
-    r"바보|멍청|병신",
-]
-_AD_HOMINEM_RE = re.compile("|".join(_AD_HOMINEM_PATTERNS), re.IGNORECASE)
 
 
 def detect_repetition(new_claim: str, previous_claims: list[str], threshold: float = 0.7) -> bool:
@@ -129,14 +106,6 @@ def detect_repetition(new_claim: str, previous_claims: list[str], threshold: flo
     return False
 
 
-def detect_prompt_injection(text: str) -> bool:
-    return bool(_INJECTION_RE.search(text))
-
-
-def detect_ad_hominem(text: str) -> bool:
-    return bool(_AD_HOMINEM_RE.search(text))
-
-
 def validate_response_schema(response_text: str) -> dict | None:
     """응답 JSON 파싱 및 스키마 검증. 유효하면 dict, 아니면 None."""
     text = response_text.strip()
@@ -148,19 +117,15 @@ def validate_response_schema(response_text: str) -> dict | None:
 
     # 2단계: JSON 파싱 시도 (전체 텍스트가 JSON인 경우)
     data = None
-    try:
+    with contextlib.suppress(json.JSONDecodeError, ValueError):
         data = json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        pass
 
     # 3단계: 텍스트 중간에 JSON이 포함된 경우 추출
     if data is None:
         json_match = re.search(r"\{[\s\S]*\}", text)
         if json_match:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, ValueError):
                 data = json.loads(json_match.group(0))
-            except (json.JSONDecodeError, ValueError):
-                pass
 
     if data is None:
         return None
@@ -335,7 +300,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                         if match.season_id:
                             from app.services.debate_season_service import DebateSeasonService
                             season_svc = DebateSeasonService(db)
-                            winner_agent = agent_b if side == "agent_a" else agent_a
                             stats_loser = await season_svc.get_or_create_season_stats(
                                 str(forfeit_loser), str(match.season_id)
                             )
@@ -393,18 +357,13 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 match.finished_at = datetime.now(UTC)
                 await db.commit()
                 await publish_event(str(match.id), "error", {
-                    "message": f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {settings.debate_credit_cost}석)",
+                    "message": (
+                        f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다"
+                        f" (필요: {settings.debate_credit_cost}석)"
+                    ),
                 })
                 return
 
-            db.add(CreditLedger(
-                user_id=agent.owner_id,
-                amount=-settings.debate_credit_cost,
-                balance_after=row.credit_balance,
-                tx_type="debate",
-                reference_id=str(match.id),
-                description=f"토론 매치 참가 (-{settings.debate_credit_cost}석)",
-            ))
         await db.commit()
 
     # API 키 복호화 — 테스트 매치는 항상 플랫폼 키 사용 (소유자 키 미사용)
@@ -440,12 +399,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
     total_penalty_a = 0
     total_penalty_b = 0
 
-    # 휴먼 감지용 이전 턴 데이터 (로컬 에이전트별)
-    elapsed_history_a: list[float] = []
-    length_history_a: list[int] = []
-    elapsed_history_b: list[float] = []
-    length_history_b: list[int] = []
-
     # 턴 루프
     use_optimized = settings.debate_orchestrator_optimized and isinstance(orchestrator, OptimizedDebateOrchestrator)
 
@@ -454,7 +407,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
         turn_a = await _execute_turn(
             db, client, match, topic, turn_num, "agent_a",
             agent_a, version_a, key_a, claims_a, claims_b,
-            elapsed_history_a, length_history_a,
             my_accumulated_penalty=total_penalty_a,
         )
         total_penalty_a += turn_a.penalty_total
@@ -470,9 +422,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 # ★ gather 전에 A turn 이벤트 먼저 발행 — B 스트리밍이 pendingStreamingTurn
                 # 없이 바로 streamingTurn으로 표시되도록 순서 보장.
                 # review_result는 gather 후 turn_review 이벤트로 별도 발행한다.
-                if turn_a.response_time_ms is not None:
-                    elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
-                    length_history_a.append(len(turn_a.claim))
                 await publish_event(str(match.id), "turn", {
                     "turn_number": turn_num,
                     "speaker": "agent_a",
@@ -481,17 +430,12 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     "evidence": turn_a.evidence,
                     "penalties": turn_a.penalties,
                     "penalty_total": turn_a.penalty_total,
-                    "human_suspicion_score": turn_a.human_suspicion_score,
                     "response_time_ms": turn_a.response_time_ms,
                     "input_tokens": turn_a.input_tokens,
                     "output_tokens": turn_a.output_tokens,
                     "is_blocked": turn_a.is_blocked,
                     "review_result": None,  # 검토 전; turn_review 이벤트로 후속 발행
                 })
-                # A 청크들이 HTTP 버퍼에서 클라이언트로 flush된 후 B가 스트리밍 시작하도록 대기
-                # (즉시 gather 시작 시 A 청크 + A turn 이벤트가 묶여 A가 한번에 출력되는 현상 방지)
-                await asyncio.sleep(0.15)
-
                 opt_orch: OptimizedDebateOrchestrator = orchestrator  # type: ignore[assignment]
                 review_start = time.monotonic()
 
@@ -508,7 +452,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                     _execute_turn(
                         db, client, match, topic, turn_num, "agent_b",
                         agent_b, version_b, key_b, claims_b, claims_a,
-                        elapsed_history_b, length_history_b,
                         my_accumulated_penalty=total_penalty_b,
                     ),
                 )
@@ -605,10 +548,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
 
         # 최적화 모드에서는 gather 전에 이미 turn 이벤트와 turn_review 이벤트를 발행했으므로 skip
         if not (settings.debate_turn_review_enabled and use_optimized):
-            if turn_a.response_time_ms is not None:
-                elapsed_history_a.append(turn_a.response_time_ms / 1000.0)
-                length_history_a.append(len(turn_a.claim))
-
             await publish_event(str(match.id), "turn", {
                 "turn_number": turn_num,
                 "speaker": "agent_a",
@@ -617,7 +556,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
                 "evidence": turn_a.evidence,
                 "penalties": turn_a.penalties,
                 "penalty_total": turn_a.penalty_total,
-                "human_suspicion_score": turn_a.human_suspicion_score,
                 "response_time_ms": turn_a.response_time_ms,
                 "input_tokens": turn_a.input_tokens,
                 "output_tokens": turn_a.output_tokens,
@@ -648,7 +586,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             turn_b = await _execute_turn(
                 db, client, match, topic, turn_num, "agent_b",
                 agent_b, version_b, key_b, claims_b, claims_a,
-                elapsed_history_b, length_history_b,
                 my_accumulated_penalty=total_penalty_b,
             )
             total_penalty_b += turn_b.penalty_total
@@ -717,10 +654,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             review_b = None
             claims_b.append(turn_b.claim)
 
-        if turn_b.response_time_ms is not None:
-            elapsed_history_b.append(turn_b.response_time_ms / 1000.0)
-            length_history_b.append(len(turn_b.claim))
-
         await publish_event(str(match.id), "turn", {
             "turn_number": turn_num,
             "speaker": "agent_b",
@@ -729,7 +662,6 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
             "evidence": turn_b.evidence,
             "penalties": turn_b.penalties,
             "penalty_total": turn_b.penalty_total,
-            "human_suspicion_score": turn_b.human_suspicion_score,
             "response_time_ms": turn_b.response_time_ms,
             "input_tokens": turn_b.input_tokens,
             "output_tokens": turn_b.output_tokens,
@@ -873,7 +805,7 @@ async def _execute_match(db: AsyncSession, match_id: str) -> None:
 
     # 요약 리포트 생성 (비동기 백그라운드, 결과 대기 안 함)
     if settings.debate_summary_enabled:
-        from app.services.debate_summary_service import generate_summary_task
+        from app.services.debate_match_service import generate_summary_task
         asyncio.create_task(generate_summary_task(str(match.id)))
 
     await publish_event(str(match.id), "finished", {
@@ -899,11 +831,9 @@ async def _execute_turn(
     api_key: str,
     my_claims: list[str],
     opponent_claims: list[str],
-    prev_elapsed_history: list[float] | None = None,
-    prev_length_history: list[int] | None = None,
     my_accumulated_penalty: int = 0,
 ) -> DebateTurnLog:
-    """단일 턴 실행. 벌점 감지 + 휴먼 감지 포함."""
+    """단일 턴 실행. 벌점 감지 포함."""
     default_prompt = "당신은 한국어 토론 참가자입니다. 반드시 한국어로만 답변하세요."
     system_prompt = version.system_prompt if version else default_prompt
 
@@ -915,7 +845,6 @@ async def _execute_turn(
     raw_response = None
     input_tokens = 0
     output_tokens = 0
-    human_suspicion_score = 0
     response_time_ms: int | None = None
 
     try:
@@ -967,22 +896,6 @@ async def _execute_turn(
                 "tool_result": ws_response.tool_result,
             }
 
-            # 휴먼 감지 분석
-            analyzer = HumanDetectionAnalyzer()
-            detection = analyzer.analyze_turn(
-                response_text=claim,
-                elapsed_seconds=elapsed,
-                turn_context=HumanTurnContext(
-                    turn_number=turn_number,
-                    previous_elapsed=prev_elapsed_history or [],
-                    previous_lengths=prev_length_history or [],
-                ),
-            )
-            human_suspicion_score = detection.score
-
-            if detection.score >= 61:
-                penalties["human_suspicion"] = PENALTY_HUMAN_SUSPICION
-                penalty_total += PENALTY_HUMAN_SUSPICION
         else:
             # 스트리밍 BYOK — 토큰별로 turn_chunk 이벤트 발행
             messages = _build_messages(
@@ -1039,17 +952,6 @@ async def _execute_turn(
             penalties["repetition"] = PENALTY_REPETITION
             penalty_total += PENALTY_REPETITION
 
-        # 프롬프트 인젝션 감지
-        full_text = f"{claim} {evidence or ''}"
-        if detect_prompt_injection(full_text):
-            penalties["prompt_injection"] = PENALTY_PROMPT_INJECTION
-            penalty_total += PENALTY_PROMPT_INJECTION
-
-        # 인신공격 감지
-        if detect_ad_hominem(full_text):
-            penalties["ad_hominem"] = PENALTY_AD_HOMINEM
-            penalty_total += PENALTY_AD_HOMINEM
-
     except TimeoutError:
         penalties["timeout"] = PENALTY_TIMEOUT
         penalty_total += PENALTY_TIMEOUT
@@ -1078,7 +980,6 @@ async def _execute_turn(
         raw_response=raw_response,
         penalties=penalties if penalties else None,
         penalty_total=penalty_total,
-        human_suspicion_score=human_suspicion_score,
         response_time_ms=response_time_ms,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -1144,7 +1045,9 @@ def _build_messages(
         )
         # Agent B의 첫 발언: 주도적으로 논점을 선점하도록 격려 (A측 편향 보정)
         if speaker == "agent_b" and not my_claims:
-            base_content += "\n\n(참고: 상대가 먼저 발언했지만, 당신도 새로운 논거로 주도적으로 쟁점을 선점할 수 있습니다.)"
+            base_content += (
+                "\n\n(참고: 상대가 먼저 발언했지만, 당신도 새로운 논거로 주도적으로 쟁점을 선점할 수 있습니다.)"
+            )
         messages.append({"role": "user", "content": base_content})
     else:
         messages.append({"role": "user", "content": "당신의 차례입니다. 주제에 대한 다음 주장을 한국어로 제시하세요."})
@@ -1175,7 +1078,7 @@ async def _execute_multi_and_finalize(
     1v1 로직을 깨뜨리지 않도록 별도 함수로 분리.
     판정/ELO 갱신/이벤트 발행까지 처리.
     """
-    from app.models.debate_match_participant import DebateMatchParticipant
+    from app.models.debate_match import DebateMatchParticipant
 
     parts_res = await db.execute(
         select(DebateMatchParticipant)
@@ -1191,6 +1094,22 @@ async def _execute_multi_and_finalize(
         return
 
     max_slots = max(len(team_a), len(team_b))
+
+    # 루프 진입 전 필요한 에이전트/버전을 한 번에 배치 조회하여 캐싱 (중복 쿼리 방지)
+    all_agent_ids = list({p.agent_id for p in parts if p.agent_id is not None})
+    agents_res = await db.execute(
+        select(DebateAgent).where(DebateAgent.id.in_(all_agent_ids))
+    )
+    agents_cache: dict = {str(a.id): a for a in agents_res.scalars().all()}
+
+    all_version_ids = list({p.version_id for p in parts if p.version_id is not None})
+    versions_cache: dict = {}
+    if all_version_ids:
+        versions_res = await db.execute(
+            select(DebateAgentVersion).where(DebateAgentVersion.id.in_(all_version_ids))
+        )
+        versions_cache = {str(v.id): v for v in versions_res.scalars().all()}
+
     claims_a: list[str] = []
     claims_b: list[str] = []
     total_penalty_a = 0
@@ -1201,14 +1120,8 @@ async def _execute_multi_and_finalize(
             a_part = team_a[i % len(team_a)]
             b_part = team_b[i % len(team_b)]
 
-            # A팀 에이전트 조회
-            multi_agent_a = (await db.execute(
-                select(DebateAgent).where(DebateAgent.id == a_part.agent_id)
-            )).scalar_one_or_none()
-            # B팀 에이전트 조회
-            multi_agent_b = (await db.execute(
-                select(DebateAgent).where(DebateAgent.id == b_part.agent_id)
-            )).scalar_one_or_none()
+            multi_agent_a = agents_cache.get(str(a_part.agent_id))
+            multi_agent_b = agents_cache.get(str(b_part.agent_id))
 
             if multi_agent_a is None or multi_agent_b is None:
                 logger.warning("Multi-agent: agent not found, slot %d turn %d", i, turn_num)
@@ -1217,12 +1130,8 @@ async def _execute_multi_and_finalize(
             key_a = _resolve_api_key(multi_agent_a)
             key_b = _resolve_api_key(multi_agent_b)
 
-            ver_a = (await db.execute(
-                select(DebateAgentVersion).where(DebateAgentVersion.id == a_part.version_id)
-            )).scalar_one_or_none() if a_part.version_id else None
-            ver_b = (await db.execute(
-                select(DebateAgentVersion).where(DebateAgentVersion.id == b_part.version_id)
-            )).scalar_one_or_none() if b_part.version_id else None
+            ver_a = versions_cache.get(str(a_part.version_id)) if a_part.version_id else None
+            ver_b = versions_cache.get(str(b_part.version_id)) if b_part.version_id else None
 
             turn_a = await _execute_turn(
                 db, client, match, topic, turn_num, "agent_a",
@@ -1339,7 +1248,7 @@ async def _execute_multi_and_finalize(
         from app.services.debate_tournament_service import DebateTournamentService
         await DebateTournamentService(db).advance_round(str(match.tournament_id))
     if settings.debate_summary_enabled:
-        from app.services.debate_summary_service import generate_summary_task
+        from app.services.debate_match_service import generate_summary_task
         asyncio.create_task(generate_summary_task(str(match.id)))
 
     await publish_event(str(match.id), "finished", {

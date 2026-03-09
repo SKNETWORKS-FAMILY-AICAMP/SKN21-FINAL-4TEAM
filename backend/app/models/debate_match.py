@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -94,4 +104,97 @@ class DebateMatch(Base):
             "match_type IN ('ranked', 'promotion', 'demotion')",
             name="ck_debate_matches_match_type",
         ),
+    )
+
+
+# --- DebateMatchParticipant ---
+
+class DebateMatchParticipant(Base):
+    __tablename__ = "debate_match_participants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_matches.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_agent_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    team: Mapped[str] = mapped_column(String(1), nullable=False)
+    slot: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    agent = relationship("DebateAgent", foreign_keys=[agent_id])
+    version = relationship("DebateAgentVersion", foreign_keys=[version_id])
+
+    __table_args__ = (
+        CheckConstraint("team IN ('A', 'B')", name="ck_debate_match_participants_team"),
+    )
+
+
+# --- DebateMatchPrediction ---
+
+class DebateMatchPrediction(Base):
+    __tablename__ = "debate_match_predictions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_matches.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    prediction: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "prediction IN ('a_win', 'b_win', 'draw')",
+            name="ck_debate_match_predictions_prediction",
+        ),
+    )
+
+
+# --- DebateMatchQueue ---
+
+class DebateMatchQueue(Base):
+    __tablename__ = "debate_match_queue"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    topic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_topics.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_ready: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    # Relationships
+    topic = relationship("DebateTopic", back_populates="queue_entries")
+    agent = relationship("DebateAgent", foreign_keys=[agent_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("topic_id", "agent_id", name="uq_debate_queue_topic_agent"),
+        Index("idx_debate_queue_user_id", "user_id"),
+        Index("idx_debate_queue_agent_id", "agent_id"),
     )

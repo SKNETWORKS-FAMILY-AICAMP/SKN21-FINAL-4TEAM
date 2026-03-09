@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
-from app.models.debate_tournament import DebateTournament
-from app.models.debate_tournament_entry import DebateTournamentEntry
+from app.models.debate_tournament import DebateTournament, DebateTournamentEntry
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -37,8 +36,11 @@ class DebateTournamentService:
     async def join_tournament(
         self, tournament_id: str, agent_id: str, user: User
     ) -> DebateTournamentEntry:
+        # 토너먼트 행 잠금 — 동시 참가 요청 시 bracket_size 초과 방지
         res = await self.db.execute(
-            select(DebateTournament).where(DebateTournament.id == tournament_id)
+            select(DebateTournament)
+            .where(DebateTournament.id == tournament_id)
+            .with_for_update()
         )
         t = res.scalar_one_or_none()
         if t is None:
@@ -46,7 +48,7 @@ class DebateTournamentService:
         if t.status != "registration":
             raise ValueError("참가 신청 기간이 아닙니다")
 
-        # 현재 참가자 수 조회
+        # 잠금 후 현재 참가자 수 재확인
         count_res = await self.db.execute(
             select(func.count(DebateTournamentEntry.id))
             .where(DebateTournamentEntry.tournament_id == tournament_id)

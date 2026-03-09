@@ -6,10 +6,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_season_stats import DebateAgentSeasonStats
-from app.models.debate_season import DebateSeason
-from app.models.debate_season_result import DebateSeasonResult
+from app.models.debate_agent import DebateAgent, DebateAgentSeasonStats
+from app.models.debate_season import DebateSeason, DebateSeasonResult
+from app.models.user import User
 from app.services.debate_agent_service import get_tier_from_elo
 
 logger = logging.getLogger(__name__)
@@ -126,7 +125,6 @@ class DebateSeasonService:
 
     async def close_season(self, season_id: str) -> None:
         """시즌 종료: results INSERT → 보상 → ELO soft reset → tier 재계산."""
-        from app.models.credit_ledger import CreditLedger
 
         res = await self.db.execute(select(DebateSeason).where(DebateSeason.id == season_id))
         season = res.scalar_one_or_none()
@@ -163,17 +161,14 @@ class DebateSeasonService:
             )
             self.db.add(result)
 
-            # 크레딧 보상 (debug 에만 지급 — tx_type은 'admin_grant' 사용)
+            # 보상 크레딧 실제 지급 — 에이전트 소유자 credit_balance에 직접 반영
             if reward > 0:
-                ledger = CreditLedger(
-                    user_id=agent.owner_id,
-                    amount=reward,
-                    balance_after=0,  # 실제 잔액 계산 생략 (간단 구현)
-                    tx_type="admin_grant",
-                    reference_id=str(season.id),
-                    description=f"시즌 {season.season_number} {rank}위 보상",
+                user_res = await self.db.execute(
+                    select(User).where(User.id == agent.owner_id)
                 )
-                self.db.add(ledger)
+                owner = user_res.scalar_one_or_none()
+                if owner is not None:
+                    owner.credit_balance += reward
 
             # 누적 ELO soft reset: (누적 elo + 1500) // 2
             new_elo = (agent.elo_rating + 1500) // 2

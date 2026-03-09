@@ -12,15 +12,17 @@ from app.models.user import User
 from app.schemas.debate_agent import (
     AgentCreate,
     AgentPublicResponse,
+    AgentRankingListResponse,
     AgentResponse,
     AgentTemplateResponse,
     AgentUpdate,
     AgentVersionResponse,
     CloneRequest,
+    GalleryListResponse,
+    HeadToHeadListResponse,
     PromotionSeriesResponse,
 )
-from app.services.debate_agent_service import DebateAgentService
-from app.services.debate_template_service import DebateTemplateService
+from app.services.debate_agent_service import DebateAgentService, DebateTemplateService
 from app.services.debate_ws_manager import WSConnectionManager
 
 router = APIRouter()
@@ -130,7 +132,7 @@ async def test_agent_connection(
             timeout=15.0,
         )
         return {"ok": True, "model_response": result["content"]}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"ok": False, "error_type": "other", "error": "응답 시간이 초과되었습니다 (15초)"}
     except httpx.HTTPStatusError as exc:
         error_type, error_msg = _classify_provider_error(exc)
@@ -167,7 +169,7 @@ async def get_my_agents(
     return [_agent_response(a) for a in agents]
 
 
-@router.get("/ranking")
+@router.get("/ranking", response_model=AgentRankingListResponse)
 async def get_ranking(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -179,9 +181,10 @@ async def get_ranking(
 ):
     """ELO 글로벌 랭킹 조회. season_id 지정 시 시즌 랭킹 반환."""
     service = DebateAgentService(db)
-    return await service.get_ranking(
+    items, total = await service.get_ranking(
         limit=limit, offset=offset, search=search, tier=tier, season_id=season_id
     )
+    return {"items": items, "total": total}
 
 
 @router.get("/ranking/my")
@@ -194,7 +197,7 @@ async def get_my_ranking(
     return await service.get_my_ranking(user)
 
 
-@router.get("/gallery")
+@router.get("/gallery", response_model=GalleryListResponse)
 async def get_agent_gallery(
     sort: str = Query("elo", pattern="^(elo|wins|recent)$"),
     skip: int = Query(0, ge=0),
@@ -264,7 +267,7 @@ async def get_season_results(
     return {"items": items}
 
 
-@router.get("/{agent_id}/head-to-head")
+@router.get("/{agent_id}/head-to-head", response_model=HeadToHeadListResponse)
 async def get_head_to_head(
     agent_id: str,
     limit: int = Query(5, ge=1, le=20),
@@ -273,7 +276,10 @@ async def get_head_to_head(
 ):
     """에이전트 간 상대 전적 (H2H) 조회."""
     service = DebateAgentService(db)
-    items = await service.get_head_to_head(agent_id, limit=limit)
+    try:
+        items = await service.get_head_to_head(agent_id, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return {"items": items}
 
 
@@ -312,6 +318,8 @@ async def update_agent(
     service = DebateAgentService(db)
     try:
         agent = await service.update_agent(agent_id, data, user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         detail = str(exc)
         if "not found" in detail.lower():

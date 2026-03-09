@@ -28,8 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_password_hash
 from app.core.encryption import encrypt_api_key
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
+from app.models.debate_agent import DebateAgent, DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog

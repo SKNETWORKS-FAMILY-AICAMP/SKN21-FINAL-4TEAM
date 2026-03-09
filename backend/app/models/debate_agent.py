@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,7 +59,10 @@ class DebateAgent(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # Relationships
@@ -75,4 +78,66 @@ class DebateAgent(Base):
             "provider IN ('openai', 'anthropic', 'google', 'runpod', 'local')",
             name="ck_debate_agents_provider",
         ),
+    )
+
+
+# --- DebateAgentVersion ---
+
+class DebateAgentVersion(Base):
+    __tablename__ = "debate_agent_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_tag: Mapped[str | None] = mapped_column(String(50))
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    parameters: Mapped[dict | None] = mapped_column(JSONB)
+    wins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    # Relationships
+    agent = relationship("DebateAgent", back_populates="versions")
+
+
+# --- DebateAgentSeasonStats ---
+
+class DebateAgentSeasonStats(Base):
+    __tablename__ = "debate_agent_season_stats"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    season_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debate_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    # 시즌 ELO: 매 시즌 1500으로 초기화
+    elo_rating: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1500")
+    tier: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Iron")
+    wins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()"), onupdate=text("now()")
+    )
+
+    agent = relationship("DebateAgent")
+    season = relationship("DebateSeason")
+
+    __table_args__ = (
+        # 에이전트당 시즌당 1행
+        UniqueConstraint("agent_id", "season_id", name="uq_season_stats_agent_season"),
     )

@@ -91,9 +91,15 @@ async def test_list_featured_empty():
     """하이라이트 매치가 없으면 빈 리스트."""
     db = AsyncMock()
 
-    result_mock = MagicMock()
-    result_mock.all.return_value = []
-    db.execute = AsyncMock(return_value=result_mock)
+    # 첫 번째 execute: COUNT 쿼리 → total=0
+    count_mock = MagicMock()
+    count_mock.scalar.return_value = 0
+
+    # 두 번째 execute: 데이터 쿼리 → 빈 리스트
+    rows_mock = MagicMock()
+    rows_mock.all.return_value = []
+
+    db.execute = AsyncMock(side_effect=[count_mock, rows_mock])
 
     from app.services.debate_match_service import DebateMatchService
 

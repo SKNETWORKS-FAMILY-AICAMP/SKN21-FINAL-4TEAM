@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,8 +14,8 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token: Optional[str] = Cookie(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    access_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """JWT에서 현재 사용자를 추출한다. Authorization 헤더 또는 쿠키를 지원. 블랙리스트 토큰은 거부."""
@@ -53,13 +52,12 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     # 밴 상태 확인
-    if user.banned_until is not None:
-        if user.banned_until > datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Account banned until {user.banned_until.isoformat()}",
-                headers={"X-Error-Code": "USER_BANNED"},
-            )
+    if user.banned_until is not None and user.banned_until > datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account banned until {user.banned_until.isoformat()}",
+            headers={"X-Error-Code": "USER_BANNED"},
+        )
 
     return user
 

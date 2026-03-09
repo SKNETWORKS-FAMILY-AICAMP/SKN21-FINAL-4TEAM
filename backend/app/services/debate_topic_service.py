@@ -6,20 +6,19 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_password_hash
-from app.models.debate_match import DebateMatch
-from app.models.debate_match_queue import DebateMatchQueue
+from app.core.redis import get_redis
+from app.models.debate_match import DebateMatch, DebateMatchQueue
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
 from app.schemas.debate_topic import TopicCreate, TopicUpdate, TopicUpdatePayload
 
 logger = logging.getLogger(__name__)
 
+_TOPIC_SYNC_REDIS_KEY = "debate:topic_sync:last_at"
+_TOPIC_SYNC_INTERVAL_SECS = 60
+
 
 class DebateTopicService:
-    # 스케줄 상태 동기화 속도 제한 — 60초 이내 재호출 시 스킵
-    _last_sync_at: datetime | None = None
-    _SYNC_INTERVAL_SECS: int = 60
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -42,7 +41,8 @@ class DebateTopicService:
             today_count = count_result.scalar() or 0
             if today_count >= settings.debate_daily_topic_limit:
                 raise ValueError(
-                    f"일일 토론 주제 등록 한도({settings.debate_daily_topic_limit}개)에 도달했습니다. 내일 다시 시도하세요."
+                    f"일일 토론 주제 등록 한도({settings.debate_daily_topic_limit}개)에 도달했습니다."
+                    " 내일 다시 시도하세요."
                 )
 
         # 시작 시각이 미래이면 scheduled, 아니면 open
@@ -89,7 +89,7 @@ class DebateTopicService:
     ) -> tuple[list[dict], int]:
         """토픽 목록 조회. 집계 서브쿼리로 N+1 방지.
 
-        sort: 'recent' (최신순) | 'popular_week' (이번 주 매치 수) | 'queue' (대기 많은 순) | 'matches' (전체 매치 많은 순)
+        sort: 'recent'(최신순) | 'popular_week'(이번 주 매치 수) | 'queue'(대기 많은 순) | 'matches'(전체 매치 많은 순)
         """
         await self._sync_scheduled_topics()
 
@@ -225,7 +225,7 @@ class DebateTopicService:
         if topic is None:
             raise ValueError("Topic not found")
 
-        match_count = await self._count_matches(topic.id)
+        match_count = await self.count_matches(topic.id)
         if match_count > 0:
             raise ValueError(
                 f"진행된 매치가 {match_count}개 있어 삭제할 수 없습니다. "
@@ -266,13 +266,21 @@ class DebateTopicService:
         await self.db.commit()
 
     async def _sync_scheduled_topics(self) -> None:
-        """scheduled_start_at/end_at 기준으로 status 자동 갱신. 60초 이내 재호출 시 스킵."""
-        now = datetime.now(UTC)
-        last = DebateTopicService._last_sync_at
-        if last is not None and (now - last).total_seconds() < DebateTopicService._SYNC_INTERVAL_SECS:
-            return
+        """scheduled_start_at/end_at 기준으로 status 자동 갱신.
 
-        DebateTopicService._last_sync_at = now
+        Redis SET NX EX 패턴으로 멀티 워커 환경에서도 60초 이내 재실행 방지.
+        Redis 장애 시에는 매번 실행(폴백).
+        """
+        try:
+            r = await get_redis()
+            # SET NX EX: 키가 없을 때만 설정 → 이미 있으면 다른 워커가 처리 중
+            acquired = await r.set(_TOPIC_SYNC_REDIS_KEY, "1", nx=True, ex=_TOPIC_SYNC_INTERVAL_SECS)
+            if not acquired:
+                return
+        except Exception:
+            logger.debug("Redis unavailable for topic sync throttle, proceeding without lock")
+
+        now = datetime.now(UTC)
 
         # scheduled → open (시작 시각 도달)
         await self.db.execute(
@@ -297,13 +305,13 @@ class DebateTopicService:
 
         await self.db.commit()
 
-    async def _count_queue(self, topic_id) -> int:
+    async def count_queue(self, topic_id) -> int:
         result = await self.db.execute(
             select(func.count(DebateMatchQueue.id)).where(DebateMatchQueue.topic_id == topic_id)
         )
         return result.scalar() or 0
 
-    async def _count_matches(self, topic_id) -> int:
+    async def count_matches(self, topic_id) -> int:
         result = await self.db.execute(
             select(func.count(DebateMatch.id)).where(
                 DebateMatch.topic_id == topic_id,

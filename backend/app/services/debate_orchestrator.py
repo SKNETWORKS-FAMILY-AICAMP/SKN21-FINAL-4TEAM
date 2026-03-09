@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 PENALTY_KO_LABELS: dict[str, str] = {
     "schema_violation": "JSON 형식 위반",
     "repetition": "주장 반복",
-    "prompt_injection": "프롬프트 인젝션",
-    "ad_hominem": "인신공격",
     "off_topic": "주제 이탈",
     "false_claim": "허위 주장",
     "llm_prompt_injection": "프롬프트 인젝션(LLM)",
@@ -91,40 +89,6 @@ REVIEW_SYSTEM_PROMPT = (
 )
 
 
-# 패스트패스 스킵 기준: 한국어 텍스트 내 복잡도 임계값
-_FAST_PATH_MIN_LEN = 10   # 최소 길이 미달 → 비어있거나 회피성 답변
-_FAST_PATH_MAX_LEN = 800  # 초장문 발언은 허위 주장 리스크 있어 검토 필요
-
-
-def _should_skip_review(claim: str, evidence: str | None) -> bool:
-    """정규식 위반 없는 짧은 한국어 발언은 LLM 검토를 스킵해 비용·지연 절약.
-
-    True 반환 → LLM 검토 스킵 (빠른 경로)
-    False 반환 → LLM 검토 실행 (정밀 경로)
-    """
-    from app.services.debate_engine import detect_ad_hominem, detect_prompt_injection
-
-    text = f"{claim} {evidence or ''}"
-    # 기존 regex 패턴이 이미 위반 감지 → LLM도 검토
-    if detect_prompt_injection(text):
-        return False
-    if detect_ad_hominem(text):
-        return False
-    # 비어있거나 너무 짧은 발언 (에러/타임아웃 응답)
-    if len(claim.strip()) < _FAST_PATH_MIN_LEN:
-        return False
-    # 초장문 발언 — 허위 주장 삽입 리스크
-    if len(claim) > _FAST_PATH_MAX_LEN:
-        return False
-    # 영어 키워드가 많으면 프롬프트 인젝션 가능성 (한국어 토론에서 영어 비율 높음)
-    words = text.split()
-    if words:
-        ascii_ratio = sum(1 for w in words if w.isascii() and len(w) > 3) / len(words)
-        if ascii_ratio > 0.4:
-            return False
-    return True
-
-
 class DebateOrchestrator:
     def __init__(self):
         self.client = InferenceClient()
@@ -170,7 +134,7 @@ class DebateOrchestrator:
         review: dict,
         input_tokens: int,
         output_tokens: int,
-        skipped: bool = False,
+        skipped: bool | None = None,
     ) -> dict:
         """파싱된 review dict를 최종 결과 dict로 변환."""
         penalties: dict[str, int] = {}
@@ -193,7 +157,7 @@ class DebateOrchestrator:
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
         }
-        # OptimizedDebateOrchestrator의 review_turn_fast는 skipped 플래그를 포함
+        # skipped 플래그는 명시적으로 전달된 경우에만 포함
         if skipped is not None:
             result["skipped"] = skipped
         return result
@@ -239,7 +203,7 @@ class DebateOrchestrator:
                 api_key=settings.openai_api_key,
                 messages=messages,
             )
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             logger.warning("review_turn timeout for turn %d speaker=%s", turn_number, speaker)
             return self._review_fallback()
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
@@ -419,11 +383,10 @@ class DebateOrchestrator:
 
 
 class OptimizedDebateOrchestrator(DebateOrchestrator):
-    """Phase 1-3 최적화 오케스트레이터.
+    """Phase 1-2 최적화 오케스트레이터.
 
     Phase 1: 경량 review 모델(gpt-4o-mini)과 중량 judge 모델(gpt-4o) 분리
     Phase 2: A검토 + B실행을 asyncio.gather()로 병렬 수행
-    Phase 3: 정규식 무위반 한국어 발언은 LLM 검토 스킵 (패스트패스)
     """
 
     async def review_turn_fast(
@@ -436,15 +399,11 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
         action: str,
         opponent_last_claim: str | None = None,
     ) -> dict:
-        """Phase 1+3 통합 검토.
+        """Phase 1 통합 검토.
 
-        - Phase 3 패스트패스: 정규식 무위반 발언은 LLM 호출 없이 즉시 폴백 반환
-        - Phase 1 모델 분리: 검토는 debate_review_model (gpt-4o-mini) 사용
+        모든 발언에 대해 항상 LLM 검토를 실행한다.
+        Phase 1 모델 분리: 검토는 debate_review_model (gpt-5-nano) 사용.
         """
-        # Phase 3: 패스트패스 스킵
-        if settings.debate_review_fast_path and _should_skip_review(claim, evidence):
-            return self._fast_path_result(claim)
-
         # Phase 1: 경량 검토 모델로 검토 실행
         review_model = settings.debate_review_model or settings.debate_orchestrator_model
         user_content = (
@@ -472,7 +431,7 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
                 api_key=settings.openai_api_key,
                 messages=messages,
             )
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             logger.warning("review_turn_fast timeout for turn %d speaker=%s", turn_number, speaker)
             return self._review_fallback()
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
@@ -483,21 +442,6 @@ class OptimizedDebateOrchestrator(DebateOrchestrator):
             return self._review_fallback()
 
         return self._build_review_result(review, input_tokens, output_tokens, skipped=False)
-
-    def _fast_path_result(self, claim: str) -> dict:
-        """패스트패스: LLM 호출 없이 안전한 발언으로 즉시 통과."""
-        return {
-            "logic_score": None,  # LLM 평가 없음 — UI에서 점수 미표시
-            "violations": [],
-            "feedback": "",
-            "block": False,
-            "penalties": {},
-            "penalty_total": 0,
-            "blocked_claim": None,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "skipped": True,   # 벤치마크 추적용 플래그
-        }
 
     async def judge(
         self,
@@ -531,23 +475,23 @@ def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0
       - 강자를 이기면 많이 획득, 약자에게 지면 많이 잃음
       - 압도적 승리(score_diff 큼)일수록 최대 max_mult배 변동
     """
-    K = settings.debate_elo_k_factor
+    k = settings.debate_elo_k_factor
     scale = settings.debate_elo_score_diff_scale
     weight = settings.debate_elo_score_diff_weight
     max_mult = settings.debate_elo_score_mult_max
 
     # 기대 승률 (로지스틱 ELO 공식)
-    E_a = 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
+    e_a = 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
 
     if result == "a_win":
-        S_a = 1.0
+        s_a = 1.0
     elif result == "b_win":
-        S_a = 0.0
+        s_a = 0.0
     else:  # draw
-        S_a = 0.5
+        s_a = 0.5
 
     # 기본 ELO 변동
-    base_delta = K * (S_a - E_a)
+    base_delta = k * (s_a - e_a)
 
     # 점수차 배수 (1.0 이상, max_mult 이하)
     mult = 1.0 + (min(abs(score_diff), scale) / scale) * weight

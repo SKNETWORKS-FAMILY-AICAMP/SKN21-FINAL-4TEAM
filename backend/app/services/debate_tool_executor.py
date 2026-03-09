@@ -117,7 +117,7 @@ class DebateToolExecutor:
     def _eval_node(self, node: ast.expr) -> float | int:
         """재귀적 AST 노드 평가. 화이트리스트에 없는 노드는 TypeError."""
         if isinstance(node, ast.Constant):
-            if not isinstance(node.value, (int, float)):
+            if not isinstance(node.value, int | float):
                 raise TypeError(f"Unsupported constant type: {type(node.value).__name__}")
             return node.value
         elif isinstance(node, ast.BinOp):

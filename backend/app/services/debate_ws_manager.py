@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 from uuid import UUID
 
@@ -217,10 +218,8 @@ class WSConnectionManager:
         ws = self._connections.get(agent_id)
         if ws is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             await ws.send_json({"type": "error", "message": message, "code": code})
-        except Exception:
-            pass
 
     async def send_ping(self, agent_id: UUID) -> None:
         ws = self._connections.get(agent_id)
@@ -259,7 +258,7 @@ class WSConnectionManager:
         """Redis pub/sub 리스너 시작. 다른 인스턴스에서 온 메시지를 로컬 에이전트에 전달."""
         if self._pubsub_task is not None:
             return
-        self._pubsub_task = asyncio.create_task(self._pubsub_loop())
+        self._pubsub_task = asyncio.create_task(self._pubsub_loop_with_restart())
         logger.info("Started Redis pub/sub listener for agent messages")
 
     async def stop_pubsub_listener(self) -> None:
@@ -268,6 +267,27 @@ class WSConnectionManager:
             self._pubsub_task.cancel()
             self._pubsub_task = None
             logger.info("Stopped Redis pub/sub listener")
+
+    async def _pubsub_loop_with_restart(self) -> None:
+        """pub/sub 루프 — 예외로 종료 시 지수 백오프로 자동 재시작."""
+        retry_delay = 1.0
+        while True:
+            try:
+                await self._pubsub_loop()
+                # 정상 종료 (CancelledError 이외의 return)
+                break
+            except asyncio.CancelledError:
+                # 앱 종료 신호 — 재시작하지 않음
+                break
+            except Exception as exc:
+                logger.warning(
+                    "pub/sub loop crashed, restarting in %.1fs: %s",
+                    retry_delay,
+                    exc,
+                )
+                await asyncio.sleep(retry_delay)
+                # 지수 백오프, 최대 60초
+                retry_delay = min(retry_delay * 2, 60.0)
 
     async def _pubsub_loop(self) -> None:
         """Redis pub/sub 수신 루프."""
@@ -302,15 +322,16 @@ class WSConnectionManager:
                 except Exception as exc:
                     logger.debug("pub/sub message handling error: %s", exc)
         except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            logger.warning("pub/sub listener error: %s", exc)
+            raise
+        except Exception:
+            raise
 
     async def _publish_to_agent(self, agent_id: UUID, payload: dict) -> None:
         """Redis pub/sub로 다른 인스턴스의 에이전트에 메시지 전달."""
         try:
-            from app.core.redis import redis_client
             import json
+
+            from app.core.redis import redis_client
 
             message = json.dumps({
                 "target_agent_id": str(agent_id),
@@ -320,12 +341,12 @@ class WSConnectionManager:
         except Exception:
             logger.debug("Failed to publish message to agent %s via Redis", agent_id)
 
-    async def wait_for_connection(self, agent_id: UUID, timeout: float) -> bool:
-        """에이전트 접속 대기. timeout 초 내에 접속하면 True.
+    async def wait_for_connection(self, agent_id: UUID, wait_timeout: float) -> bool:
+        """에이전트 접속 대기. wait_timeout 초 내에 접속하면 True.
 
         멀티 워커 환경에서 다른 워커에 연결된 에이전트도 Redis 프레즌스로 감지.
         """
-        deadline = asyncio.get_event_loop().time() + timeout
+        deadline = asyncio.get_event_loop().time() + wait_timeout
         while asyncio.get_event_loop().time() < deadline:
             if await self.check_presence(agent_id):
                 return True

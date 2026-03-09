@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import time
-import uuid
 from collections.abc import AsyncGenerator
 
 from app.core.redis import pubsub_client, redis_client  # 공유 연결 풀
@@ -25,7 +24,7 @@ async def publish_event(match_id: str, event_type: str, data: dict) -> None:
     await redis_client.publish(_channel(match_id), payload)
 
 
-async def subscribe(match_id: str, max_wait_seconds: int = 600) -> AsyncGenerator[str, None]:
+async def subscribe(match_id: str, user_id: str, max_wait_seconds: int = 600) -> AsyncGenerator[str, None]:
     """Redis pub/sub 구독. SSE 형식 문자열을 yield.
 
     max_wait_seconds 내에 finished/error 이벤트가 오지 않으면 timeout 에러를 발행하고 종료.
@@ -34,11 +33,10 @@ async def subscribe(match_id: str, max_wait_seconds: int = 600) -> AsyncGenerato
     pubsub = pubsub_client.pubsub()
     await pubsub.subscribe(_channel(match_id))
 
-    # 관전자 수 추적 — 공유 redis_client + Set 기반
-    conn_id = str(uuid.uuid4())
+    # 관전자 수 추적 — user_id를 Set 멤버로 사용해 새로고침 시 중복 카운트 방지
     viewers_key = f"debate:viewers:{match_id}"
     try:
-        await redis_client.sadd(viewers_key, conn_id)
+        await redis_client.sadd(viewers_key, user_id)
         await redis_client.expire(viewers_key, 3600)
     except Exception:
         logger.warning("Failed to add viewer for match %s", match_id)
@@ -72,7 +70,7 @@ async def subscribe(match_id: str, max_wait_seconds: int = 600) -> AsyncGenerato
         await pubsub.unsubscribe(_channel(match_id))
         await pubsub.aclose()
         try:
-            await redis_client.srem(viewers_key, conn_id)
+            await redis_client.srem(viewers_key, user_id)
         except Exception:
             logger.warning("Failed to remove viewer for match %s", match_id)
 
@@ -118,7 +116,10 @@ async def subscribe_queue(
                     default=str,
                 )
                 yield f"data: {timeout_payload}\n\n"
-                logger.warning("Queue subscribe timeout for topic=%s agent=%s after %ds", topic_id, agent_id, max_wait_seconds)
+                logger.warning(
+                    "Queue subscribe timeout for topic=%s agent=%s after %ds",
+                    topic_id, agent_id, max_wait_seconds,
+                )
                 break
 
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)

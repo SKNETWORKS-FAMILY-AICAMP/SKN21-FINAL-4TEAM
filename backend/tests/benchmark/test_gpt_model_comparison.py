@@ -24,7 +24,6 @@ import pytest
 from app.services.debate_orchestrator import (
     DebateOrchestrator,
     OptimizedDebateOrchestrator,
-    _should_skip_review,
 )
 
 # ─── 모델 카탈로그 ─────────────────────────────────────────────────────────────

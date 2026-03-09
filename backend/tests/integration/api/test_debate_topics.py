@@ -8,8 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import encrypt_api_key
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
+from app.models.debate_agent import DebateAgent, DebateAgentVersion
 from tests.conftest import auth_header
 
 

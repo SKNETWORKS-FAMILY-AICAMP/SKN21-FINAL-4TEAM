@@ -144,7 +144,9 @@ class InferenceClient:
                 async for chunk in self._stream_openai_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
                     yield chunk
             case "anthropic":
-                async for chunk in self._stream_anthropic_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
+                async for chunk in self._stream_anthropic_byok(
+                    model_id, api_key, messages, usage_out=usage_out, **kwargs
+                ):
                     yield chunk
             case "google":
                 async for chunk in self._stream_google_byok(model_id, api_key, messages, usage_out=usage_out, **kwargs):
@@ -320,10 +322,10 @@ class InferenceClient:
             }
             if system_prompt:
                 body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            # Google API 키를 URL 파라미터 대신 헤더로 전달 — 로그/트레이스에 키 노출 방지
             response = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent",
-                params={"key": api_key},
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
                 json=body,
             )
             response.raise_for_status()
@@ -358,11 +360,12 @@ class InferenceClient:
             }
             if system_prompt:
                 body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            # Google API 키를 URL 파라미터 대신 헤더로 전달 — 로그/트레이스에 키 노출 방지
             async with client.stream(
                 "POST",
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:streamGenerateContent",
-                params={"key": api_key, "alt": "sse"},
-                headers={"Content-Type": "application/json"},
+                params={"alt": "sse"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
                 json=body,
             ) as response:
                 response.raise_for_status()
@@ -631,10 +634,10 @@ class InferenceClient:
             if system_prompt:
                 body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
+            # Google API 키를 URL 파라미터 대신 헤더로 전달 — 로그/트레이스에 키 노출 방지
             response = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_id}:generateContent",
-                params={"key": settings.google_api_key},
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": settings.google_api_key},
                 json=body,
             )
             response.raise_for_status()
@@ -671,11 +674,12 @@ class InferenceClient:
             if system_prompt:
                 body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
+            # Google API 키를 URL 파라미터 대신 헤더로 전달 — 로그/트레이스에 키 노출 방지
             async with client.stream(
                 "POST",
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_id}:streamGenerateContent",
-                params={"key": settings.google_api_key, "alt": "sse"},
-                headers={"Content-Type": "application/json"},
+                params={"alt": "sse"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": settings.google_api_key},
                 json=body,
             ) as response:
                 response.raise_for_status()

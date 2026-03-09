@@ -29,7 +29,7 @@ class TestDebateAutoMatcher:
     @pytest.mark.asyncio
     async def test_stale_entry_triggers_auto_match(self):
         """타임아웃 초과 엔트리가 플랫폼 에이전트와 매칭된다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         matcher = DebateAutoMatcher()
         entry = _make_entry()
@@ -45,7 +45,7 @@ class TestDebateAutoMatcher:
     @pytest.mark.asyncio
     async def test_no_platform_agents_publishes_timeout(self):
         """플랫폼 에이전트가 없으면 timeout 이벤트를 발행한다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         matcher = DebateAutoMatcher()
         entry = _make_entry()
@@ -61,7 +61,7 @@ class TestDebateAutoMatcher:
         db.execute = AsyncMock(side_effect=[fresh_result, platform_result])
 
         with patch(
-            "app.services.debate_auto_match.publish_queue_event", new_callable=AsyncMock
+            "app.services.debate_matching_service.publish_queue_event", new_callable=AsyncMock
         ) as mock_pub:
             await matcher._auto_match_with_platform_agent(db, entry)
 
@@ -74,7 +74,7 @@ class TestDebateAutoMatcher:
         """본인 소유 플랫폼 에이전트는 매칭에서 제외된다."""
         # 쿼리 WHERE절에 owner_id != entry.user_id가 포함되는지 검증
         # _auto_match_with_platform_agent의 SELECT 쿼리 파라미터를 통해 확인
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         matcher = DebateAutoMatcher()
         user_id = uuid.uuid4()
@@ -91,7 +91,7 @@ class TestDebateAutoMatcher:
         db.execute = AsyncMock(side_effect=[fresh_result, platform_result])
 
         with patch(
-            "app.services.debate_auto_match.publish_queue_event", new_callable=AsyncMock
+            "app.services.debate_matching_service.publish_queue_event", new_callable=AsyncMock
         ) as mock_pub:
             await matcher._auto_match_with_platform_agent(db, entry)
 
@@ -103,7 +103,7 @@ class TestDebateAutoMatcher:
     @pytest.mark.asyncio
     async def test_entry_already_removed_is_skipped(self):
         """다른 매치로 이미 처리된 엔트리는 스킵된다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         matcher = DebateAutoMatcher()
         entry = _make_entry()
@@ -115,7 +115,7 @@ class TestDebateAutoMatcher:
         db.execute = AsyncMock(return_value=fresh_result)
 
         with patch(
-            "app.services.debate_auto_match.publish_queue_event", new_callable=AsyncMock
+            "app.services.debate_matching_service.publish_queue_event", new_callable=AsyncMock
         ) as mock_pub:
             await matcher._auto_match_with_platform_agent(db, entry)
 
@@ -124,7 +124,7 @@ class TestDebateAutoMatcher:
     @pytest.mark.asyncio
     async def test_match_created_and_event_published(self):
         """플랫폼 에이전트가 있으면 매치가 생성되고 matched 이벤트가 발행된다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         matcher = DebateAutoMatcher()
         user_id = uuid.uuid4()
@@ -157,11 +157,11 @@ class TestDebateAutoMatcher:
         )
 
         with (
-            patch("app.services.debate_auto_match.DebateMatch") as MockMatch,
+            patch("app.services.debate_matching_service.DebateMatch") as MockMatch,
             patch(
-                "app.services.debate_auto_match.publish_queue_event", new_callable=AsyncMock
+                "app.services.debate_matching_service.publish_queue_event", new_callable=AsyncMock
             ) as mock_pub,
-            patch("app.services.debate_auto_match.asyncio.create_task"),
+            patch("app.services.debate_matching_service.asyncio.create_task"),
         ):
             MockMatch.return_value = mock_match
             db.refresh = AsyncMock(side_effect=lambda m: setattr(m, "id", uuid.uuid4()))
@@ -175,7 +175,7 @@ class TestDebateAutoMatcher:
 
     def test_singleton_pattern(self):
         """get_instance()는 항상 동일 인스턴스를 반환한다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         # 기존 싱글톤 초기화
         DebateAutoMatcher._instance = None
@@ -185,12 +185,12 @@ class TestDebateAutoMatcher:
 
     def test_start_stop(self):
         """start/stop이 _running 플래그를 올바르게 설정한다."""
-        from app.services.debate_auto_match import DebateAutoMatcher
+        from app.services.debate_matching_service import DebateAutoMatcher
 
         DebateAutoMatcher._instance = None
         matcher = DebateAutoMatcher.get_instance()
 
-        with patch("app.services.debate_auto_match.asyncio.create_task"):
+        with patch("app.services.debate_matching_service.asyncio.create_task"):
             matcher.start()
             assert matcher._running is True
 

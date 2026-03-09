@@ -25,6 +25,8 @@ class User(Base):
     preferred_llm_model_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("llm_models.id"))
     preferred_themes: Mapped[list[str] | None] = mapped_column(ARRAY(String(30)), nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    daily_token_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monthly_token_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_credit_grant_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     banned_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
