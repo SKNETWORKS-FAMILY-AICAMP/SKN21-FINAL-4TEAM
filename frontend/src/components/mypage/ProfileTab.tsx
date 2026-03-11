@@ -2,10 +2,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { User, Pencil, Lock, Calendar, Shield, Check, X, Gem } from 'lucide-react';
+import { User, Pencil, Lock, Calendar, Shield, Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUserStore } from '@/stores/userStore';
-import { useCreditStore } from '@/stores/creditStore';
 import { toast } from '@/stores/toastStore';
 
 type ProfileData = {
@@ -32,7 +31,6 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function ProfileTab() {
   const { user, setUser } = useUserStore();
-  const { balance: creditBalance, fetchBalance } = useCreditStore();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +45,6 @@ export function ProfileTab() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
-    fetchBalance();
     api
       .get<ProfileData>('/auth/me')
       .then((data) => {
@@ -56,7 +53,7 @@ export function ProfileTab() {
       })
       .catch(() => toast.error('프로필을 불러올 수 없습니다'))
       .finally(() => setLoading(false));
-  }, [fetchBalance]);
+  }, []);
 
   const handleSaveNickname = async () => {
     if (!newNickname.trim() || newNickname === profile?.nickname) {
@@ -213,23 +210,6 @@ export function ProfileTab() {
               <span className="text-xs text-text-muted">
                 ({new Date(profile.adult_verified_at).toLocaleDateString('ko-KR')} 인증)
               </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Gem size={16} className="text-primary shrink-0" />
-            <span className="text-sm text-text-muted w-20">대화석</span>
-            {creditBalance ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-primary">
-                  {creditBalance.balance.toLocaleString()}석
-                </span>
-                <span className="text-xs text-text-muted">
-                  (일일 {creditBalance.daily_credits}석 ·{' '}
-                  {creditBalance.granted_today ? '오늘 지급됨' : '오늘 미지급'})
-                </span>
-              </div>
-            ) : (
-              <span className="text-sm text-text-muted">불러오는 중...</span>
             )}
           </div>
           <div className="flex items-center gap-3">

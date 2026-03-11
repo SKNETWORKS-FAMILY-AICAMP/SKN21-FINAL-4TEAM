@@ -12,7 +12,7 @@ async def test_toggle_featured_match_not_found():
     result_mock.scalar_one_or_none.return_value = None
     db.execute = AsyncMock(return_value=result_mock)
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     with pytest.raises(ValueError, match="Match not found"):
@@ -31,7 +31,7 @@ async def test_toggle_featured_not_completed():
     result_mock.scalar_one_or_none.return_value = match_mock
     db.execute = AsyncMock(return_value=result_mock)
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     with pytest.raises(ValueError, match="완료된 매치만"):
@@ -54,7 +54,7 @@ async def test_toggle_featured_success():
     db.execute = AsyncMock(return_value=result_mock)
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     result = await service.toggle_featured("match-id", True)
@@ -77,7 +77,7 @@ async def test_toggle_featured_unset():
     db.execute = AsyncMock(return_value=result_mock)
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     result = await service.toggle_featured("match-id", False)
@@ -101,7 +101,7 @@ async def test_list_featured_empty():
 
     db.execute = AsyncMock(side_effect=[count_mock, rows_mock])
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     items, total = await service.list_featured(limit=5)

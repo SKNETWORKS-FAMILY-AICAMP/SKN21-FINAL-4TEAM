@@ -75,14 +75,3 @@ async def require_superadmin(user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superadmin access required")
     return user
 
-
-
-async def require_adult_verified(user: User = Depends(get_current_user)) -> User:
-    """성인인증 완료 사용자만 통과시킨다."""
-    if user.adult_verified_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Adult verification required",
-            headers={"X-Error-Code": "AUTH_ADULT_REQUIRED"},
-        )
-    return user

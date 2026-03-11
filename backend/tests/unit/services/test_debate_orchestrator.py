@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate_orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, calculate_elo
+from app.services.debate.orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, calculate_elo
 
 
 class TestEloCalculation:
@@ -157,7 +157,7 @@ class TestJudge:
         """A 점수가 B보다 5 이상 높으면 A가 승자."""
         orch = DebateOrchestrator()
         # A=84, B=63 → diff=21 ≥ 5
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         # swap을 비활성화하기 위해 random.random을 패치
@@ -178,7 +178,7 @@ class TestJudge:
         """B 점수가 A보다 5 이상 높으면 B가 승자."""
         orch = DebateOrchestrator()
         # A=49, B=84 → B wins
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=15, a_evidence=12, a_rebuttal=12, a_relevance=10,
                 b_logic=25, b_evidence=20, b_rebuttal=22, b_relevance=17,
@@ -200,7 +200,7 @@ class TestJudge:
         """점수차 5 미만이면 무승부 (winner_id=None)."""
         orch = DebateOrchestrator()
         # A=80, B=78 → diff=2 < 5 → draw
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=22, a_evidence=20, a_rebuttal=20, a_relevance=18,
                 b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=18,
@@ -222,7 +222,7 @@ class TestJudge:
         """점수차가 정확히 5이면 무승부가 아닌 승/패로 처리된다."""
         orch = DebateOrchestrator()
         # A=84, B=79 → diff=5 → A wins (not draw)
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=25, a_evidence=20, a_rebuttal=22, a_relevance=17,
                 b_logic=22, b_evidence=19, b_rebuttal=21, b_relevance=17,
@@ -243,7 +243,7 @@ class TestJudge:
     async def test_judge_fallback_on_invalid_json(self):
         """LLM이 잘못된 JSON을 반환하면 균등 점수 폴백으로 무승부 처리."""
         orch = DebateOrchestrator()
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": "이것은 JSON이 아닙니다"}
         )
         result = await orch.judge(self._make_match(), [], self._make_topic())
@@ -256,7 +256,7 @@ class TestJudge:
     async def test_judge_fallback_on_missing_scorecard_keys(self):
         """scorecard 내 agent_a/agent_b 키가 없으면 폴백 처리."""
         orch = DebateOrchestrator()
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": '{"invalid": "structure"}'}
         )
         result = await orch.judge(self._make_match(), [], self._make_topic())
@@ -268,7 +268,7 @@ class TestJudge:
         """벌점이 기본 점수에서 차감되어 최종 점수에 반영된다."""
         orch = DebateOrchestrator()
         # A=84 - penalty_a(10) = 74, B=63 → diff=11 ≥ 5 → A wins
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         import random
@@ -288,7 +288,7 @@ class TestJudge:
         """벌점이 충분히 크면 원래 승자가 패자로 뒤집힐 수 있다."""
         orch = DebateOrchestrator()
         # A=84, B=63, penalty_a=30 → final_a=54, final_b=63 → diff=9 ≥ 5 → B wins
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         import random
@@ -307,7 +307,7 @@ class TestJudge:
         """벌점으로 점수차가 5 미만이 되면 무승부로 처리된다."""
         orch = DebateOrchestrator()
         # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 < 5 → draw
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         import random
@@ -326,7 +326,7 @@ class TestJudge:
         """벌점이 점수를 초과하면 최종 점수는 0으로 제한된다."""
         orch = DebateOrchestrator()
         # A=84, penalty_a=100 → max(0, -16) = 0, B=63 → B wins
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         import random
@@ -346,7 +346,7 @@ class TestJudge:
         orch = DebateOrchestrator()
         raw = self._scorecard()
         wrapped = f"```json\n{raw}\n```"
-        orch.client._call_openai_byok = AsyncMock(return_value={"content": wrapped})
+        orch.client.generate_byok = AsyncMock(return_value={"content": wrapped})
 
         import random
         original_random = random.random
@@ -363,7 +363,7 @@ class TestJudge:
     async def test_judge_returns_penalty_info(self):
         """결과에 penalty_a·penalty_b 정보가 포함된다."""
         orch = DebateOrchestrator()
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
         import random
@@ -385,7 +385,7 @@ class TestJudge:
         orch = DebateOrchestrator()
         # 스왑 시 LLM은 B의 내용을 "agent_a"로 보고 채점 → 이를 역변환
         # 원래 A=84, B=63이 되어야 함
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 # 스왑된 상태에서 LLM이 받는 응답: "agent_a"=B의 점수, "agent_b"=A의 점수
                 a_logic=18, a_evidence=16, a_rebuttal=15, a_relevance=14,  # B의 점수
@@ -435,7 +435,7 @@ class TestReviewTurn:
         violations = [
             {"type": "off_topic", "severity": "minor", "detail": "주제와 무관"},
         ]
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(logic_score=6, violations=violations)}
         )
 
@@ -461,7 +461,7 @@ class TestReviewTurn:
         violations = [
             {"type": "ad_hominem", "severity": "severe", "detail": "심각한 인신공격"},
         ]
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(
                 logic_score=2, violations=violations, severity="severe", block=True
             )}
@@ -486,13 +486,13 @@ class TestReviewTurn:
         """LLM 타임아웃 → fallback dict 반환 (block=False, penalty_total=0)."""
         orch = self._make_orch()
 
-        async def slow_call(**_kwargs):
+        async def slow_call(*_args, **_kwargs):
             await asyncio.sleep(100)
             return {"content": ""}
 
-        orch.client._call_openai_byok = slow_call
+        orch.client.generate_byok = slow_call
 
-        with patch("app.services.debate_orchestrator.settings") as mock_settings:
+        with patch("app.services.debate.orchestrator.settings") as mock_settings:
             mock_settings.debate_turn_review_timeout = 0.01
             mock_settings.debate_turn_review_model = "gpt-4o"
             mock_settings.debate_orchestrator_model = "gpt-4o"
@@ -516,7 +516,7 @@ class TestReviewTurn:
     async def test_invalid_json_returns_fallback(self):
         """JSON 파싱 실패 → fallback dict 반환."""
         orch = self._make_orch()
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": "이것은 JSON이 아닙니다 {{{}"}
         )
 
@@ -541,7 +541,7 @@ class TestReviewTurn:
             {"type": "prompt_injection", "severity": "severe", "detail": "인젝션 시도"},
             {"type": "false_claim", "severity": "minor", "detail": "허위 주장"},
         ]
-        orch.client._call_openai_byok = AsyncMock(
+        orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(
                 logic_score=3, violations=violations, severity="severe", block=True
             )}
@@ -563,3 +563,66 @@ class TestReviewTurn:
         )
         assert result["penalty_total"] == expected_total
         assert result["block"] is True
+
+
+class TestOrchestratorUnification:
+    """통합된 단일 DebateOrchestrator 클래스 테스트."""
+
+    def test_optimized_true_uses_review_model(self):
+        """optimized=True이면 debate_review_model을 사용한다."""
+        orch = DebateOrchestrator(optimized=True)
+        assert orch.optimized is True
+
+    def test_optimized_false_is_sequential(self):
+        """optimized=False이면 순차 모드다."""
+        orch = DebateOrchestrator(optimized=False)
+        assert orch.optimized is False
+
+    def test_default_is_optimized(self):
+        """기본값은 optimized=True이다."""
+        orch = DebateOrchestrator()
+        assert orch.optimized is True
+
+    @pytest.mark.asyncio
+    async def test_review_turn_optimized_uses_review_model(self, monkeypatch):
+        """optimized=True이면 review_turn이 debate_review_model을 사용한다."""
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "openai_api_key", "test-key")
+        monkeypatch.setattr(settings, "debate_review_model", "test-review-model")
+
+        orch = DebateOrchestrator(optimized=True)
+        called_with_model = []
+
+        async def mock_call_review(model_id, api_key, messages):
+            called_with_model.append(model_id)
+            return {"logic_score": 7, "violations": [], "severity": "none", "feedback": "ok", "block": False}, 10, 10
+
+        monkeypatch.setattr(orch, "_call_review_llm", mock_call_review)
+        await orch.review_turn(topic="test", speaker="agent_a", turn_number=1, claim="test claim", evidence=None, action="argue")
+
+        assert called_with_model[0] == "test-review-model"
+
+    @pytest.mark.asyncio
+    async def test_review_turn_sequential_uses_turn_review_model(self, monkeypatch):
+        """optimized=False이면 review_turn이 debate_turn_review_model을 사용한다."""
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "openai_api_key", "test-key")
+        monkeypatch.setattr(settings, "debate_turn_review_model", "test-sequential-model")
+        monkeypatch.setattr(settings, "debate_orchestrator_model", "fallback-model")
+
+        orch = DebateOrchestrator(optimized=False)
+        called_with_model = []
+
+        async def mock_call_review(model_id, api_key, messages):
+            called_with_model.append(model_id)
+            return {"logic_score": 7, "violations": [], "severity": "none", "feedback": "ok", "block": False}, 10, 10
+
+        monkeypatch.setattr(orch, "_call_review_llm", mock_call_review)
+        await orch.review_turn(topic="test", speaker="agent_a", turn_number=1, claim="test claim", evidence=None, action="argue")
+
+        assert called_with_model[0] == "test-sequential-model"
+
+    def test_optimized_orchestrator_class_removed(self):
+        """OptimizedDebateOrchestrator 클래스가 더 이상 존재하지 않는다."""
+        import app.services.debate.orchestrator as mod
+        assert not hasattr(mod, "OptimizedDebateOrchestrator")

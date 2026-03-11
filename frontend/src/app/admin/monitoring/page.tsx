@@ -5,13 +5,11 @@ import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 import { DataTable } from '@/components/admin/DataTable';
 import { SkeletonStat } from '@/components/ui/Skeleton';
-import { Users, MonitorDot, MessageSquare, UserPlus, ShieldAlert, X, User, Bot } from 'lucide-react';
+import { Users, Sword, Trophy, UserPlus, X } from 'lucide-react';
 
 type MonitoringStats = {
-  totals: { users: number; sessions: number; messages: number; personas: number };
-  today: { active_sessions: number; messages: number };
-  weekly: { new_users: number };
-  moderation: { pending_personas: number };
+  totals?: { users?: number; agents?: number; matches?: number };
+  weekly?: { new_users?: number };
 };
 
 type LogEntry = {
@@ -29,13 +27,6 @@ type LogEntry = {
   created_at: string;
 };
 
-type LogDetailMessage = {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  token_count: number | null;
-  created_at: string;
-};
-
 type LogDetail = {
   id: number;
   input_tokens: number;
@@ -44,7 +35,6 @@ type LogDetail = {
   cost: number;
   created_at: string;
   session_id: string | null;
-  messages: LogDetailMessage[];
 };
 
 export default function AdminMonitoringPage() {
@@ -131,42 +121,32 @@ export default function AdminMonitoringPage() {
       <h1 className="page-title">모니터링</h1>
 
       {statsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonStat key={i} />
           ))}
         </div>
       ) : stats ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <StatCard
             title="전체 사용자"
-            value={stats.totals.users}
+            value={stats.totals?.users ?? '-'}
             icon={<Users className="w-5 h-5" />}
           />
           <StatCard
-            title="전체 세션"
-            value={stats.totals.sessions}
-            icon={<MonitorDot className="w-5 h-5" />}
-          />
-          <StatCard
-            title="오늘 메시지"
-            value={stats.today.messages}
-            icon={<MessageSquare className="w-5 h-5" />}
-          />
-          <StatCard
             title="이번 주 신규"
-            value={stats.weekly.new_users}
+            value={stats.weekly?.new_users ?? '-'}
             icon={<UserPlus className="w-5 h-5" />}
           />
           <StatCard
-            title="전체 메시지"
-            value={stats.totals.messages}
-            icon={<MessageSquare className="w-5 h-5" />}
+            title="에이전트 수"
+            value={stats.totals?.agents ?? '-'}
+            icon={<Sword className="w-5 h-5" />}
           />
           <StatCard
-            title="검수 대기"
-            value={stats.moderation.pending_personas}
-            icon={<ShieldAlert className="w-5 h-5" />}
+            title="매치 수"
+            value={stats.totals?.matches ?? '-'}
+            icon={<Trophy className="w-5 h-5" />}
           />
         </div>
       ) : null}
@@ -218,44 +198,35 @@ export default function AdminMonitoringPage() {
 
               <div className="border-t border-border my-1" />
 
-              <div className="grid grid-cols-3 gap-3">
-                <TokenBox label="입력 토큰" value={selectedLog.input_tokens} color="text-blue-400" />
-                <TokenBox
-                  label="출력 토큰"
-                  value={selectedLog.output_tokens}
-                  color="text-green-400"
-                />
-                <TokenBox label="총 토큰" value={selectedLog.total_tokens} color="text-primary" />
-              </div>
-
-              <div className="border-t border-border my-1" />
-
-              <DetailRow label="비용" value={`$${selectedLog.cost.toFixed(6)}`} highlight />
-
-              {/* 대화 내용 */}
-              <div className="border-t border-border my-1" />
-              <div className="text-xs font-semibold text-text-muted mb-1">대화 내용</div>
-
               {detailLoading ? (
-                <div className="flex flex-col gap-2">
-                  <div className="h-16 rounded-xl bg-bg-hover animate-pulse" />
-                  <div className="h-16 rounded-xl bg-bg-hover animate-pulse" />
-                </div>
-              ) : logDetail && logDetail.messages.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {logDetail.messages.map((msg, i) => (
-                    <MessageBubble key={i} message={msg} />
+                <div className="grid grid-cols-3 gap-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-16 rounded-xl bg-bg-hover animate-pulse" />
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-text-muted text-center py-4">
-                  {selectedLog.session_id
-                    ? '대화 내용을 찾을 수 없습니다'
-                    : '세션 정보 없음'}
+                <div className="grid grid-cols-3 gap-3">
+                  <TokenBox
+                    label="입력 토큰"
+                    value={logDetail?.input_tokens ?? selectedLog.input_tokens}
+                    color="text-blue-400"
+                  />
+                  <TokenBox
+                    label="출력 토큰"
+                    value={logDetail?.output_tokens ?? selectedLog.output_tokens}
+                    color="text-green-400"
+                  />
+                  <TokenBox
+                    label="총 토큰"
+                    value={logDetail?.total_tokens ?? selectedLog.total_tokens}
+                    color="text-primary"
+                  />
                 </div>
               )}
 
               <div className="border-t border-border my-1" />
+
+              <DetailRow label="비용" value={`$${selectedLog.cost.toFixed(6)}`} highlight />
 
               {selectedLog.session_id && (
                 <DetailRow label="세션 ID" value={selectedLog.session_id} mono />
@@ -297,36 +268,6 @@ function TokenBox({ label, value, color }: { label: string; value: number; color
     <div className="bg-bg-hover rounded-xl p-3 text-center">
       <div className="text-[11px] text-text-muted mb-1">{label}</div>
       <div className={`text-lg font-bold ${color}`}>{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: LogDetailMessage }) {
-  const isUser = message.role === 'user';
-  return (
-    <div
-      className={`rounded-xl p-3 text-sm ${
-        isUser ? 'bg-primary/10 border border-primary/20' : 'bg-bg-hover border border-border'
-      }`}
-    >
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {isUser ? (
-          <User size={12} className="text-primary" />
-        ) : (
-          <Bot size={12} className="text-green-400" />
-        )}
-        <span className="text-xs font-semibold text-text-muted">
-          {isUser ? '사용자 입력' : '모델 응답'}
-        </span>
-        {message.token_count != null && (
-          <span className="text-[10px] text-text-muted ml-auto">
-            {message.token_count.toLocaleString()} tokens
-          </span>
-        )}
-      </div>
-      <div className="text-text whitespace-pre-wrap break-words leading-relaxed max-h-48 overflow-y-auto">
-        {message.content}
-      </div>
     </div>
   );
 }

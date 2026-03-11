@@ -12,7 +12,7 @@ type PredictionStats = {
   a_win_pct: number;
   b_win_pct: number;
   draw_pct: number;
-  user_prediction: string | null;
+  my_prediction: string | null;
 };
 
 type Props = {
@@ -37,7 +37,7 @@ export function PredictionPanel({ matchId, agentAName, agentBName, turnCount }: 
   }, [matchId]);
 
   const vote = async (prediction: 'a_win' | 'b_win' | 'draw') => {
-    if (!canVote || submitting || stats?.user_prediction) return;
+    if (!canVote || submitting || stats?.my_prediction) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -53,7 +53,7 @@ export function PredictionPanel({ matchId, agentAName, agentBName, turnCount }: 
     }
   };
 
-  const voted = stats?.user_prediction;
+  const voted = stats?.my_prediction;
 
   return (
     <div className="rounded-xl border border-border bg-bg-surface p-4 mb-4">

@@ -1,11 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { StreamingTurn } from '@/stores/debateStore';
-
-// 타이핑 속도: 6글자 / 30ms ≈ 200자/sec — 너무 빠르지 않게 읽기 편한 속도
-const CHARS_PER_TICK = 6;
-const TICK_MS = 30;
 
 type Props = {
   turn: StreamingTurn;
@@ -13,6 +9,10 @@ type Props = {
   agentBName: string;
   agentAImageUrl?: string | null;
   agentBImageUrl?: string | null;
+  // 타이핑이 완전히 끝난 시점에 1회 호출 — TurnBubble로 교체할 타이밍을 상위에 알림
+  onTypingDone?: () => void;
+  // turn SSE 이벤트가 도착한 경우 true — 모든 청크 수신 완료를 의미
+  turnComplete?: boolean;
 };
 
 /**
@@ -22,39 +22,54 @@ type Props = {
  */
 function extractPartialClaim(raw: string): string {
   const match = raw.match(/"claim"\s*:\s*"((?:[^"\\]|\\.)*)(?:"|$)/s);
-  if (!match) return '';
-  return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  if (match) return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  // JSON 형식이 아닌 평문 출력 (스키마 미준수 LLM 또는 local 에이전트) — raw 텍스트 직접 표시
+  if (!raw.trim().startsWith('{')) return raw.trim();
+  return '';
 }
 
-export function StreamingTurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl }: Props) {
+export function StreamingTurnBubble({
+  turn,
+  agentAName,
+  agentBName,
+  agentAImageUrl,
+  agentBImageUrl,
+  onTypingDone,
+  turnComplete,
+}: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
 
-  // 전체 claim 텍스트 (SSE 수신 기준)
-  const fullClaim = extractPartialClaim(turn.raw);
-  // 타이핑 효과로 표시할 텍스트
-  const [displayedClaim, setDisplayedClaim] = useState('');
-  // 최신 fullClaim을 interval 내부에서 참조하기 위한 ref
-  const targetRef = useRef(fullClaim);
-  targetRef.current = fullClaim;
+  // SSE 청크를 직접 표시 — 가짜 타이핑 interval 없이 실시간 반영
+  // turn.raw는 appendChunk 호출마다 Zustand에서 새 객체로 교체되므로 re-render 자동 발생
+  const claim = extractPartialClaim(turn.raw);
 
-  // 턴이 바뀌면 표시 텍스트 초기화
+  const onDoneRef = useRef(onTypingDone);
+  onDoneRef.current = onTypingDone;
+  const doneFiredRef = useRef(false);
+
+  // 턴이 바뀌면 완료 플래그 초기화
   useEffect(() => {
-    setDisplayedClaim('');
+    doneFiredRef.current = false;
   }, [turn.turn_number, turn.speaker]);
 
-  // 고정 interval로 타이핑 효과 구현
+  // turn SSE 이벤트 도착(= 모든 청크 수신 완료) → 즉시 TurnBubble 교체 신호
   useEffect(() => {
-    const interval = setInterval(() => {
-      setDisplayedClaim((prev) => {
-        const target = targetRef.current;
-        if (prev.length >= target.length) return prev;
-        return target.slice(0, prev.length + CHARS_PER_TICK);
-      });
-    }, TICK_MS);
-    return () => clearInterval(interval);
-  }, []); // 컴포넌트 생애주기 동안 한 번만 등록
+    if (turnComplete && !doneFiredRef.current) {
+      doneFiredRef.current = true;
+      setTimeout(() => onDoneRef.current?.(), 0);
+    }
+  }, [turnComplete]);
+
+  // DOM 커밋 직후(페인트 전) 스크롤 — claim 변경마다 새 scrollHeight 기준으로 정확히 이동
+  useLayoutEffect(() => {
+    if (!claim) return;
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    if (maxScroll <= 0 || window.scrollY >= maxScroll - 150) {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
+  }, [claim]);
 
   return (
     <div className={`flex ${isAgentA ? 'justify-start' : 'justify-end'}`}>
@@ -81,11 +96,13 @@ export function StreamingTurnBubble({ turn, agentAName, agentBName, agentAImageU
           <span className="text-[10px] text-text-muted">Turn {turn.turn_number}</span>
         </div>
 
-        {/* 타이핑 효과 텍스트 또는 대기 점 */}
-        {displayedClaim ? (
+        {/* 실시간 SSE 텍스트 또는 대기 점 */}
+        {claim ? (
           <p className="text-sm text-text whitespace-pre-wrap">
-            {displayedClaim}
-            <span className="inline-block w-0.5 h-3.5 bg-primary animate-pulse ml-0.5 align-middle" />
+            {claim}
+            {!turnComplete && (
+              <span className="inline-block w-0.5 h-3.5 bg-primary animate-pulse ml-0.5 align-middle" />
+            )}
           </p>
         ) : (
           <div className="flex items-center gap-1 py-1">

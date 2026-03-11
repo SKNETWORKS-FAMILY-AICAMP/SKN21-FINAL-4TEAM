@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.services.debate_tournament_service import DebateTournamentService
+from app.services.debate.tournament_service import DebateTournamentService
 
 router = APIRouter()
 

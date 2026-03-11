@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate_season_service import DebateSeasonService
+from app.services.debate.season_service import DebateSeasonService
 
 
 def _make_season(status: str = "active", season_number: int = 1) -> MagicMock:
@@ -100,7 +100,6 @@ class TestGetOrCreateSeasonStats:
     async def test_creates_new_stats_with_defaults(self):
         """기존 행 없으면 ELO=1500, tier=Iron으로 신규 생성."""
         db = AsyncMock()
-        db.flush = AsyncMock()
         agent_id = str(uuid.uuid4())
         season_id = str(uuid.uuid4())
 
@@ -108,11 +107,16 @@ class TestGetOrCreateSeasonStats:
         result_mock.scalar_one_or_none.return_value = None
         db.execute = AsyncMock(return_value=result_mock)
 
+        # begin_nested()는 async with 컨텍스트 매니저로 사용 — AsyncMock으로 직접 생성
+        begin_nested_cm = MagicMock()
+        begin_nested_cm.__aenter__ = AsyncMock(return_value=None)
+        begin_nested_cm.__aexit__ = AsyncMock(return_value=False)
+        db.begin_nested = MagicMock(return_value=begin_nested_cm)
+
         svc = DebateSeasonService(db)
         stats = await svc.get_or_create_season_stats(agent_id, season_id)
 
         db.add.assert_called_once()
-        db.flush.assert_called_once()
         # 생성된 객체는 DebateAgentSeasonStats 인스턴스여야 함
         from app.models.debate_agent import DebateAgentSeasonStats
         assert isinstance(db.add.call_args[0][0], DebateAgentSeasonStats)
@@ -197,7 +201,7 @@ class TestUpdateSeasonStats:
 class TestGetRankingSeasonFilter:
     async def test_overall_ranking_uses_agent_elo(self):
         """season_id 없으면 누적 ELO 기준 랭킹 반환."""
-        from app.services.debate_agent_service import DebateAgentService
+        from app.services.debate.agent_service import DebateAgentService
 
         db = AsyncMock()
         agent = _make_agent(elo=1700, wins=10, losses=3)
@@ -221,7 +225,7 @@ class TestGetRankingSeasonFilter:
 
     async def test_season_ranking_uses_season_stats_elo(self):
         """season_id 지정 시 시즌 ELO 기준 랭킹 반환."""
-        from app.services.debate_agent_service import DebateAgentService
+        from app.services.debate.agent_service import DebateAgentService
 
         db = AsyncMock()
         season_id = str(uuid.uuid4())
@@ -311,7 +315,7 @@ class TestCloseSeasonUsesSeasonStats:
 class TestMatchSeasonTagging:
     async def test_active_season_tags_match_season_id(self):
         """활성 시즌이 있으면 매치 생성 시 season_id 태깅."""
-        from app.services.debate_matching_service import DebateMatchingService
+        from app.services.debate.matching_service import DebateMatchingService
 
         db = AsyncMock()
         db.flush = AsyncMock()

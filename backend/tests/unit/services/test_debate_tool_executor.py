@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.services.debate_tool_executor import DebateToolExecutor, ToolContext
+from app.services.debate.tool_executor import DebateToolExecutor, ToolContext
 
 
 def _ctx(**kwargs) -> ToolContext:

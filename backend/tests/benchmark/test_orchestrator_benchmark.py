@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate_orchestrator import (
+from app.services.debate.orchestrator import (
     DebateOrchestrator,
     OptimizedDebateOrchestrator,
 )
@@ -136,7 +136,7 @@ class TestScenarioA_SequentialBaseline:
             return {"content": '{"logic_score":7,"violations":[],"feedback":"ok","severity":"none","block":false}', "input_tokens": 100, "output_tokens": 50}
 
         with (
-            patch("app.services.debate_orchestrator.settings") as mock_settings,
+            patch("app.services.debate.orchestrator.settings") as mock_settings,
             patch.object(orch.client, "_call_openai_byok", side_effect=capture_model_call),
         ):
             mock_settings.debate_turn_review_model = ""
@@ -189,7 +189,7 @@ class TestScenarioB_ModelSplit:
             }
 
         with (
-            patch("app.services.debate_orchestrator.settings") as mock_settings,
+            patch("app.services.debate.orchestrator.settings") as mock_settings,
             patch.object(orch.client, "_call_openai_byok", side_effect=capture_call),
         ):
             mock_settings.debate_review_model = "gpt-4o-mini"
@@ -237,12 +237,14 @@ class TestScenarioB_ModelSplit:
         mock_topic.description = "테스트"
 
         with (
-            patch("app.services.debate_orchestrator.settings") as mock_settings,
+            patch("app.services.debate.orchestrator.settings") as mock_settings,
             patch.object(orch.client, "_call_openai_byok", side_effect=capture_call),
         ):
             mock_settings.debate_judge_model = "gpt-4o"
             mock_settings.debate_orchestrator_model = "gpt-4o-mini"
             mock_settings.openai_api_key = "test-key"
+            mock_settings.debate_draw_threshold = 5
+            mock_settings.debate_judge_max_tokens = 1024
 
             await orch.judge(
                 match=mock_match,

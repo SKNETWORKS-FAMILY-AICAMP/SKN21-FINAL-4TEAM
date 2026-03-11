@@ -3,36 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Drama, Check, X, AlertCircle, Eye, EyeOff,
-  Heart, Swords, Sparkles, Smile, Ghost, Laugh, Clapperboard, Rocket, ChevronRight,
+  Swords, Check, X, AlertCircle, Eye, EyeOff,
 } from 'lucide-react';
 import { login, register, checkNickname, checkLoginId } from '@/lib/auth';
 import { useUserStore } from '@/stores/userStore';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
-import { CATEGORIES } from '@/constants/categories';
 
 type AuthMode = 'login' | 'register';
 type LoginIdStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 type NicknameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
-type Step = 'auth' | 'themes';
-
-const THEME_ICONS: Record<string, { icon: typeof Heart; color: string }> = {
-  romance: { icon: Heart, color: 'text-pink-400' },
-  action: { icon: Swords, color: 'text-orange-400' },
-  fantasy: { icon: Sparkles, color: 'text-purple-400' },
-  daily: { icon: Smile, color: 'text-green-400' },
-  horror: { icon: Ghost, color: 'text-red-400' },
-  comedy: { icon: Laugh, color: 'text-yellow-400' },
-  drama: { icon: Clapperboard, color: 'text-blue-400' },
-  scifi: { icon: Rocket, color: 'text-cyan-400' },
-};
-
-const THEMES = CATEGORIES.map((c) => ({
-  ...c,
-  icon: THEME_ICONS[c.id]?.icon ?? Heart,
-  color: THEME_ICONS[c.id]?.color ?? 'text-text-muted',
-}));
 
 function validateLoginId(value: string): string | null {
   if (value.length < 2) return '2자 이상 입력하세요';
@@ -64,7 +44,6 @@ export default function HomePage() {
   const router = useRouter();
   const { setUser, setToken } = useUserStore();
   const [mode, setMode] = useState<AuthMode>('login');
-  const [step, setStep] = useState<Step>('auth');
   const [loginId, setLoginId] = useState('');
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
@@ -73,10 +52,6 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Theme selection (after registration)
-  const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
-  const [registeredToken, setRegisteredToken] = useState<string | null>(null);
 
   // LoginId duplicate check
   const [loginIdStatus, setLoginIdStatus] = useState<LoginIdStatus>('idle');
@@ -159,8 +134,6 @@ export default function HomePage() {
     setNicknameError(null);
     setConfirmPassword('');
     setEmail('');
-    setStep('auth');
-    setSelectedThemes([]);
   }, [mode]);
 
   const passwordStrength = getPasswordStrength(password);
@@ -170,12 +143,6 @@ export default function HomePage() {
     nicknameStatus === 'available' &&
     password.length >= 6 &&
     password === confirmPassword;
-
-  const toggleTheme = (themeId: string) => {
-    setSelectedThemes((prev) =>
-      prev.includes(themeId) ? prev.filter((t) => t !== themeId) : [...prev, themeId],
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,8 +163,7 @@ export default function HomePage() {
     try {
       if (mode === 'login') {
         const res = await login(loginId, password);
-        // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
-        setToken(res.access_token); // 하위 호환성 (no-op)
+        setToken(res.access_token);
         const user = await api.get<{
           id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
           age_group: string; adult_verified_at: string | null;
@@ -214,10 +180,22 @@ export default function HomePage() {
         router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/debate');
       } else {
         const res = await register(loginId.trim(), nickname.trim(), password, email || undefined);
-        // 쿠키는 백엔드에서 자동 설정됨 — localStorage 저장 불필요
-        setToken(res.access_token); // 하위 호환성 (no-op)
-        setRegisteredToken(res.access_token);
-        setStep('themes');
+        setToken(res.access_token);
+        const user = await api.get<{
+          id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
+          age_group: string; adult_verified_at: string | null;
+          preferred_llm_model_id: string | null;
+          credit_balance?: number; subscription_plan_key?: string | null;
+        }>('/auth/me');
+        setUser({
+          id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
+          ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
+          preferredLlmModelId: user.preferred_llm_model_id,
+          creditBalance: user.credit_balance ?? 0,
+          subscriptionPlanKey: user.subscription_plan_key ?? null,
+        });
+        toast.success('가입이 완료되었습니다!');
+        router.push('/debate');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '오류가 발생했습니다';
@@ -227,113 +205,11 @@ export default function HomePage() {
     }
   };
 
-  const handleThemeComplete = async () => {
-    setLoading(true);
-    try {
-      if (selectedThemes.length > 0) {
-        await api.put('/auth/me', { preferred_themes: selectedThemes });
-      }
-      const user = await api.get<{
-        id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
-        age_group: string; adult_verified_at: string | null;
-        preferred_llm_model_id: string | null;
-        credit_balance?: number; subscription_plan_key?: string | null;
-      }>('/auth/me');
-      setUser({
-        id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
-        ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
-        preferredLlmModelId: user.preferred_llm_model_id,
-        creditBalance: user.credit_balance ?? 0,
-        subscriptionPlanKey: user.subscription_plan_key ?? null,
-      });
-      toast.success('가입이 완료되었습니다!');
-      router.push('/debate');
-    } catch {
-      toast.error('설정 저장에 실패했습니다');
-      router.push('/debate');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Theme selection step
-  if (step === 'themes') {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-bg">
-        <div className="bg-bg-surface rounded-2xl py-10 px-6 md:px-10 w-full max-w-[480px] mx-4 shadow-card">
-          <div className="flex justify-center mb-3">
-            <Sparkles size={40} className="text-primary" />
-          </div>
-          <h1 className="m-0 text-xl text-center text-text">관심 테마를 선택하세요</h1>
-          <p className="text-center text-text-secondary text-sm mb-6">
-            선택한 테마에 맞는 챗봇을 추천해드립니다 (복수 선택 가능)
-          </p>
-
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            {THEMES.map((theme) => {
-              const Icon = theme.icon;
-              const selected = selectedThemes.includes(theme.id);
-              return (
-                <button
-                  key={theme.id}
-                  type="button"
-                  onClick={() => toggleTheme(theme.id)}
-                  className={`flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all duration-150 cursor-pointer bg-transparent text-left ${
-                    selected
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:border-primary/40'
-                  }`}
-                >
-                  <div className={`${theme.color}`}>
-                    <Icon size={22} />
-                  </div>
-                  <span className={`text-sm font-medium ${selected ? 'text-text' : 'text-text-secondary'}`}>
-                    {theme.label}
-                  </span>
-                  {selected && (
-                    <Check size={16} className="text-primary ml-auto" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={handleThemeComplete}
-              disabled={loading}
-              className="btn-primary py-3 text-[15px] flex items-center justify-center gap-2"
-            >
-              {loading ? '설정 중...' : (
-                <>
-                  {selectedThemes.length > 0
-                    ? `${selectedThemes.length}개 테마 선택 완료`
-                    : '시작하기'}
-                  <ChevronRight size={16} />
-                </>
-              )}
-            </button>
-            {selectedThemes.length === 0 && (
-              <button
-                onClick={handleThemeComplete}
-                disabled={loading}
-                className="text-sm text-text-muted bg-transparent border-none cursor-pointer hover:text-text py-1"
-              >
-                건너뛰기
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Auth form (login / register)
   return (
     <div className="flex justify-center items-center min-h-screen bg-bg">
       <div className="bg-bg-surface rounded-2xl py-12 px-6 md:px-10 w-full max-w-[420px] mx-4 shadow-card">
         <div className="flex justify-center mb-3">
-          <Drama size={48} className="text-primary" />
+          <Swords size={48} className="text-primary" />
         </div>
         <h1 className="m-0 text-2xl text-center text-text">AI 토론 플랫폼</h1>
         <p className="text-center text-text-secondary text-sm mb-6">LLM 에이전트 AI 토론 플랫폼</p>
@@ -520,7 +396,7 @@ export default function HomePage() {
             disabled={loading || (mode === 'register' && !isRegisterValid)}
             className="btn-primary py-3 text-[15px] mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? '처리 중...' : mode === 'login' ? '로그인' : '다음'}
+            {loading ? '처리 중...' : mode === 'login' ? '로그인' : '가입하기'}
           </button>
         </form>
       </div>

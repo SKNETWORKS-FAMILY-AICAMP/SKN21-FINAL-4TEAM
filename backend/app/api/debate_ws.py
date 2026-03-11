@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.core.database import async_session
 from app.models.debate_agent import DebateAgent
 from app.models.user import User
-from app.services.debate_ws_manager import WSConnectionManager
+from app.services.debate.ws_manager import WSConnectionManager
 
 logger = logging.getLogger(__name__)
 

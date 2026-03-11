@@ -11,7 +11,7 @@ from app.core.deps import require_superadmin
 from app.models.debate_tournament import DebateTournament
 from app.models.user import User
 from app.schemas.debate_tournament import TournamentCreate
-from app.services.debate_tournament_service import DebateTournamentService
+from app.services.debate.tournament_service import DebateTournamentService
 
 router = APIRouter()
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -6,6 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+
+from app.core.exceptions import AppError
 
 from app.api import (
     auth,
@@ -17,7 +20,7 @@ from app.api import (
 from app.api.admin.debate import agents as admin_debate_agents
 from app.api.admin.debate import matches as admin_debate_matches
 from app.api.admin.debate import seasons as admin_debate_seasons
-from app.api.admin.debate import stats as admin_debate_stats
+from app.api.admin.debate import topics as admin_debate_topics
 from app.api.admin.debate import templates as admin_debate_templates
 from app.api.admin.debate import tournaments as admin_debate_tournaments
 from app.api.admin.system import llm_models as admin_llm_models
@@ -35,18 +38,43 @@ logger = logging.getLogger(__name__)
 init_sentry()
 
 
+async def _runpod_warmer() -> None:
+    """RunPod Serverless 콜드스타트 방지 — 5분마다 최소 토큰 요청으로 워커 warm 유지."""
+    import httpx
+
+    if not settings.runpod_api_key or not settings.runpod_endpoint_id:
+        return
+
+    base_url = f"https://api.runpod.ai/v2/{settings.runpod_endpoint_id}/runsync"
+    headers = {"Authorization": f"Bearer {settings.runpod_api_key}", "Content-Type": "application/json"}
+    # 워머는 연결 유지가 목적이므로 최소 페이로드 사용
+    body = {"input": {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}}
+
+    while True:
+        await asyncio.sleep(300)  # 5분 대기
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(base_url, headers=headers, json=body)
+                logger.debug("RunPod warmer ping: status=%s", resp.status_code)
+        except Exception as exc:
+            logger.debug("RunPod warmer ping failed (non-critical): %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 토론 자동 매칭 태스크 + WS pub/sub 리스너 시작
     if settings.debate_enabled:
-        from app.services.debate_matching_service import DebateAutoMatcher
-        from app.services.debate_ws_manager import WSConnectionManager
+        from app.services.debate.matching_service import DebateAutoMatcher
+        from app.services.debate.ws_manager import WSConnectionManager
 
         auto_matcher = DebateAutoMatcher.get_instance()
         auto_matcher.start()
 
         ws_manager = WSConnectionManager.get_instance()
         await ws_manager.start_pubsub_listener()
+
+    # RunPod 콜드스타트 방지 워머 (runpod_api_key·endpoint_id 미설정 시 내부에서 즉시 반환)
+    asyncio.create_task(_runpod_warmer())
 
     yield
 
@@ -68,6 +96,11 @@ app = FastAPI(
 
 # Prometheus 계측 (/metrics 엔드포인트 노출)
 setup_prometheus(app)
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
 @app.exception_handler(NotImplementedError)
@@ -119,7 +152,7 @@ app.include_router(admin_monitoring.router, prefix="/api/admin/monitoring", tags
 if settings.debate_enabled:
     _debate_prefix = "/api/admin/debate"
     _debate_tags = ["admin-debate"]
-    app.include_router(admin_debate_stats.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_topics.router, prefix=_debate_prefix, tags=_debate_tags)
     app.include_router(admin_debate_matches.router, prefix=_debate_prefix, tags=_debate_tags)
     app.include_router(admin_debate_agents.router, prefix=_debate_prefix, tags=_debate_tags)
     app.include_router(admin_debate_seasons.router, prefix=_debate_prefix, tags=_debate_tags)

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate_promotion_service import DebatePromotionService, TIER_ORDER
+from app.services.debate.promotion_service import DebatePromotionService, TIER_ORDER
 
 
 def _make_series(

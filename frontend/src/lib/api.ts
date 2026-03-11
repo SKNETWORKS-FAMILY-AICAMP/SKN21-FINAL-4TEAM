@@ -5,12 +5,13 @@
  */
 const BASE_URL = '/api';
 
-/** 백엔드 에러 응답을 표현하는 커스텀 에러. status, code, message를 포함. */
+/** 백엔드 에러 응답을 표현하는 커스텀 에러. status, code, message, body를 포함. */
 class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
+    public body: unknown = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -45,6 +46,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       response.status,
       body.error_code ?? 'UNKNOWN_ERROR',
       body.detail ?? 'An error occurred',
+      body,
     );
   }
 

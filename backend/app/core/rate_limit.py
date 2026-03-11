@@ -138,18 +138,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 results = await pipe.execute()
                 current_count = results[2]
                 if current_count > stream_limit:
+                    retry_after = reset_at - int(now)
                     return JSONResponse(
                         status_code=429,
                         content={
                             "detail": "Too many stream connections",
                             "error_code": "RATE_LIMIT_EXCEEDED",
-                            "retry_after": reset_at - int(now),
+                            "retry_after": retry_after,
                         },
                         headers={
                             "X-RateLimit-Limit": str(stream_limit),
                             "X-RateLimit-Remaining": "0",
                             "X-RateLimit-Reset": str(reset_at),
-                            "Retry-After": str(reset_at - int(now)),
+                            "Retry-After": str(retry_after),
                         },
                     )
             except Exception:

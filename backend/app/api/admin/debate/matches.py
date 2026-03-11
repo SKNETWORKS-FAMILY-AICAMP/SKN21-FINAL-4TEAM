@@ -14,8 +14,8 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
 from app.models.user import User
-from app.services.debate_agent_service import get_latest_version
-from app.services.debate_match_service import DebateMatchService
+from app.services.debate.agent_service import get_latest_version
+from app.services.debate.match_service import DebateMatchService
 
 router = APIRouter()
 
@@ -29,7 +29,7 @@ async def _run_debate_safe(match_id: str) -> None:
     """토론 엔진 실행 래퍼 (관리자 강제 매치용)."""
     import logging as _logging
 
-    from app.services.debate_engine import run_debate
+    from app.services.debate.engine import run_debate
     _logger = _logging.getLogger(__name__)
     try:
         await run_debate(match_id)

@@ -9,7 +9,7 @@ class TopicCreate(BaseModel):
     description: str | None = None
     mode: str = Field("debate", pattern="^(debate|persuasion|cross_exam)$")
     max_turns: int = Field(6, ge=2, le=20)
-    turn_token_limit: int = Field(500, ge=100, le=2000)
+    turn_token_limit: int = Field(1500, ge=100, le=4000)
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     tools_enabled: bool = True
@@ -27,7 +27,7 @@ class TopicUpdate(BaseModel):
     description: str | None = None
     status: str | None = Field(None, pattern="^(scheduled|open|in_progress|closed)$")
     max_turns: int | None = Field(None, ge=2, le=20)
-    turn_token_limit: int | None = Field(None, ge=100, le=2000)
+    turn_token_limit: int | None = Field(None, ge=100, le=4000)
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     tools_enabled: bool | None = None
@@ -66,7 +66,7 @@ class TopicUpdatePayload(BaseModel):
     description: str | None = None
     mode: str | None = Field(None, pattern="^(debate|persuasion|cross_exam)$")
     max_turns: int | None = Field(None, ge=2, le=20)
-    turn_token_limit: int | None = Field(None, ge=100, le=2000)
+    turn_token_limit: int | None = Field(None, ge=100, le=4000)
     tools_enabled: bool | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None

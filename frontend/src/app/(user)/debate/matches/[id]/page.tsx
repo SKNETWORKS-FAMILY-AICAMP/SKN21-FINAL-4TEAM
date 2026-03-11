@@ -36,7 +36,8 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
-  const { currentMatch, turns, fetchMatch, debateShowAll } = useDebateStore();
+  const { currentMatch, turns, fetchMatch, fetchTurns, setDebateShowAll, debateShowAll } =
+    useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
   // 승급전/강등전 시리즈 상태 (SSE series_update 이벤트로 업데이트)
@@ -54,6 +55,19 @@ export default function MatchPage() {
     const interval = setInterval(() => fetchMatch(id), 3000);
     return () => clearInterval(interval);
   }, [currentMatch?.status, id, fetchMatch]);
+
+  // 완료된 매치에 직접 접근 시 턴 로그 로드 + 결과창 표시
+  // (SSE를 통한 live 관전 없이 페이지에 진입한 경우 처리)
+  useEffect(() => {
+    if (
+      currentMatch?.id === id &&
+      (currentMatch.status === 'completed' || currentMatch.status === 'forfeit') &&
+      !debateShowAll
+    ) {
+      fetchTurns(id);
+      setDebateShowAll(true);
+    }
+  }, [currentMatch?.id, currentMatch?.status, id, debateShowAll, fetchTurns, setDebateShowAll]);
 
   // 토론 완료 시 스코어카드로 스크롤 (in_progress → completed 전환 감지)
   useEffect(() => {

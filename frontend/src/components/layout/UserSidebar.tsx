@@ -5,17 +5,8 @@ import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Home,
-  MessageSquare,
-  PenSquare,
-  Users,
   UserCircle,
   User,
-  Heart,
-  Bell,
-  HeartHandshake,
-  MessageCircle,
-  ClipboardList,
   Swords,
   Images,
   Trophy,
@@ -23,29 +14,17 @@ import {
 } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
-import { useFeatureFlagStore } from '@/stores/featureFlagStore';
-import { useNotificationStore } from '@/stores/notificationStore';
-import { CreditBadge } from '@/components/credits/CreditBadge';
 
-type MenuItem = { href: string; label: string; icon: typeof Home; flagKey?: string };
+type MenuItem = { href: string; label: string; icon: typeof Swords };
 
 const PLATFORM_ITEMS: MenuItem[] = [
-  { href: '/personas', label: '챗봇 탐색', icon: Home, flagKey: 'personas' },
-  { href: '/sessions', label: '내 대화', icon: MessageSquare, flagKey: 'chat' },
-  { href: '/personas/create', label: '챗봇 만들기', icon: PenSquare, flagKey: 'personas' },
-  { href: '/favorites', label: '즐겨찾기', icon: Heart, flagKey: 'favorites' },
-  { href: '/relationships', label: '관계도', icon: HeartHandshake, flagKey: 'relationships' },
-  { href: '/community', label: '캐릭터 피드', icon: Users, flagKey: 'community' },
-  { href: '/character-chats', label: '캐릭터 대화', icon: MessageCircle, flagKey: 'character_chats' },
-  { href: '/pending-posts', label: '승인 대기', icon: ClipboardList, flagKey: 'pending_posts' },
-  { href: '/debate', label: 'AI 토론', icon: Swords, flagKey: 'debate' },
-  { href: '/debate/gallery', label: '에이전트 갤러리', icon: Images, flagKey: 'debate_gallery' },
-  { href: '/debate/tournaments', label: '토너먼트', icon: Trophy, flagKey: 'debate_tournaments' },
+  { href: '/debate', label: 'AI 토론', icon: Swords },
+  { href: '/debate/gallery', label: '에이전트 갤러리', icon: Images },
+  { href: '/debate/tournaments', label: '토너먼트', icon: Trophy },
 ];
 
 const ACCOUNT_ITEMS: MenuItem[] = [
-  { href: '/mypage', label: '마이페이지', icon: UserCircle, flagKey: 'mypage' },
-  { href: '/notifications', label: '알림', icon: Bell, flagKey: 'notifications' },
+  { href: '/mypage', label: '마이페이지', icon: UserCircle },
 ];
 
 function GroupLabel({ label }: { label: string }) {
@@ -60,12 +39,10 @@ function NavItem({
   item,
   active,
   onClick,
-  badge,
 }: {
   item: MenuItem;
   active: boolean;
   onClick?: () => void;
-  badge?: number;
 }) {
   const Icon = item.icon;
   return (
@@ -80,11 +57,6 @@ function NavItem({
     >
       <Icon size={20} />
       <span className="flex-1">{item.label}</span>
-      {badge != null && badge > 0 && (
-        <span className="min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-          {badge > 99 ? '99+' : badge}
-        </span>
-      )}
     </Link>
   );
 }
@@ -94,8 +66,6 @@ export const UserSidebar = memo(function UserSidebar() {
   const router = useRouter();
   const { user, logout, isAdmin } = useUserStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
-  const { isEnabled } = useFeatureFlagStore();
-  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
@@ -109,8 +79,6 @@ export const UserSidebar = memo(function UserSidebar() {
 
   const isActive = (href: string) => {
     if (href === '/mypage') return pathname.startsWith('/mypage');
-    if (href === '/personas') return pathname === '/personas';
-    if (href === '/notifications') return pathname.startsWith('/notifications');
     // /debate는 갤러리·토너먼트 전용 메뉴가 있으므로 해당 하위 경로에선 비활성
     if (href === '/debate') {
       return (
@@ -123,12 +91,8 @@ export const UserSidebar = memo(function UserSidebar() {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
-  const visiblePlatformItems = PLATFORM_ITEMS.filter(
-    (item) => !item.flagKey || isEnabled(item.flagKey),
-  );
-  const visibleAccountItems = ACCOUNT_ITEMS.filter(
-    (item) => !item.flagKey || isEnabled(item.flagKey),
-  );
+  const visiblePlatformItems = PLATFORM_ITEMS;
+  const visibleAccountItems = ACCOUNT_ITEMS;
 
   return (
     <>
@@ -147,15 +111,12 @@ export const UserSidebar = memo(function UserSidebar() {
           md:relative md:translate-x-0 md:z-auto md:min-h-screen`}
       >
         <div className="px-5 py-5 border-b border-border">
-          <Link href="/personas" className="text-text no-underline text-base font-bold block">
+          <Link href="/debate" className="text-text no-underline text-base font-bold block">
             AI 토론 플랫폼
           </Link>
           <span className="text-[11px] text-primary font-semibold uppercase tracking-wide">
             AI Debate
           </span>
-          <div className="mt-2">
-            <CreditBadge />
-          </div>
         </div>
 
         <nav className="flex-1 flex flex-col py-1 overflow-y-auto">
@@ -171,7 +132,6 @@ export const UserSidebar = memo(function UserSidebar() {
               item={item}
               active={isActive(item.href)}
               onClick={closeSidebar}
-              badge={item.href === '/notifications' ? unreadCount : undefined}
             />
           ))}
         </nav>

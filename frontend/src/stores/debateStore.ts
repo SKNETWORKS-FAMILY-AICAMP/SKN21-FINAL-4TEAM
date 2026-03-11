@@ -1,161 +1,52 @@
+// debateStore.ts — 하위 호환성 유지를 위한 re-export 파사드
+// 실제 구현은 아래 3개 스토어에 분산됨:
+//   - debateTopicStore: 토픽 목록, 큐 관련
+//   - debateMatchStore: 매치 관전, 스트리밍, 리플레이, 예측투표
+//   - debateRankingStore: 랭킹, 하이라이트
+
+export { useDebateTopicStore } from './debateTopicStore';
+export type { DebateTopicState } from './debateTopicStore';
+
+export { useDebateMatchStore } from './debateMatchStore';
+export type { DebateMatchState } from './debateMatchStore';
+
+export { useDebateRankingStore } from './debateRankingStore';
+export type { DebateRankingState } from './debateRankingStore';
+
+// 기존 코드에서 useDebateStore를 사용하는 경우를 위해
+// 3개 스토어의 상태/액션을 합친 단일 Zustand 스토어를 유지
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-
-type AgentSummary = {
-  id: string;
-  name: string;
-  provider: string;
-  model_id: string;
-  elo_rating: number;
-  image_url?: string | null;
-};
-
-type DebateTopic = {
-  id: string;
-  title: string;
-  description: string | null;
-  mode: string;
-  status: string;
-  max_turns: number;
-  turn_token_limit: number;
-  scheduled_start_at: string | null;
-  scheduled_end_at: string | null;
-  is_admin_topic: boolean;
-  tools_enabled: boolean;
-  queue_count: number;
-  match_count: number;
-  created_at: string;
-  updated_at: string;
-  created_by: string | null;
-  creator_nickname: string | null;
-  is_password_protected?: boolean;
-};
-
-type PromotionSeries = {
-  id: string;
-  agent_id: string;
-  series_type: 'promotion' | 'demotion';
-  from_tier: string;
-  to_tier: string;
-  required_wins: number;
-  current_wins: number;
-  current_losses: number;
-  status: 'active' | 'won' | 'lost' | 'cancelled';
-  created_at: string;
-  completed_at: string | null;
-};
-
-type DebateMatch = {
-  id: string;
-  topic_id: string;
-  topic_title: string;
-  agent_a: AgentSummary;
-  agent_b: AgentSummary;
-  status: 'pending' | 'in_progress' | 'completed' | 'error' | 'waiting_agent' | 'forfeit';
-  winner_id: string | null;
-  score_a: number;
-  score_b: number;
-  penalty_a: number;
-  penalty_b: number;
-  turn_count?: number;
-  started_at: string | null;
-  finished_at: string | null;
-  created_at: string;
-  elo_a_before?: number | null;
-  elo_b_before?: number | null;
-  elo_a_after?: number | null;
-  elo_b_after?: number | null;
-  match_type?: 'ranked' | 'promotion' | 'demotion';
-  series_id?: string | null;
-};
-
-type TurnLog = {
-  id: string;
-  turn_number: number;
-  speaker: string;
-  agent_id: string;
-  action: string;
-  claim: string;
-  evidence: string | null;
-  tool_used: string | null;
-  tool_result: string | null;
-  penalties: Record<string, number> | null;
-  penalty_total: number;
-  human_suspicion_score: number;
-  response_time_ms: number | null;
-  input_tokens: number;
-  output_tokens: number;
-  review_result: {
-    logic_score: number;
-    violations: { type: string; severity: string; detail: string }[];
-    feedback: string;
-    blocked: boolean;
-    skipped?: boolean;
-  } | null;
-  is_blocked: boolean;
-  created_at: string;
-};
-
-type TurnReview = {
-  turn_number: number;
-  speaker: string;
-  logic_score: number | null;
-  violations: { type: string; severity: string; detail: string }[];
-  feedback: string;
-  blocked: boolean;
-  skipped?: boolean;
-};
-
-type StreamingTurn = {
-  turn_number: number;
-  speaker: string;
-  raw: string;
-};
-
-type RankingEntry = {
-  id: string;
-  name: string;
-  owner_nickname: string;
-  provider: string;
-  model_id: string;
-  elo_rating: number;
-  wins: number;
-  losses: number;
-  draws: number;
-  image_url?: string | null;
-  tier?: string;
-  is_profile_public?: boolean;
-};
-
-type TopicCreatePayload = {
-  title: string;
-  description?: string | null;
-  mode?: string;
-  max_turns?: number;
-  turn_token_limit?: number;
-  tools_enabled?: boolean;
-  scheduled_start_at?: string | null;
-  scheduled_end_at?: string | null;
-  password?: string | null;
-};
+import type {
+  DebateTopic,
+  DebateMatch,
+  TurnLog,
+  TurnReview,
+  StreamingTurn,
+  PredictionStats,
+  RankingEntry,
+  TopicCreatePayload,
+} from '@/types/debate';
 
 type DebateState = {
+  // ─── topic 상태 ────────────────────────────────────────────
   topics: DebateTopic[];
   topicsTotal: number;
   popularTopics: DebateTopic[];
   popularTopicsTotal: number;
+  topicsLoading: boolean;
+  // ─── match 상태 ────────────────────────────────────────────
   currentMatch: DebateMatch | null;
   turns: TurnLog[];
   streamingTurn: StreamingTurn | null;
   // 최적화 모드에서 A 검토 중 B가 동시 스트리밍될 때 B 청크를 버퍼링
   pendingStreamingTurn: StreamingTurn | null;
+  // turn SSE 이벤트가 도착했지만 StreamingTurnBubble 타이핑이 아직 진행 중인 턴을 보관
+  pendingTurnLogs: TurnLog[];
   turnReviews: TurnReview[];
-  ranking: RankingEntry[];
-  featuredMatches: DebateMatch[];
-  topicsLoading: boolean;
   matchLoading: boolean;
-  rankingLoading: boolean;
   streaming: boolean;
+  nextSpeaker: string | null; // A turn 완료 후 B 청크 대기 구간에서 표시할 다음 화자
   // 리플레이 상태
   replayMode: boolean;
   replayIndex: number;
@@ -165,19 +56,27 @@ type DebateState = {
   // 완료된 매치 전체 보기 여부 — false: 턴 숨김(기본), true: 전체 표시
   // Scorecard/SummaryReport 노출 제어에도 사용
   debateShowAll: boolean;
+  predictionStats: PredictionStats | null;
+  predictionLoading: boolean;
+  // ─── ranking 상태 ──────────────────────────────────────────
+  ranking: RankingEntry[];
+  rankingLoading: boolean;
+  featuredMatches: DebateMatch[];
+  // ─── topic 액션 ────────────────────────────────────────────
   fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
-  fetchMatch: (matchId: string) => Promise<void>;
-  fetchTurns: (matchId: string) => Promise<void>;
-  fetchRanking: (seasonId?: string) => Promise<void>;
-  fetchFeatured: (limit?: number) => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
   deleteTopic: (topicId: string) => Promise<void>;
   joinQueue: (topicId: string, agentId: string, password?: string) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
-  randomMatch: (agentId: string) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
+  randomMatch: (agentId: string) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
+  // ─── match 액션 ────────────────────────────────────────────
+  fetchMatch: (matchId: string) => Promise<void>;
+  fetchTurns: (matchId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
+  // StreamingTurnBubble 타이핑 완료 후 호출 — pendingTurnLogs에 있던 턴을 turns로 이동
+  flushPendingTurn: (turn_number: number, speaker: string) => void;
   appendChunk: (turn_number: number, speaker: string, chunk: string) => void;
   clearStreamingTurn: () => void;
   setStreaming: (v: boolean) => void;
@@ -189,31 +88,44 @@ type DebateState = {
   tickReplay: () => void;
   setReplayTyping: (v: boolean) => void;
   setDebateShowAll: (v: boolean) => void;
+  submitPrediction: (matchId: string, prediction: 'a_win' | 'b_win' | 'draw') => Promise<void>;
+  fetchPredictionStats: (matchId: string) => Promise<void>;
+  // ─── ranking 액션 ──────────────────────────────────────────
+  fetchRanking: (seasonId?: string) => Promise<void>;
+  fetchFeatured: (limit?: number) => Promise<void>;
 };
 
 export const useDebateStore = create<DebateState>((set, get) => ({
+  // ─── topic 초기 상태 ────────────────────────────────────────
   topics: [],
   topicsTotal: 0,
   popularTopics: [],
   popularTopicsTotal: 0,
+  topicsLoading: false,
+  // ─── match 초기 상태 ────────────────────────────────────────
   currentMatch: null,
   turns: [],
   streamingTurn: null,
   pendingStreamingTurn: null,
+  pendingTurnLogs: [],
   turnReviews: [],
-  ranking: [],
-  featuredMatches: [],
-  topicsLoading: false,
   matchLoading: false,
-  rankingLoading: false,
   streaming: false,
+  nextSpeaker: null,
   replayMode: false,
   replayIndex: 0,
   replaySpeed: 1,
   replayPlaying: false,
   replayTyping: false,
   debateShowAll: false,
-  fetchTopics: async (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => {
+  predictionStats: null,
+  predictionLoading: false,
+  // ─── ranking 초기 상태 ──────────────────────────────────────
+  ranking: [],
+  rankingLoading: false,
+  featuredMatches: [],
+  // ─── topic 액션 구현 ────────────────────────────────────────
+  fetchTopics: async (params?) => {
     set({ topicsLoading: true });
     try {
       const { status, sort, page = 1, pageSize = 20 } = params ?? {};
@@ -241,65 +153,6 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       console.error('Failed to fetch popular topics:', err);
     } finally {
       set({ topicsLoading: false });
-    }
-  },
-  fetchMatch: async (matchId) => {
-    // 동일 매치 로딩 중 중복 호출 방지 (빠른 새로고침 시 DB 커넥션 풀 고갈 방지)
-    if (get().matchLoading) return;
-    // 새 매치 로드 시에만 상태 초기화 — 동일 매치 재조회(SSE finished, 폴링)는 기존 상태 유지
-    // 동일 매치 리셋 시 debateShowAll이 false로 돌아가 completed 상태에서 결과창이 비워지는 버그 방지
-    const isSameMatch = get().currentMatch?.id === matchId;
-    set({
-      matchLoading: true,
-      ...(!isSameMatch && {
-        turns: [],
-        streamingTurn: null,
-        pendingStreamingTurn: null,
-        turnReviews: [],
-        replayMode: false,
-        replayPlaying: false,
-        replayIndex: -1,
-        replayTyping: false,
-        debateShowAll: false,
-      }),
-    });
-    try {
-      const data = await api.get<DebateMatch>(`/matches/${matchId}`);
-      set({ currentMatch: data });
-    } catch (err) {
-      console.error('Failed to fetch match:', err);
-    } finally {
-      set({ matchLoading: false });
-    }
-  },
-  fetchTurns: async (matchId) => {
-    try {
-      const data = await api.get<TurnLog[]>(`/matches/${matchId}/turns`);
-      set({ turns: data });
-    } catch (err) {
-      console.error('Failed to fetch turns:', err);
-    }
-  },
-  fetchRanking: async (seasonId?: string) => {
-    set({ rankingLoading: true });
-    try {
-      const params = seasonId ? `?season_id=${seasonId}` : '';
-      const data = await api.get<RankingEntry[]>(`/agents/ranking${params}`);
-      set({ ranking: data });
-    } catch (err) {
-      console.error('Failed to fetch ranking:', err);
-    } finally {
-      set({ rankingLoading: false });
-    }
-  },
-  fetchFeatured: async (limit = 5) => {
-    try {
-      const data = await api.get<{ items: DebateMatch[]; total: number }>(
-        `/matches/featured?limit=${limit}`,
-      );
-      set({ featuredMatches: data.items });
-    } catch (err) {
-      console.error('Failed to fetch featured matches:', err);
     }
   },
   createTopic: async (payload) => {
@@ -330,54 +183,152 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       { agent_id: agentId, ...(password ? { password } : {}) },
     );
   },
+  leaveQueue: async (topicId, agentId) => {
+    await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);
+  },
   randomMatch: async (agentId) => {
     return api.post<{ topic_id: string; status: string; opponent_agent_id?: string }>(
       '/topics/random-match',
       { agent_id: agentId },
     );
   },
-  leaveQueue: async (topicId, agentId) => {
-    await api.delete(`/topics/${topicId}/queue?agent_id=${agentId}`);
+  // ─── match 액션 구현 ────────────────────────────────────────
+  fetchMatch: async (matchId) => {
+    // 동일 매치 로딩 중 중복 호출 방지 (빠른 새로고침 시 DB 커넥션 풀 고갈 방지)
+    if (get().matchLoading) return;
+    // 새 매치 로드 시에만 상태 초기화 — 동일 매치 재조회(SSE finished, 폴링)는 기존 상태 유지
+    // 동일 매치 리셋 시 debateShowAll이 false로 돌아가 completed 상태에서 결과창이 비워지는 버그 방지
+    const isSameMatch = get().currentMatch?.id === matchId;
+    set({
+      matchLoading: true,
+      ...(!isSameMatch && {
+        turns: [],
+        streamingTurn: null,
+        pendingStreamingTurn: null,
+        pendingTurnLogs: [],
+        turnReviews: [],
+        replayMode: false,
+        replayPlaying: false,
+        replayIndex: -1,
+        replayTyping: false,
+        debateShowAll: false,
+        predictionStats: null,
+      }),
+    });
+    try {
+      const data = await api.get<DebateMatch>(`/matches/${matchId}`);
+      set({ currentMatch: data });
+    } catch (err) {
+      console.error('Failed to fetch match:', err);
+    } finally {
+      set({ matchLoading: false });
+    }
+  },
+  fetchTurns: async (matchId) => {
+    try {
+      const data = await api.get<TurnLog[]>(`/matches/${matchId}/turns`);
+      set({ turns: data });
+    } catch (err) {
+      console.error('Failed to fetch turns:', err);
+    }
   },
   addTurnFromSSE: (turn) => {
     set((s) => {
-      const exists = s.turns.some(
-        (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
-      );
-      // 완료된 턴과 동일한 화자일 때만 streamingTurn 제거 — 다른 화자(병렬 스트리밍)는 유지
+      // StreamingTurnBubble이 같은 (turn_number, speaker)를 타이핑 중이면
+      // 타이핑이 끝날 때까지 turns에 추가하지 않고 pendingTurnLogs에 버퍼링
       const isCurrentStreaming =
         s.streamingTurn?.turn_number === turn.turn_number &&
         s.streamingTurn?.speaker === turn.speaker;
-      const nextStreaming = isCurrentStreaming ? s.pendingStreamingTurn : s.streamingTurn;
-      const nextPending = isCurrentStreaming ? null : s.pendingStreamingTurn;
 
-      if (exists) {
+      if (isCurrentStreaming) {
+        // findIndex: some() + map() 이중 순회 대신 단일 순회로 교체
+        const pendingIdx = s.pendingTurnLogs.findIndex(
+          (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
+        );
         return {
-          turns: s.turns.map((t) =>
-            t.turn_number === turn.turn_number && t.speaker === turn.speaker ? turn : t,
-          ),
-          streamingTurn: nextStreaming,
-          pendingStreamingTurn: nextPending,
+          pendingTurnLogs:
+            pendingIdx >= 0
+              ? s.pendingTurnLogs.map((t, i) => (i === pendingIdx ? turn : t))
+              : [...s.pendingTurnLogs, turn],
         };
       }
+
+      // pendingStreamingTurn과 동일한 (turn_number, speaker) — A 타이핑 중 B turn 이벤트 도착
+      // streamingTurn(A)이 아직 타이핑 중이므로 pendingTurnLogs에 버퍼링. flushPendingTurn(A) 시 승격.
+      const isPendingStreaming =
+        s.pendingStreamingTurn?.turn_number === turn.turn_number &&
+        s.pendingStreamingTurn?.speaker === turn.speaker;
+
+      if (isPendingStreaming) {
+        const pendingIdx = s.pendingTurnLogs.findIndex(
+          (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
+        );
+        return {
+          pendingTurnLogs:
+            pendingIdx >= 0
+              ? s.pendingTurnLogs.map((t, i) => (i === pendingIdx ? turn : t))
+              : [...s.pendingTurnLogs, turn],
+        };
+      }
+
+      // 현재 스트리밍 중인 화자가 아닌 경우 — 즉시 turns에 추가 (pendingStreamingTurn 승격)
+      const turnIdx = s.turns.findIndex(
+        (t) => t.turn_number === turn.turn_number && t.speaker === turn.speaker,
+      );
       return {
-        turns: [...s.turns, turn],
-        streamingTurn: nextStreaming,
-        pendingStreamingTurn: nextPending,
+        turns:
+          turnIdx >= 0
+            ? s.turns.map((t, i) => (i === turnIdx ? turn : t))
+            : [...s.turns, turn],
+        streamingTurn: s.pendingStreamingTurn,
+        pendingStreamingTurn: null,
+        nextSpeaker: turn.speaker === 'agent_a' ? 'agent_b' : 'agent_a',
+      };
+    });
+  },
+  flushPendingTurn: (turn_number, speaker) => {
+    set((s) => {
+      const pendingIdx = s.pendingTurnLogs.findIndex(
+        (t) => t.turn_number === turn_number && t.speaker === speaker,
+      );
+      if (pendingIdx < 0) {
+        // pending이 없어도 streamingTurn/pendingStreamingTurn 승격은 수행
+        const isCurrentStreaming =
+          s.streamingTurn?.turn_number === turn_number && s.streamingTurn?.speaker === speaker;
+        if (!isCurrentStreaming) return {};
+        return {
+          streamingTurn: s.pendingStreamingTurn,
+          pendingStreamingTurn: null,
+          nextSpeaker: speaker === 'agent_a' ? 'agent_b' : 'agent_a',
+        };
+      }
+
+      const pending = s.pendingTurnLogs[pendingIdx];
+      const remainingPendingLogs = s.pendingTurnLogs.filter((_, i) => i !== pendingIdx);
+      const turnIdx = s.turns.findIndex(
+        (t) => t.turn_number === turn_number && t.speaker === speaker,
+      );
+      const updatedTurns =
+        turnIdx >= 0
+          ? s.turns.map((t, i) => (i === turnIdx ? pending : t))
+          : [...s.turns, pending];
+
+      return {
+        turns: updatedTurns,
+        pendingTurnLogs: remainingPendingLogs,
+        streamingTurn: s.pendingStreamingTurn,
+        pendingStreamingTurn: null,
+        nextSpeaker: speaker === 'agent_a' ? 'agent_b' : 'agent_a',
       };
     });
   },
   addTurnReview: (review) => {
     set((s) => {
-      const exists = s.turnReviews.some(
+      const idx = s.turnReviews.findIndex(
         (r) => r.turn_number === review.turn_number && r.speaker === review.speaker,
       );
-      if (exists) {
-        return {
-          turnReviews: s.turnReviews.map((r) =>
-            r.turn_number === review.turn_number && r.speaker === review.speaker ? review : r,
-          ),
-        };
+      if (idx >= 0) {
+        return { turnReviews: s.turnReviews.map((r, i) => (i === idx ? review : r)) };
       }
       return { turnReviews: [...s.turnReviews, review] };
     });
@@ -390,20 +341,57 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       }
       // 다른 화자의 chunk가 왔고 현재 streamingTurn이 활성 상태 — pending 버퍼에 쌓기
       if (s.streamingTurn) {
-        if (s.pendingStreamingTurn?.turn_number === turn_number && s.pendingStreamingTurn?.speaker === speaker) {
-          return { pendingStreamingTurn: { ...s.pendingStreamingTurn, raw: s.pendingStreamingTurn.raw + chunk } };
+        if (
+          s.pendingStreamingTurn?.turn_number === turn_number &&
+          s.pendingStreamingTurn?.speaker === speaker
+        ) {
+          return {
+            pendingStreamingTurn: {
+              ...s.pendingStreamingTurn,
+              raw: s.pendingStreamingTurn.raw + chunk,
+            },
+          };
         }
         return { pendingStreamingTurn: { turn_number, speaker, raw: chunk } };
       }
       // streamingTurn 없음 — 바로 활성화
-      return { streamingTurn: { turn_number, speaker, raw: chunk } };
+      return { streamingTurn: { turn_number, speaker, raw: chunk }, nextSpeaker: null };
     });
   },
-  clearStreamingTurn: () => set({ streamingTurn: null, pendingStreamingTurn: null }),
+  clearStreamingTurn: () =>
+    set((s) => {
+      // 대기 중인 pendingTurnLogs를 turns에 병합 — finished/error 이벤트 시 손실 방지
+      const logsToFlush = s.pendingTurnLogs;
+      if (logsToFlush.length === 0) {
+        return { streamingTurn: null, pendingStreamingTurn: null, pendingTurnLogs: [], nextSpeaker: null };
+      }
+      // 기존 turns를 Map으로 인덱싱 — O(n²) some+map 중첩 대신 O(n) 단일 패스로 병합
+      const turnMap = new Map(s.turns.map((t, i) => [`${t.turn_number}:${t.speaker}`, i]));
+      const updatedTurns = [...s.turns];
+      for (const pending of logsToFlush) {
+        const key = `${pending.turn_number}:${pending.speaker}`;
+        const idx = turnMap.get(key);
+        if (idx !== undefined) {
+          updatedTurns[idx] = pending;
+        } else {
+          updatedTurns.push(pending);
+          turnMap.set(key, updatedTurns.length - 1);
+        }
+      }
+      return {
+        turns: updatedTurns,
+        streamingTurn: null,
+        pendingStreamingTurn: null,
+        pendingTurnLogs: [],
+        nextSpeaker: null,
+      };
+    }),
   setStreaming: (v) => set({ streaming: v }),
   // replayIndex -1: 재생 시작 시 0턴도 아직 안 보임. 첫 tick에서 0으로 올라가 첫 턴 등장
-  startReplay: () => set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false, debateShowAll: false }),
-  stopReplay: () => set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false, debateShowAll: true }),
+  startReplay: () =>
+    set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false, debateShowAll: false }),
+  stopReplay: () =>
+    set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false, debateShowAll: true }),
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   tickReplay: () => {
     const { replayIndex, turns, replayTyping } = get();
@@ -418,7 +406,62 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   },
   setReplayTyping: (v) => set({ replayTyping: v }),
   setDebateShowAll: (v) => set({ debateShowAll: v }),
+  submitPrediction: async (matchId, prediction) => {
+    await api.post(`/matches/${matchId}/predictions`, { prediction });
+    // 제출 후 통계 갱신
+    const stats = await api.get<PredictionStats>(`/matches/${matchId}/predictions`);
+    set({ predictionStats: stats });
+  },
+  fetchPredictionStats: async (matchId) => {
+    set({ predictionLoading: true });
+    try {
+      const stats = await api.get<PredictionStats>(`/matches/${matchId}/predictions`);
+      set({ predictionStats: stats });
+    } catch {
+      // 로그인 안 된 경우 등 무시
+    } finally {
+      set({ predictionLoading: false });
+    }
+  },
+  // ─── ranking 액션 구현 ──────────────────────────────────────
+  fetchRanking: async (seasonId?) => {
+    set({ rankingLoading: true });
+    try {
+      const params = seasonId ? `?season_id=${seasonId}` : '';
+      const data = await api.get<{ items: RankingEntry[]; total: number }>(
+        `/agents/ranking${params}`,
+      );
+      set({ ranking: data.items });
+    } catch (err) {
+      console.error('Failed to fetch ranking:', err);
+    } finally {
+      set({ rankingLoading: false });
+    }
+  },
+  fetchFeatured: async (limit = 5) => {
+    try {
+      const data = await api.get<{ items: DebateMatch[]; total: number }>(
+        `/matches/featured?limit=${limit}`,
+      );
+      set({ featuredMatches: data.items });
+    } catch (err) {
+      console.error('Failed to fetch featured matches:', err);
+    }
+  },
 }));
 
-export type { DebateTopic, DebateMatch, TurnLog, TurnReview, StreamingTurn, RankingEntry, AgentSummary, TopicCreatePayload, PromotionSeries };
+// 타입 re-export (기존 import 경로 하위 호환성 유지)
+export type {
+  DebateTopic,
+  DebateMatch,
+  TurnLog,
+  TurnReview,
+  StreamingTurn,
+  RankingEntry,
+  AgentSummary,
+  TopicCreatePayload,
+  PromotionSeries,
+  PredictionStats,
+} from '@/types/debate';
+
 export type { DebateState };

@@ -23,26 +23,14 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "ASYNC"]
 ```
 
-## RBAC & 접근 제어
-
-- 관리자 API: `Depends(require_admin)` 또는 `Depends(require_superadmin)` 필수
-- 파괴적 작업(삭제/역할변경/정책수정): `require_superadmin` 필수
-- 18+ 콘텐츠 접근 API: `Depends(require_adult_verified)` 적용
-- 회원가입/닉네임 변경 시 `'admin'` 포함 닉네임 차단 (400 반환)
-
 ## 주석 규칙
 
 **"왜(Why)"만 쓴다. "무엇(What)"은 코드로.**
 
 ```python
-# Good — 법적 근거
-# 청소년유해매체물 제공 시 본인확인 의무 (청소년보호법 시행령)
-if persona.age_rating == "18+" and not user.adult_verified_at:
-    raise HTTPException(status_code=403)
-
-# Good — 비직관적 최적화
-# RadixAttention 캐시 히트를 위해 시스템 프롬프트를 대화 히스토리 앞에 고정
-prompt = build_prefix(persona) + history + user_input
+# Good — 비직관적 동작의 이유
+# asyncio.gather로 A 검토와 B 실행을 병렬화 — 턴 지연 37% 단축
+review_a, result_b = await asyncio.gather(review(turn_a), execute(turn_b))
 
 # Bad — 코드 반복
 # 사용자 ID를 가져온다
@@ -54,141 +42,205 @@ user_id = request.user.id
 - 마이그레이션 파일: 변경 사유 주석 필수
 - SQL 주석: 복잡 쿼리(JOIN 3개+, 서브쿼리)에 의도 기술
 
+## RBAC & 접근 제어
+
+- 관리자 API: `Depends(require_admin)` 또는 `Depends(require_superadmin)` 필수
+- 파괴적 작업(삭제/역할변경): `require_superadmin` 필수
+- 사용자는 자신의 리소스만 접근 가능 (소유권 체크 필수)
+- 소유권 실패 → `PermissionError` (HTTP 403), 미존재 → `ValueError` (HTTP 404)
+
+## 프로젝트 구조
+
+```
+app/
+├── main.py                  # FastAPI 앱, 라우터 등록
+├── api/                     # 라우터 레이어 (입력 검증 + HTTP 응답만)
+│   ├── auth.py
+│   ├── debate_agents.py
+│   ├── debate_matches.py
+│   ├── debate_topics.py
+│   ├── debate_tournaments.py
+│   ├── debate_ws.py         # WebSocket (로컬 에이전트 연결)
+│   ├── models.py
+│   ├── uploads.py
+│   ├── usage.py
+│   └── admin/
+│       ├── debate/          # 토론 관리 (agents, matches, seasons, stats, templates, tournaments)
+│       └── system/          # 시스템 관리 (llm_models, monitoring, usage, users)
+├── core/                    # 인프라 설정
+│   ├── config.py            # BaseSettings (환경 변수 전체 관리)
+│   ├── database.py          # SQLAlchemy async 엔진 + 세션
+│   ├── redis.py             # Redis 클라이언트
+│   ├── auth.py              # JWT 발급/검증
+│   ├── deps.py              # FastAPI Depends (get_db, get_current_user, require_admin 등)
+│   ├── encryption.py        # API 키 암호화/복호화 (Fernet)
+│   ├── observability.py     # Langfuse + Sentry 초기화
+│   └── rate_limit.py        # SlowAPI 기반 Rate Limiting
+├── models/                  # SQLAlchemy ORM 모델
+├── schemas/                 # Pydantic 입출력 스키마
+└── services/                # 비즈니스 로직 (라우터에서 직접 쿼리 금지)
+    ├── debate/              # 토론 도메인 서비스 (engine, orchestrator, broadcast 등 12개)
+    ├── llm/                 # LLM 추론 (inference_client.py + providers/)
+    │   └── providers/       # provider별 HTTP 구현 (openai, anthropic, google, runpod)
+    ├── usage_service.py
+    └── user_service.py
+```
+
+## API 라우트 목록
+
+| 경로 | 파일 | 설명 |
+|---|---|---|
+| `GET /health` | `health.py` | 서버 상태 확인 |
+| `/api/auth/*` | `auth.py` | 회원가입, 로그인, 토큰 갱신 |
+| `/api/models/*` | `models.py` | LLM 모델 목록 조회, 선호 모델 설정 |
+| `/api/usage/*` | `usage.py` | 내 토큰 사용량 조회 |
+| `/api/uploads/*` | `uploads.py` | 이미지 업로드 |
+| `/api/agents/*` | `debate_agents.py` | 에이전트 CRUD, 랭킹, 갤러리, H2H |
+| `/api/topics/*` | `debate_topics.py` | 토픽 등록/조회/매칭 큐 |
+| `/api/matches/*` | `debate_matches.py` | 매치 조회, SSE 스트리밍, 예측투표, 요약 |
+| `/api/tournaments/*` | `debate_tournaments.py` | 토너먼트 CRUD, 대진표 |
+| `/api/ws/debate/*` | `debate_ws.py` | WebSocket (로컬 에이전트 전용) |
+| `/api/admin/users/*` | `admin/system/users.py` | 사용자 조회/역할 변경 |
+| `/api/admin/models/*` | `admin/system/llm_models.py` | LLM 모델 등록/수정/활성화 |
+| `/api/admin/usage/*` | `admin/system/usage.py` | 전체 사용량 현황 |
+| `/api/admin/monitoring/*` | `admin/system/monitoring.py` | 토큰/비용 모니터링 |
+| `/api/admin/debate/*` | `admin/debate/` | 매치 강제실행, 시즌/토너먼트 관리 |
+
 ## Database
 
-- **엔진:** PostgreSQL 16 + pgvector, EC2 내부 Docker (RDS 사용 안 함)
-- **ORM:** SQLAlchemy 2.0 (async), **마이그레이션:** Alembic
-- **벡터 인덱스:** HNSW (vector_cosine_ops), BGE-M3 1024차원
+- **엔진:** PostgreSQL 16, EC2 내부 Docker (RDS 사용 안 함)
+- **ORM:** SQLAlchemy 2.0 async, **마이그레이션:** Alembic
 
 ### SQL 컨벤션
 
 - 테이블/컬럼: snake_case
-- PK: `id` (UUID 또는 BIGINT IDENTITY)
+- PK: `id` (UUID)
 - FK: `{참조테이블_단수}_id`
 - 인덱스: `idx_{테이블}_{컬럼}`
 - TIMESTAMPTZ 사용 (TIME ZONE 포함)
 - CHECK 제약조건으로 enum 대체
 
-### 테이블 목록 (36개)
+### 모델 목록 (18개)
 
-- **정책/사용자 (8):** users, consent_logs, spoiler_settings, user_personas, notifications, persona_favorites, persona_relationships, usage_quotas
-- **근거 데이터 (7):** webtoons, episodes, episode_emotions, episode_embeddings, comment_stats, lorebook_entries, review_cache
-- **대화/생성 (5):** personas, live2d_models, chat_sessions, chat_messages, user_memories
-- **LLM/과금 (3):** llm_models, token_usage_logs, credit_ledger
-- **크레딧/구독 (4):** subscription_plans, user_subscriptions, credit_costs, credit_ledger
-- **커뮤니티/에이전트 (11):** boards, board_posts, board_comments, board_reactions, persona_lounge_configs, agent_activity_logs, pending_posts, character_chat_sessions, character_chat_messages, world_events
+| 모델 | 테이블 | 설명 |
+|---|---|---|
+| `User` | `users` | 사용자 계정, 역할(user/admin/superadmin), 크레딧 잔액 |
+| `LLMModel` | `llm_models` | 등록된 LLM 모델 (provider, 비용, 활성화 여부) |
+| `TokenUsageLog` | `token_usage_logs` | LLM 호출 토큰·비용 기록 |
+| `DebateAgent` | `debate_agents` | 에이전트 (소유자, provider, ELO, 공개 여부, 승급전 상태) |
+| `DebateAgentVersion` | `debate_agent_versions` | 에이전트 버전 이력 (system_prompt 스냅샷) |
+| `DebateAgentSeasonStats` | `debate_agent_season_stats` | 시즌별 ELO·전적 분리 집계 |
+| `DebateAgentTemplate` | `debate_agent_templates` | 관리자 제공 에이전트 템플릿 |
+| `DebateTopic` | `debate_topics` | 토론 주제 (등록자, 승인 상태) |
+| `DebateMatch` | `debate_matches` | 매치 (참가자, 형식, 상태, 결과, 시즌/시리즈 연결) |
+| `DebateMatchParticipant` | `debate_match_participants` | 멀티에이전트 매치 참가자 목록 |
+| `DebateMatchPrediction` | `debate_match_predictions` | 사용자 예측투표 |
+| `DebateMatchQueue` | `debate_match_queues` | 매칭 대기 큐 |
+| `DebateTurnLog` | `debate_turn_logs` | 턴별 발언·검토 결과·점수 기록 |
+| `DebatePromotionSeries` | `debate_promotion_series` | 승급전/강등전 시리즈 상태 |
+| `DebateSeason` | `debate_seasons` | 시즌 기간·상태 |
+| `DebateSeasonResult` | `debate_season_results` | 시즌 종료 시 최종 순위 스냅샷 |
+| `DebateTournament` | `debate_tournaments` | 토너먼트 대진표·상태 |
+| `DebateTournamentEntry` | `debate_tournament_entries` | 토너먼트 참가 에이전트 목록 |
 
-### 주요 컬럼 변경 이력
+## 서비스 목록
 
-- `users` — `role`, `adult_verified_at`, `preferred_llm_model_id`, `password_hash`, `credit_balance`, `last_credit_grant_at`, `preferred_themes` 추가. role CHECK에 'superadmin' 추가
-- `personas` — `created_by`, `type`, `visibility`, `moderation_status`, `age_rating`, `live2d_model_id`, `background_image_url`, `category`, `description`, `greeting_message`, `scenario`, `example_dialogues`, `tags`, `chat_count`, `like_count`, `follower_count`, `is_character_page_enabled` 추가
-- `chat_sessions` — `llm_model_id`, `title`, `is_pinned`, `user_persona_id` 추가
-- `chat_messages` — `parent_id` (self FK, 분기용), `is_active`, `is_edited`, `edited_at` 추가
-- `lorebook_entries` — `persona_id`, `created_by` 추가, `webtoon_id` NULLABLE
-- 신규 테이블: `live2d_models`, `llm_models`, `token_usage_logs`, `user_personas`, `persona_favorites`, `persona_relationships`, `notifications`, `usage_quotas`, `subscription_plans`, `user_subscriptions`, `credit_ledger`, `credit_costs`, `boards`, `board_posts`, `board_comments`, `board_reactions`, `persona_lounge_configs`, `agent_activity_logs`, `pending_posts`, `character_chat_sessions`, `character_chat_messages`, `world_events`
+**`services/debate/`**
 
-## 성인인증 & 연령등급 게이트
-
-```
-사용자 가입 (age_group: 'unverified')
-         │
-         ▼
-  성인인증 (/api/auth/adult-verify)
-         ├─ 성공 → age_group = 'adult_verified', adult_verified_at = now()
-         └─ 미인증 → 'minor_safe' 또는 'unverified' 유지
-```
-
-| 사용자 상태 | 전연령(all) | 15+ | 18+ |
-|---|:---:|:---:|:---:|
-| unverified | O | X | X |
-| minor_safe | O | O | X |
-| adult_verified | O | O | O |
-
-- 게이트는 **API 미들웨어**에서 강제 (프롬프트 의존 금지)
-- 18+ 페르소나 생성/접근: `adult_verified`만 가능
-
-## LLM 모델 관리
-
-```
-사용자 요청 → inference_client.py
-    → llm_models 테이블에서 provider/model_id 조회
-    → provider별 분기 (runpod / openai / anthropic / google)
-    → 응답 + 토큰 수 → token_usage_logs INSERT
-```
-
-**llm_models 주요 필드:** `provider`, `model_id`, `display_name`, `input_cost_per_1m`, `output_cost_per_1m`, `max_context_length`, `is_adult_only`, `is_active`, `tier`, `credit_per_1k_tokens`
-
-## 토큰 사용량 & 크레딧
-
-```
-LLM 호출 완료 → token_usage_logs INSERT
-    → cost = (input_tokens * input_cost / 1M) + (output_tokens * output_cost / 1M)
-    → Redis 캐시 갱신: user:{id}:daily_usage, user:{id}:monthly_usage
-```
-
-- **크레딧 시스템:** 일일 무료 지급 + 유료 구매/구독, `credit_ledger`에 모든 변동 기록
-- **Quota:** 일/월 토큰 한도 + 월 비용 한도, 초과 시 429
-
-## 페르소나 시스템
-
-| 항목 | 저장 위치 |
+| 파일 | 역할 |
 |---|---|
-| 캐릭터 이름 | `personas.display_name` |
-| 성격/시스템 프롬프트 | `personas.system_prompt` |
-| 말투 규칙 | `personas.style_rules` (JSONB) |
-| 리뷰 템플릿 | `personas.review_template` (JSONB) |
-| 캐치프레이즈 | `personas.catchphrases` (TEXT[]) |
-| Live2D 모델 | `personas.live2d_model_id` |
-| 배경 이미지 | `personas.background_image_url` |
-| 연령등급 | `personas.age_rating` ('all'/'15+'/'18+') |
-| 공개 범위 | `personas.visibility` (private/public/unlisted) |
-| 카테고리 | `personas.category` (romance/action/fantasy/daily/horror/comedy/drama/scifi) |
-| 로어북 | `lorebook_entries` |
+| `agent_service.py` | 에이전트 CRUD, 랭킹, 갤러리, 클론, H2H, 버전 관리 |
+| `match_service.py` | 매치 조회, 하이라이트, 요약 리포트 생성 |
+| `matching_service.py` | 큐 등록/취소, 자동 매칭(`DebateAutoMatcher`), ready_up |
+| `engine.py` | 토론 실행 루프 (턴 실행 → 검토 → 판정 → 결과 저장) |
+| `orchestrator.py` | LLM 검토(`DebateOrchestrator`) + 최적화 병렬 실행(`OptimizedDebateOrchestrator`) |
+| `broadcast.py` | SSE 이벤트 발행/구독, 관전자 수 관리 |
+| `ws_manager.py` | WebSocket 연결 관리 (로컬 에이전트 인증·메시지 라우팅) |
+| `topic_service.py` | 토픽 CRUD, Redis 캐싱·동기화 |
+| `season_service.py` | 시즌 생성/종료, 시즌 ELO 집계, 보상 지급 |
+| `promotion_service.py` | 승급전/강등전 시리즈 생성·진행·완료 처리 |
+| `tournament_service.py` | 토너먼트 대진표 생성·진행 |
+| `tool_executor.py` | 에이전트 Tool Call 실행 (함수 호출 결과 반환) |
 
-### 프롬프트 레이어 순서
+**`services/llm/`**
 
-1. 불변 정책 (스포일러/연령/PII/저작권 안전)
-1.5. 세계관 이벤트 — [World Event] 블록
-2. 사용자 정의 페르소나 (성격/말투/시스템 프롬프트 + scenario)
-2.3. 관계 상태 — [Relationship] 블록
-2.5. 사용자 페르소나 — [User Character] 블록
-2.7. 예시 대화 — example_dialogues few-shot
-3. 사용자 정의 로어북
-3.5. 사용자 기억 — [User Memories] 블록
-4. 세션 요약 + 최근 대화 (is_active=True)
-5. 근거 번들 (검색 결과 + 감정 신호)
+| 파일 | 역할 |
+|---|---|
+| `inference_client.py` | LLM 호출 단일 진입점 (Langfuse 추적, 토큰 로깅, provider 분기) |
+| `providers/base.py` | provider 공통 추상 인터페이스 |
+| `providers/{openai,anthropic,google,runpod}_provider.py` | provider별 HTTP 구현 |
 
-## RunPod Integration
+**`services/` 루트**
 
-- **엔진:** SGLang (RadixAttention 활성화, DISABLE_RADIX_CACHE=false)
-- **기본 모델:** Llama 3 70B (4-bit 양자화), GPU: A100 80GB
-- **과금:** 초 단위 Serverless, 콜드스타트 FlashBoot (~2초)
-- **네트워크:** 서울↔미국 RTT ~150ms, SSE 스트리밍으로 체감 지연 상쇄
-- **멀티 모델:** llm_models 테이블 기반 동적 라우팅
+| 파일 | 역할 |
+|---|---|
+| `usage_service.py` | 토큰 사용량 집계 조회 |
+| `user_service.py` | 사용자 조회, 역할 변경, 쿼터 관리 |
+
+## LLM 호출 규칙
+
+**모든 LLM 호출은 반드시 `InferenceClient`를 통한다.** 직접 `openai.AsyncOpenAI()` 호출 금지.
+
+```
+서비스 → inference_client.generate()
+    → llm_models 테이블에서 provider/model_id 조회
+    → provider별 분기 (openai / anthropic / google / runpod)
+    → Langfuse 트레이스 기록
+    → token_usage_logs INSERT
+    → 응답 반환
+```
+
+**llm_models 주요 필드:** `provider`, `model_id`, `display_name`, `input_cost_per_1m`, `output_cost_per_1m`, `max_context_length`, `is_active`, `tier`
+
+## 토론 엔진 흐름
+
+```
+큐 등록 → DebateAutoMatcher 감지 → ready_up() → DebateMatch 생성
+    → debate_engine.run_match()
+        ├─ 턴 루프 (N 라운드)
+        │   ├─ 에이전트 발언 생성 (LLM 호출 or WebSocket)
+        │   └─ OptimizedDebateOrchestrator.review_turn()  ← 항상 LLM 검토
+        │       └─ asyncio.gather(A 검토, B 실행) 병렬 실행
+        └─ judge() → 최종 판정 → ELO 갱신 → 승급전 체크
+    → SSE 이벤트 발행 (debate_broadcast)
+```
+
+**오케스트레이터 설정 (`config.py`):**
+- `debate_review_model = "gpt-5-nano"` — 턴 검토 (경량)
+- `debate_judge_model = "gpt-4.1"` — 최종 판정 (고정밀)
+- `debate_orchestrator_optimized = True` — 모델 분리 + 병렬 실행 활성화
+
+## WebSocket 인증 방식
+
+URL 파라미터 토큰 방식 미사용. 연결 후 첫 메시지로 인증:
+
+```json
+{"type": "auth", "token": "<JWT>"}
+```
+
+인증 실패 또는 5초 내 미전송 시 연결 즉시 종료.
 
 ## 테스트
 
 **반드시 venv 활성화 후 실행** (`backend/.venv/Scripts/activate` on Windows)
 
 ```bash
-pytest backend/tests/ -v --cov=app --cov-report=term-missing  # 전체
-pytest backend/tests/unit/ -v                                   # 단위만
-pytest backend/tests/integration/ -v                            # 통합만
+cd backend
+.venv/Scripts/python.exe -m pytest tests/unit/ -v          # 단위 테스트 (224개)
+.venv/Scripts/python.exe -m pytest tests/benchmark/ -v     # 벤치마크 (28개)
+.venv/Scripts/python.exe -m pytest tests/integration/ -v   # 통합 테스트 (DB/Redis 필요)
 ```
 
 ### 규칙
 
 - 파일: `test_*.py`, 함수: `test_동작_조건_기대결과`
-- 외부 의존성(RunPod, 외부 LLM API)만 mock, 내부 서비스는 실제 로직
+- 외부 LLM API만 mock, 내부 서비스는 실제 로직 테스트
 - 비동기: `@pytest.mark.asyncio`, async fixture는 `@pytest_asyncio.fixture`
 - DB 격리: 테스트마다 트랜잭션 롤백
 
-### 필수 정책 검증 테스트 (CI 통과 필수)
+### 필수 정책 검증 테스트
 
-- 미성년 사용자가 18+ 페르소나 접근 → 403
-- 성인인증 미완료가 18+ 페르소나 생성 → 403
-- 차단된 페르소나로 채팅 시도 → 403
-- 타인의 private 페르소나 접근 → 403
+- 타인의 에이전트 수정 시도 → 403
 - 관리자 API에 일반 사용자 접근 → 403
-- PII 포함 입력 → 마스킹 처리 확인
+- 소유하지 않은 에이전트로 큐 등록 → 403
 - 토큰 사용량 기록 누락 없음 확인

@@ -51,7 +51,7 @@ async def test_resolve_predictions_a_win():
     db.execute = AsyncMock(return_value=execute_result)
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     agent_a_id = str(uuid.uuid4())
@@ -76,7 +76,7 @@ async def test_resolve_predictions_draw():
     db.execute = AsyncMock(return_value=MagicMock())
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     agent_a_id = str(uuid.uuid4())
@@ -99,7 +99,7 @@ async def test_resolve_predictions_b_win():
     db.execute = AsyncMock(return_value=MagicMock())
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     agent_a_id = str(uuid.uuid4())

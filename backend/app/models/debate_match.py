@@ -160,6 +160,7 @@ class DebateMatchPrediction(Base):
             "prediction IN ('a_win', 'b_win', 'draw')",
             name="ck_debate_match_predictions_prediction",
         ),
+        UniqueConstraint("match_id", "user_id", name="uq_debate_match_predictions_user"),
     )
 
 

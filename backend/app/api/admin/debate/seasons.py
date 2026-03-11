@@ -11,7 +11,7 @@ from app.core.deps import require_superadmin
 from app.models.debate_season import DebateSeason
 from app.models.user import User
 from app.schemas.debate_season import SeasonCreate
-from app.services.debate_season_service import DebateSeasonService
+from app.services.debate.season_service import DebateSeasonService
 
 router = APIRouter()
 

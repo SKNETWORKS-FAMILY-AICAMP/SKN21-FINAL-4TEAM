@@ -170,15 +170,14 @@ def setup_prometheus(app):
 
 _llm_request_duration = None
 _llm_token_counter = None
-_pipeline_duration = None
 
 
 def get_metrics():
     """커스텀 Prometheus 메트릭 싱글턴."""
-    global _llm_request_duration, _llm_token_counter, _pipeline_duration
+    global _llm_request_duration, _llm_token_counter
 
     if _llm_request_duration is not None:
-        return _llm_request_duration, _llm_token_counter, _pipeline_duration
+        return _llm_request_duration, _llm_token_counter
 
     try:
         from prometheus_client import Counter, Histogram
@@ -196,30 +195,16 @@ def get_metrics():
             labelnames=["provider", "model", "direction"],  # direction: input/output
         )
 
-        _pipeline_duration = Histogram(
-            "pipeline_duration_seconds",
-            "NLP pipeline processing duration",
-            labelnames=["pipeline"],  # emotion, embedding, reranker, pii, korean_nlp
-            buckets=[0.01, 0.05, 0.1, 0.5, 1, 5],
-        )
-
-        return _llm_request_duration, _llm_token_counter, _pipeline_duration
+        return _llm_request_duration, _llm_token_counter
     except Exception:
-        return None, None, None
+        return None, None
 
 
 def record_llm_metrics(provider: str, model: str, duration: float, input_tokens: int, output_tokens: int):
     """LLM 호출 메트릭 기록."""
-    duration_hist, token_counter, _ = get_metrics()
+    duration_hist, token_counter = get_metrics()
     if duration_hist:
         duration_hist.labels(provider=provider, model=model).observe(duration)
     if token_counter:
         token_counter.labels(provider=provider, model=model, direction="input").inc(input_tokens)
         token_counter.labels(provider=provider, model=model, direction="output").inc(output_tokens)
-
-
-def record_pipeline_duration(pipeline_name: str, duration: float):
-    """파이프라인 처리 시간 기록."""
-    _, _, pipeline_hist = get_metrics()
-    if pipeline_hist:
-        pipeline_hist.labels(pipeline=pipeline_name).observe(duration)

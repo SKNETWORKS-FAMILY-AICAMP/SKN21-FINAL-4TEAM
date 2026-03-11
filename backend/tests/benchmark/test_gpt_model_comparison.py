@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.debate_orchestrator import (
+from app.services.debate.orchestrator import (
     DebateOrchestrator,
     OptimizedDebateOrchestrator,
 )

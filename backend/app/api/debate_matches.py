@@ -10,8 +10,8 @@ from app.core.deps import get_current_user
 from app.models.debate_match import DebateMatch
 from app.models.user import User
 from app.schemas.debate_match import PredictionCreate, TurnLogResponse
-from app.services.debate_broadcast import subscribe
-from app.services.debate_match_service import DebateMatchService
+from app.services.debate.broadcast import subscribe
+from app.services.debate.match_service import DebateMatchService
 
 router = APIRouter()
 
@@ -76,19 +76,11 @@ async def get_match_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """토론 요약 리포트 조회. 생성 중이면 generating, 완료면 ready."""
-    from sqlalchemy import select
-
-    from app.models.debate_match import DebateMatch
-
-    res = await db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
-    match = res.scalar_one_or_none()
-    if match is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
-    if match.status != "completed":
-        return {"status": "unavailable"}
-    if match.summary_report is None:
-        return {"status": "generating"}
-    return {"status": "ready", **match.summary_report}
+    service = DebateMatchService(db)
+    try:
+        return await service.get_summary_status(match_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found") from exc
 
 
 @router.get("/{match_id}")
@@ -147,7 +139,10 @@ async def stream_match(
     res = await db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
     match = res.scalar_one_or_none()
 
-    if match and match.status in ("completed", "error", "forfeit"):
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+
+    if match.status in ("completed", "error", "forfeit"):
         # SSE 연결 전에 이미 종료된 매치 — 즉시 종료 이벤트를 합성해 반환
         async def _immediate():
             if match.status == "completed":

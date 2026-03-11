@@ -71,17 +71,31 @@ class Settings(BaseSettings):
 
     # LLM 모델
     debate_orchestrator_model: str = "gpt-4o"       # 기본 오케스트레이터 모델 (폴백용)
-    debate_review_model: str = "gpt-5-nano"         # 턴 검토 모델 — 경량·저비용
+    debate_review_model: str = "gpt-4o-mini"           # 턴 검토 모델 — 경량·저비용
     debate_judge_model: str = "gpt-4.1"             # 최종 판정 모델 — 고정밀
     debate_summary_model: str = "gpt-4o-mini"       # 요약 리포트 생성 모델
 
     # 턴 검토
     debate_turn_review_enabled: bool = True         # 턴 검토 기능 ON/OFF
-    debate_turn_review_timeout: int = 10            # 검토 LLM 응답 최대 대기 시간 (초)
+    debate_turn_review_timeout: int = 25            # 검토 LLM 응답 최대 대기 시간 (초, gpt-5-nano 추론 포함)
     debate_turn_review_model: str = ""              # 검토 모델 오버라이드 — 빈 문자열이면 debate_review_model 사용
 
     # 최적화
     debate_orchestrator_optimized: bool = True      # 최적화 오케스트레이터 활성화 (모델 분리 + 병렬 실행)
+
+    # 판정 규칙
+    debate_draw_threshold: int = 5                  # 승패 판정 최소 점수차 (미만이면 무승부)
+    debate_review_max_tokens: int = 2000            # 턴 검토 LLM max_tokens (gpt-5-nano reasoning 포함)
+    debate_judge_max_tokens: int = 1024             # 최종 판정 LLM max_tokens
+    debate_prediction_cutoff_turns: int = 2         # 예측투표 가능 최대 턴 수 (초과 시 마감)
+    debate_ready_countdown_seconds: int = 10        # 첫 준비 완료 후 자동매치 카운트다운 (초)
+
+    # 시즌 보상 크레딧
+    debate_season_reward_top3: list[int] = [500, 300, 200]  # 1~3위 보상 (인덱스=순위-1)
+    debate_season_reward_rank4_10: int = 50         # 4~10위 보상
+
+    # 에이전트 제약
+    agent_name_change_cooldown_days: int = 7        # 에이전트 이름 변경 쿨다운 (일)
 
     # 요약 리포트
     debate_summary_enabled: bool = True             # 매치 종료 후 요약 리포트 자동 생성

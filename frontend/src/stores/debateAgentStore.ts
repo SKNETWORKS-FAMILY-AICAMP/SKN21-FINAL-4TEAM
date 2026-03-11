@@ -1,88 +1,14 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-
-type DebateAgent = {
-  id: string;
-  owner_id: string;
-  name: string;
-  description: string | null;
-  provider: string;
-  model_id: string;
-  image_url: string | null;
-  elo_rating: number;
-  wins: number;
-  losses: number;
-  draws: number;
-  is_active: boolean;
-  is_connected: boolean;
-  is_system_prompt_public: boolean;
-  use_platform_credits: boolean;
-  tier: string;
-  tier_protection_count: number;
-  active_series_id: string | null;
-  is_profile_public: boolean;
-  name_changed_at: string | null;
-  template_id: string | null;
-  customizations: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type AgentVersion = {
-  id: string;
-  version_number: number;
-  version_tag: string | null;
-  system_prompt: string;
-  parameters: Record<string, unknown> | null;
-  wins: number;
-  losses: number;
-  draws: number;
-  created_at: string;
-};
-
-// 템플릿 커스터마이징 스키마 타입
-type SliderField = {
-  key: string;
-  label: string;
-  min: number;
-  max: number;
-  default: number;
-  description: string;
-};
-
-type SelectOption = { value: string; label: string };
-
-type SelectField = {
-  key: string;
-  label: string;
-  options: SelectOption[];
-  default: string;
-};
-
-type FreeTextField = {
-  key: string;
-  label: string;
-  placeholder: string;
-  max_length: number;
-};
-
-type CustomizationSchema = {
-  sliders: SliderField[];
-  selects: SelectField[];
-  free_text?: FreeTextField;
-};
-
-type AgentTemplate = {
-  id: string;
-  slug: string;
-  display_name: string;
-  description: string | null;
-  icon: string | null;
-  customization_schema: CustomizationSchema;
-  default_values: Record<string, unknown>;
-  sort_order: number;
-  is_active: boolean;
-};
+import type {
+  DebateAgent,
+  AgentVersion,
+  SliderField,
+  SelectField,
+  FreeTextField,
+  CustomizationSchema,
+  AgentTemplate,
+} from '@/types/debate';
 
 type CreateAgentPayload = {
   name: string;

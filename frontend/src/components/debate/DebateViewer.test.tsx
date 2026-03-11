@@ -15,7 +15,12 @@ const mockStoreState = {
   replayMode: false,
   replayIndex: -1,
   replaySpeed: 1,
+  replayPlaying: false,
+  replayTyping: false,
   debateShowAll: false,
+  nextSpeaker: null,
+  predictionStats: null,
+  predictionLoading: false,
   fetchTurns: mockFetchTurns,
   fetchMatch: vi.fn(),
   addTurnFromSSE: mockAddTurnFromSSE,
@@ -27,6 +32,10 @@ const mockStoreState = {
   setDebateShowAll: vi.fn(),
   startReplay: vi.fn(),
   stopReplay: vi.fn(),
+  submitPrediction: vi.fn(),
+  fetchPredictionStats: vi.fn(),
+  flushPendingTurn: vi.fn(),
+  tickReplay: vi.fn(),
 };
 
 vi.mock('@/stores/debateStore', () => ({
@@ -62,6 +71,14 @@ vi.mock('@/components/ui/ScrollToTop', () => ({
 
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn().mockResolvedValue({ count: 0 }) },
+}));
+
+vi.mock('@/hooks/useDebateStream', () => ({
+  useDebateStream: vi.fn().mockReturnValue({ connected: false, error: null }),
+}));
+
+vi.mock('@/hooks/useDebateReplay', () => ({
+  useDebateReplay: vi.fn(),
 }));
 
 // jsdom에 scrollIntoView가 없으므로 mock

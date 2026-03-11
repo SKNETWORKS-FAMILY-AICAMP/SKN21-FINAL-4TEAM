@@ -66,7 +66,7 @@ def _make_template() -> SimpleNamespace:
 
 class TestValidateSliders:
     def test_valid_slider_values(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -75,7 +75,7 @@ class TestValidateSliders:
         assert result["aggression"] == 4
 
     def test_slider_value_at_min(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -84,7 +84,7 @@ class TestValidateSliders:
         assert result["aggression"] == 1
 
     def test_slider_value_at_max(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -93,7 +93,7 @@ class TestValidateSliders:
         assert result["aggression"] == 5
 
     def test_slider_exceeds_max_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -102,7 +102,7 @@ class TestValidateSliders:
             svc.validate_customizations(tmpl, {"aggression": 6}, enable_free_text=False)
 
     def test_slider_below_min_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -111,7 +111,7 @@ class TestValidateSliders:
             svc.validate_customizations(tmpl, {"aggression": 0}, enable_free_text=False)
 
     def test_slider_non_integer_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -126,7 +126,7 @@ class TestValidateSliders:
 
 class TestValidateSelects:
     def test_valid_select_value(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -135,7 +135,7 @@ class TestValidateSelects:
         assert result["tone"] == "formal"
 
     def test_invalid_select_value_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -150,7 +150,7 @@ class TestValidateSelects:
 
 class TestValidateFreeText:
     def test_free_text_disabled_removes_key(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -163,7 +163,7 @@ class TestValidateFreeText:
         assert "additional_instructions" not in result
 
     def test_free_text_enabled_valid(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -176,7 +176,7 @@ class TestValidateFreeText:
         assert result["additional_instructions"] == "한국 사례 인용"
 
     def test_free_text_exceeds_max_length_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -189,7 +189,7 @@ class TestValidateFreeText:
             )
 
     def test_free_text_injection_pattern_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -202,7 +202,7 @@ class TestValidateFreeText:
             )
 
     def test_free_text_injection_inst_tag_raises(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -221,7 +221,7 @@ class TestValidateFreeText:
 
 class TestDefaultValues:
     def test_missing_keys_filled_with_defaults(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -233,7 +233,7 @@ class TestDefaultValues:
         assert result["focus_area"] == _DEFAULTS["focus_area"]
 
     def test_none_customizations_uses_all_defaults(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -249,7 +249,7 @@ class TestDefaultValues:
 
 class TestAssemblePrompt:
     def test_customization_block_replaced(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -270,7 +270,7 @@ class TestAssemblePrompt:
         assert "기술" in prompt
 
     def test_free_text_appears_in_prompt(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()
@@ -284,7 +284,7 @@ class TestAssemblePrompt:
         assert "한국 사례만 인용" in prompt
 
     def test_base_prompt_content_preserved(self):
-        from app.services.debate_agent_service import DebateTemplateService
+        from app.services.debate.agent_service import DebateTemplateService
 
         svc = DebateTemplateService.__new__(DebateTemplateService)
         tmpl = _make_template()

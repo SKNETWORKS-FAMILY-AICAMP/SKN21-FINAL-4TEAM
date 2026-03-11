@@ -1,3 +1,18 @@
+"""
+테스트 픽스처 및 표준 패턴.
+
+## 단위 테스트 표준 패턴 (services/)
+- DB 세션: `db_session` 픽스처 사용 (SQLite in-memory, 실제 ORM 쿼리 실행)
+- LLM 호출: `AsyncMock`으로 `InferenceClient` 또는 `BaseProvider.generate` mock
+- 외부 HTTP: `AsyncMock`으로 httpx 클라이언트 mock
+
+## 통합 테스트 패턴 (integration/)
+- DB: docker-compose.test.yml PostgreSQL (포트 5433)
+- Redis: docker-compose.test.yml (포트 6380)
+
+## 벤치마크 패턴 (benchmark/)
+- LLM만 AsyncMock, DB는 실제 사용 또는 db_session
+"""
 import os
 import uuid
 from datetime import datetime, timezone
@@ -44,8 +59,13 @@ def auth_header(user) -> dict:
 
 @pytest_asyncio.fixture
 async def db_session():
-    # 각 테스트마다 새 엔진 생성 (이벤트 루프 충돌 방지)
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    """단위 테스트용 SQLite in-memory 세션.
+
+    실제 PostgreSQL 없이 ORM 쿼리를 실행할 수 있다.
+    각 테스트 종료 시 테이블이 드롭되므로 격리됨.
+    """
+    # 이유: AsyncMock 체인 없이 실제 ORM 쿼리를 실행해 테스트 신뢰도 향상
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with engine.begin() as conn:

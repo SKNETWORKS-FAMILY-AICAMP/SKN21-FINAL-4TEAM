@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { Play, Pause, Square } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 
@@ -13,28 +12,7 @@ export function ReplayControls() {
   const startReplay = useDebateStore((s) => s.startReplay);
   const stopReplay = useDebateStore((s) => s.stopReplay);
   const setReplaySpeed = useDebateStore((s) => s.setReplaySpeed);
-  const tickReplay = useDebateStore((s) => s.tickReplay);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!replayMode) return;
-    if (replayPlaying) {
-      intervalRef.current = setInterval(() => {
-        tickReplay();
-      }, 1000 / replaySpeed);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [replayPlaying, replayMode, replaySpeed, tickReplay]);
+  // interval은 useDebateReplay 훅이 단일 관리 — 여기서 직접 tickReplay를 호출하지 않음
 
   if (!replayMode) return null;
 

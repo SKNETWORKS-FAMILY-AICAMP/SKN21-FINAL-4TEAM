@@ -22,10 +22,23 @@ from app.schemas.debate_agent import (
     HeadToHeadListResponse,
     PromotionSeriesResponse,
 )
-from app.services.debate_agent_service import DebateAgentService, DebateTemplateService
-from app.services.debate_ws_manager import WSConnectionManager
+from app.services.debate.agent_service import DebateAgentService, DebateTemplateService
+from app.services.debate.ws_manager import WSConnectionManager
 
 router = APIRouter()
+
+# 관리자 역할 집합 — 소유권 우회 가능 (변경 시 이 한 곳만 수정)
+_ADMIN_ROLES: frozenset[str] = frozenset({"admin", "superadmin"})
+
+
+async def _require_agent_access(service: DebateAgentService, agent_id: str, user: User) -> DebateAgent:
+    """에이전트 존재 확인 + 접근 권한 검증. 소유자 또는 관리자만 허용."""
+    agent = await service.get_agent(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+    if agent.owner_id != user.id and user.role not in _ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    return agent
 
 
 def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
@@ -121,7 +134,7 @@ async def test_agent_connection(
     if not data.api_key:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="API 키를 입력해주세요.")
 
-    from app.services.inference_client import InferenceClient
+    from app.services.llm.inference_client import InferenceClient
 
     client = InferenceClient()
     messages = [{"role": "user", "content": "Say ok"}]
@@ -235,7 +248,7 @@ async def get_current_season(
     db: AsyncSession = Depends(get_db),
 ):
     """현재 활성 시즌 조회."""
-    from app.services.debate_season_service import DebateSeasonService
+    from app.services.debate.season_service import DebateSeasonService
 
     service = DebateSeasonService(db)
     season = await service.get_current_season()
@@ -260,7 +273,7 @@ async def get_season_results(
     db: AsyncSession = Depends(get_db),
 ):
     """시즌 결과 조회."""
-    from app.services.debate_season_service import DebateSeasonService
+    from app.services.debate.season_service import DebateSeasonService
 
     service = DebateSeasonService(db)
     items = await service.get_season_results(season_id)
@@ -354,11 +367,7 @@ async def get_agent_versions(
 ):
     """버전 히스토리(system_prompt 포함)는 소유자만 조회 가능."""
     service = DebateAgentService(db)
-    agent = await service.get_agent(agent_id)
-    if agent is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    await _require_agent_access(service, agent_id, user)
     versions = await service.get_agent_versions(agent_id)
     return [AgentVersionResponse.model_validate(v) for v in versions]
 
@@ -370,14 +379,10 @@ async def get_agent_active_series(
     db: AsyncSession = Depends(get_db),
 ):
     """에이전트의 현재 활성 승급전/강등전 시리즈 조회. 없으면 null 반환."""
-    from app.services.debate_promotion_service import DebatePromotionService
+    from app.services.debate.promotion_service import DebatePromotionService
 
     agent_service = DebateAgentService(db)
-    agent = await agent_service.get_agent(agent_id)
-    if agent is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    await _require_agent_access(agent_service, agent_id, user)
 
     promo_svc = DebatePromotionService(db)
     series = await promo_svc.get_active_series(agent_id)
@@ -395,14 +400,10 @@ async def get_agent_series_history(
     db: AsyncSession = Depends(get_db),
 ):
     """에이전트의 승급전/강등전 시리즈 이력 조회 (최신 순)."""
-    from app.services.debate_promotion_service import DebatePromotionService
+    from app.services.debate.promotion_service import DebatePromotionService
 
     agent_service = DebateAgentService(db)
-    agent = await agent_service.get_agent(agent_id)
-    if agent is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    if agent.owner_id != user.id and user.role not in ("admin", "superadmin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    await _require_agent_access(agent_service, agent_id, user)
 
     promo_svc = DebatePromotionService(db)
     history = await promo_svc.get_series_history(agent_id, limit=limit, offset=offset)

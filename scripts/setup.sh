@@ -108,12 +108,20 @@ _stop_servers() {
     while IFS='=' read -r name pid; do
         [ -z "${name:-}" ] && continue
         if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null
+            # Windows: bash PID → Windows PID 변환 후 종료
+            local win_pid
+            win_pid=$(ps -p "$pid" -o pid,ppid 2>/dev/null | awk "NR>1 && \$1==$pid {print \$1}" | head -1)
+            if [ -n "$win_pid" ]; then
+                cmd //c "taskkill /F /T /PID $(ps -p "$pid" -o pid 2>/dev/null | tail -1 | tr -d ' ')" 2>/dev/null
+            fi
+            kill -9 "$pid" 2>/dev/null
             _green "$name 종료 (PID $pid)"
         else
             _info "$name (PID $pid) — 이미 종료됨"
         fi
     done < "$PIDS_FILE"
+    # 남은 uvicorn/node 프로세스 정리
+    cmd //c "taskkill /F /IM python.exe" 2>/dev/null || true
     rm -f "$PIDS_FILE"
 }
 
@@ -270,7 +278,7 @@ _create_admin() {
     _step "Admin 계정 생성 (admin / admin123)"
     cd "$BACKEND_DIR"
     local exit_code=0
-    "$VENV_PYTHON" ../scripts/create_test_admin.py --env-file .env || exit_code=$?
+    PYTHONPATH="$BACKEND_DIR" "$VENV_PYTHON" ../scripts/create_test_admin.py --env-file .env || exit_code=$?
     cd "$PROJECT_ROOT"
     if [ $exit_code -ne 0 ]; then
         _yellow "Admin 계정 생성 실패 — 로그를 확인하세요."
