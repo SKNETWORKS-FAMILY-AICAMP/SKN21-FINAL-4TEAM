@@ -613,6 +613,7 @@ async def _run_turn_loop(
                         evidence=turn_a.evidence,
                         action=turn_a.action,
                         opponent_last_claim=claims_b[-1] if claims_b else None,
+                        recent_history=claims_a[-2:] if claims_a else None,
                     )
                 )
 
@@ -642,6 +643,7 @@ async def _run_turn_loop(
                         evidence=turn_b.evidence,
                         action=turn_b.action,
                         opponent_last_claim=claims_a[-1] if claims_a else None,
+                        recent_history=claims_b[-2:] if claims_b else None,
                     )
                 )
                 prev_turn_b = turn_b
@@ -731,6 +733,7 @@ async def _run_turn_loop(
                     evidence=turn_a.evidence,
                     action=turn_a.action,
                     opponent_last_claim=claims_b[-1] if claims_b else None,
+                    recent_history=claims_a[-2:] if claims_a else None,
                 )
                 review_elapsed = time.monotonic() - review_start
 
@@ -774,6 +777,7 @@ async def _run_turn_loop(
                     evidence=turn_b.evidence,
                     action=turn_b.action,
                     opponent_last_claim=claims_a[-1] if claims_a else None,
+                    recent_history=claims_b[-2:] if claims_b else None,
                 )
                 review_elapsed = time.monotonic() - review_start
 
