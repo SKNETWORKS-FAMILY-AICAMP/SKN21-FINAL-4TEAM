@@ -196,14 +196,14 @@ class TestJudge:
         assert result["score_b"] > result["score_a"]
 
     @pytest.mark.asyncio
-    async def test_judge_draw_when_diff_lt_5(self):
-        """점수차 5 미만이면 무승부 (winner_id=None)."""
+    async def test_judge_draw_when_scores_equal(self):
+        """점수가 동일하면 무승부 (winner_id=None)."""
         orch = DebateOrchestrator()
-        # A=80, B=78 → diff=2 < 5 → draw
+        # A=80, B=80 → diff=0 < 1 → draw
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
-                a_logic=22, a_evidence=20, a_rebuttal=20, a_relevance=18,
-                b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=18,
+                a_logic=20, a_evidence=20, a_rebuttal=20, a_relevance=20,
+                b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=20,
             )}
         )
         import random
@@ -215,7 +215,7 @@ class TestJudge:
             random.random = original_random
 
         assert result["winner_id"] is None
-        assert abs(result["score_a"] - result["score_b"]) < 5
+        assert result["score_a"] == result["score_b"]
 
     @pytest.mark.asyncio
     async def test_judge_exact_5_diff_is_not_draw(self):
@@ -303,10 +303,10 @@ class TestJudge:
         assert result["winner_id"] == "bbb"
 
     @pytest.mark.asyncio
-    async def test_judge_penalty_causes_draw(self):
-        """벌점으로 점수차가 5 미만이 되면 무승부로 처리된다."""
+    async def test_judge_penalty_small_diff_still_wins(self):
+        """벌점 후 점수차가 1이어도 승/패로 처리된다."""
         orch = DebateOrchestrator()
-        # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 < 5 → draw
+        # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 ≥ 1 → A wins
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
@@ -319,7 +319,7 @@ class TestJudge:
             random.random = original_random
 
         assert result["score_a"] == 64
-        assert result["winner_id"] is None
+        assert result["winner_id"] == "aaa"
 
     @pytest.mark.asyncio
     async def test_judge_score_capped_at_zero_with_large_penalty(self):
