@@ -279,7 +279,11 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         turns:
           turnIdx >= 0
             ? s.turns.map((t, i) => (i === turnIdx ? turn : t))
-            : [...s.turns, turn].sort((a, b) => a.turn_number - b.turn_number),
+            : [...s.turns, turn].sort(
+                (a, b) =>
+                  a.turn_number - b.turn_number ||
+                  (a.speaker === 'agent_a' ? -1 : 1) - (b.speaker === 'agent_a' ? -1 : 1),
+              ),
         streamingTurn: s.pendingStreamingTurn,
         pendingStreamingTurn: null,
         nextSpeaker: turn.speaker === 'agent_a' ? 'agent_b' : 'agent_a',
