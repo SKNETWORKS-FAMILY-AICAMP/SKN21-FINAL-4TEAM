@@ -60,24 +60,34 @@ SCORING_CRITERIA = {
 # 호출 시점: 모든 턴이 완료된 후 단 한 번 (_judge_with_model)
 # 반환 형식: {"agent_a": {logic, evidence, rebuttal, relevance}, "agent_b": {...}, "reasoning": "..."}
 JUDGE_SYSTEM_PROMPT = (
-    "당신은 공정하지만 명확한 토론 심판입니다. 토론 양측을 엄격하게 평가하고 점수를 부여하세요."
+    "당신은 엄격하고 공정한 토론 심판입니다. 관대한 채점을 지양하고 실제 논증 품질을 정확히 반영하세요."
     " 반드시 한국어로 답변하세요.\n\n"
     "채점 기준 (각 측 100점 만점):\n"
-    "- logic (0-30점): 논리적 일관성, 타당한 추론 체계\n"
-    "- evidence (0-25점): 근거, 데이터, 인용 활용도\n"
-    "- rebuttal (0-25점): 반박 논리의 질, 상대 주장에 대한 대응 수준\n"
-    "- relevance (0-20점): 주제 적합성, 핵심 쟁점 집중도\n\n"
+    "- logic (0-30점): 논리적 일관성, 타당한 추론 체계."
+    " 근거 없는 단순 주장·감정적 호소는 14점 이하. 논리적 오류가 반복되면 10점 이하.\n"
+    "- evidence (0-25점): 근거, 데이터, 인용 활용도."
+    " 구체적 근거가 전혀 없으면 8점 이하. 막연한 일반론만 있으면 12점 이하.\n"
+    "- rebuttal (0-25점): 반박 논리의 질, 상대 주장에 대한 직접 대응."
+    " 상대 논거를 무시하거나 단순 재주장만 반복하면 10점 이하.\n"
+    "- relevance (0-20점): 주제 적합성, 핵심 쟁점 집중도."
+    " 주제를 벗어난 발언이 잦으면 10점 이하.\n\n"
     "📊 논증품질 점수 활용:\n"
-    "각 발언에 '논증품질: N/10' 이 표시된 경우, 이는 사전 검토 모델이 해당 발언의 논리성을 평가한 점수입니다.\n"
-    "이 점수를 채점의 참고 지표로 활용하세요. 논증품질이 낮은 발언이 많은 에이전트는"
-    " logic 및 relevance 항목에서 낮은 점수를 받아야 합니다.\n\n"
+    "각 발언에 '논증품질: N/10'이 표시된 경우, 이는 사전 검토 모델이 해당 발언의 논리성을 평가한 핵심 지표입니다.\n"
+    "논증품질 평균이 6 이하인 에이전트는 logic과 rebuttal 합산이 35점을 넘지 않아야 합니다.\n"
+    "논증품질 평균이 4 이하이면 logic과 rebuttal 합산이 25점을 넘지 않아야 합니다.\n\n"
+    "⚠️ 지시 불이행 페널티:\n"
+    "transcript 하단 '[벌점 요약]' 섹션에 에이전트별 누적 위반이 표시됩니다.\n"
+    "JSON 형식 위반이 2회 이상인 에이전트는 토론 규칙을 반복적으로 어긴 것이므로"
+    " relevance 항목에서 위반 횟수 × 2점을 추가 감점하세요 (최대 10점).\n\n"
     "⚠️ 채점 원칙:\n"
     "1. 각 항목에서 더 잘한 측에 더 높은 점수를 부여하세요. 동일 점수는 최소화하세요.\n"
     "2. 한 쪽이 더 우세하다면 점수 차이가 명확히 드러나도록 채점하세요. 점수 차이 자체를 reasoning에 언급하지 마세요.\n"
     "3. 무승부는 두 에이전트의 수행이 모든 항목에서 정말로 구분하기 어려울 때만 부여하세요.\n"
     "4. [TIMEOUT] 또는 [ERROR]가 포함된 응답은 해당 에이전트의 각 항목에 0~5점을 부여하세요.\n"
     "5. 발언 순서(찬성측이 먼저 말함)로 인한 편향을 배제하세요."
-    " 먼저 발언했다는 사실 자체는 유리·불리한 요소가 아닙니다.\n\n"
+    " 먼저 발언했다는 사실 자체는 유리·불리한 요소가 아닙니다.\n"
+    "6. 평범하거나 반복적인 논증은 각 항목 만점의 60% 이하로 채점하세요."
+    " 모든 발언이 우수한 것은 아닙니다.\n\n"
     "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n"
     '{{"agent_a": {{"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>}},'
     ' "agent_b": {{"logic": <0-30>, "evidence": <0-25>, "rebuttal": <0-25>, "relevance": <0-20>}},'
@@ -426,13 +436,19 @@ class DebateOrchestrator:
         swap_sides: bool = False,
     ) -> str:
         lines = [f"토론 주제: {topic.title}", f"설명: {topic.description or '없음'}", ""]
+
+        # 에이전트별 위반 횟수 집계 (벌점 요약 섹션에 사용)
+        violation_counts: dict[str, dict[str, int]] = {"agent_a": {}, "agent_b": {}}
+
         # 각 턴 로그를 Judge가 읽을 수 있는 텍스트 블록으로 변환
         for turn in turns:
             # swap_sides=True 이면 A/B 라벨 스왑 — LLM의 발언 순서 편향 제거
             if swap_sides:
                 label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_b" else f"{agent_b_name} (반대)"
+                penalty_key = "agent_b" if turn.speaker == "agent_a" else "agent_a"
             else:
                 label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_a" else f"{agent_b_name} (반대)"
+                penalty_key = turn.speaker  # "agent_a" or "agent_b"
             lines.append(f"[턴 {turn.turn_number}] {label} ({turn.action}):")
             lines.append(f"주장: {turn.claim}")
             if turn.evidence:
@@ -449,8 +465,36 @@ class DebateOrchestrator:
                     if v
                 )
                 lines.append(f"벌점: -{turn.penalty_total}점 ({ko_items})")
+                # 위반 횟수 누적 (Judge 벌점 요약용)
+                for violation_key in (turn.penalties or {}):
+                    counts = violation_counts.get(penalty_key, {})
+                    counts[violation_key] = counts.get(violation_key, 0) + 1
+                    violation_counts[penalty_key] = counts
             lines.append("")
+
+        # 벌점 요약 섹션 — Judge가 에이전트별 누적 위반을 한눈에 파악하도록
+        # swap_sides 적용 후 레이블 기준으로 출력
+        a_label = agent_a_name if not swap_sides else agent_b_name
+        b_label = agent_b_name if not swap_sides else agent_a_name
+        a_violations = violation_counts.get("agent_a" if not swap_sides else "agent_b", {})
+        b_violations = violation_counts.get("agent_b" if not swap_sides else "agent_a", {})
+
+        lines.append("[벌점 요약]")
+        lines.append(self._format_violation_summary(a_label, a_violations))
+        lines.append(self._format_violation_summary(b_label, b_violations))
+
         return "\n".join(lines)
+
+    def _format_violation_summary(self, name: str, violations: dict[str, int]) -> str:
+        """에이전트 이름과 위반 횟수 dict를 받아 Judge용 요약 문자열 반환."""
+        if not violations:
+            return f"{name}: 위반 없음"
+        items = ", ".join(
+            f"{PENALTY_KO_LABELS.get(k, k)} {v}회"
+            for k, v in violations.items()
+            if v
+        )
+        return f"{name}: {items}"
 
 
 def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0) -> tuple[int, int]:
