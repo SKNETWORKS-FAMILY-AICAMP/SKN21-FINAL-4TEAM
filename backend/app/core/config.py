@@ -102,7 +102,7 @@ class Settings(BaseSettings):
 
     # ── Rate Limiting ─────────────────────────────────────────────────────────
     rate_limit_auth: int = 20           # 인증 엔드포인트 최대 요청 수
-    rate_limit_api: int = 60            # 일반 API 최대 요청 수
+    rate_limit_api: int = 300           # 일반 API 최대 요청 수 (페이지 로드 시 5~10개 동시 요청 고려)
     rate_limit_debate: int = 120        # 토론 엔드포인트 최대 요청 수 (SSE 포함)
     rate_limit_admin: int = 120         # 관리자 API 최대 요청 수
     rate_limit_window: int = 60         # 요청 수 집계 윈도우 (초)
