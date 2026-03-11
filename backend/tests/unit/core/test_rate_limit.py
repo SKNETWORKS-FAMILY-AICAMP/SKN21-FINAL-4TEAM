@@ -48,7 +48,7 @@ class TestGetRateLimitConfig:
 
     def test_api_tier(self):
         limit, window = _get_rate_limit_config("api")
-        assert limit == 60
+        assert limit == 300
         assert window == 60
 
     def test_admin_tier(self):
@@ -58,7 +58,7 @@ class TestGetRateLimitConfig:
 
     def test_unknown_group_falls_back_to_api(self):
         limit, _ = _get_rate_limit_config("unknown_group")
-        assert limit == 60
+        assert limit == 300
 
 
 # ---------------------------------------------------------------------------
@@ -129,13 +129,13 @@ class TestCheckRateLimit:
             allowed, limit, remaining, reset_at = await check_rate_limit("user:abc", "api")
 
         assert allowed is True
-        assert limit == 60
-        assert remaining == 55
+        assert limit == 300
+        assert remaining == 295
         assert reset_at > int(time.time())
 
     @pytest.mark.asyncio
     async def test_blocks_request_at_limit(self):
-        mock_redis = self._make_mock_redis(zcard_count=61)
+        mock_redis = self._make_mock_redis(zcard_count=301)
 
         with patch("app.core.rate_limit.redis_client", mock_redis):
             allowed, limit, remaining, reset_at = await check_rate_limit("ip:10.0.0.1", "api")
@@ -169,9 +169,9 @@ class TestCheckRateLimit:
         allowed, limit = await _check("auth", 21)
         assert not allowed and limit == 20
 
-        # api: 60 limit, 61 requests → blocked
-        allowed, limit = await _check("api", 61)
-        assert not allowed and limit == 60
+        # api: 300 limit, 301 requests → blocked
+        allowed, limit = await _check("api", 301)
+        assert not allowed and limit == 300
 
         # debate: 120 limit, 100 requests → allowed
         allowed, limit = await _check("debate", 100)

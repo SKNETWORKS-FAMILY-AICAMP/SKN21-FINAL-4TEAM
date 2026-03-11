@@ -227,7 +227,13 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   fetchTurns: async (matchId) => {
     try {
       const data = await api.get<TurnLog[]>(`/matches/${matchId}/turns`);
-      set({ turns: data });
+      // turn_number 오름차순, 동점 시 agent_a 먼저 (백엔드 ORDER BY 보완)
+      const sorted = data.sort(
+        (a, b) =>
+          a.turn_number - b.turn_number ||
+          (a.speaker === 'agent_a' ? -1 : 1) - (b.speaker === 'agent_a' ? -1 : 1),
+      );
+      set({ turns: sorted });
     } catch (err) {
       console.error('Failed to fetch turns:', err);
     }
@@ -279,7 +285,11 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         turns:
           turnIdx >= 0
             ? s.turns.map((t, i) => (i === turnIdx ? turn : t))
-            : [...s.turns, turn],
+            : [...s.turns, turn].sort(
+                (a, b) =>
+                  a.turn_number - b.turn_number ||
+                  (a.speaker === 'agent_a' ? -1 : 1) - (b.speaker === 'agent_a' ? -1 : 1),
+              ),
         streamingTurn: s.pendingStreamingTurn,
         pendingStreamingTurn: null,
         nextSpeaker: turn.speaker === 'agent_a' ? 'agent_b' : 'agent_a',

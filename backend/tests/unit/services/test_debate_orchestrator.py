@@ -626,3 +626,82 @@ class TestOrchestratorUnification:
         """OptimizedDebateOrchestrator 클래스가 더 이상 존재하지 않는다."""
         import app.services.debate.orchestrator as mod
         assert not hasattr(mod, "OptimizedDebateOrchestrator")
+
+
+class TestFormatDebateLog:
+    """_format_debate_log 벌점 요약 섹션 검증."""
+
+    def _make_turn(
+        self,
+        turn_number: int,
+        speaker: str,
+        claim: str,
+        penalties: dict | None = None,
+        penalty_total: int = 0,
+    ) -> MagicMock:
+        turn = MagicMock()
+        turn.turn_number = turn_number
+        turn.speaker = speaker
+        turn.claim = claim
+        turn.evidence = None
+        turn.action = "argue"
+        turn.review_result = None
+        turn.penalties = penalties or {}
+        turn.penalty_total = penalty_total
+        return turn
+
+    def test_no_violations_shows_no_violations(self):
+        """위반 없는 경우 벌점 요약에 '위반 없음'이 표시된다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turns = [
+            self._make_turn(1, "agent_a", "AI는 발전해야 한다"),
+            self._make_turn(2, "agent_b", "AI 발전은 위험하다"),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "[벌점 요약]" in log
+        assert "에이전트A: 위반 없음" in log
+        assert "에이전트B: 위반 없음" in log
+
+    def test_schema_violations_aggregated_per_agent(self):
+        """JSON 형식 위반이 여러 번 발생하면 에이전트별로 누적 집계된다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turns = [
+            self._make_turn(1, "agent_a", "주장A1", {"schema_violation": 5}, 5),
+            self._make_turn(2, "agent_b", "주장B1"),
+            self._make_turn(3, "agent_a", "주장A2", {"schema_violation": 5}, 5),
+            self._make_turn(4, "agent_b", "주장B2"),
+            self._make_turn(5, "agent_a", "주장A3", {"schema_violation": 5}, 5),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "[벌점 요약]" in log
+        assert "에이전트A" in log
+        assert "JSON 형식 위반 3회" in log
+        assert "에이전트B: 위반 없음" in log
+
+    def test_swap_sides_correctly_assigns_violations(self):
+        """swap_sides=True이면 A/B 라벨이 뒤바뀐 상태로 위반 집계가 일치한다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        # agent_a가 위반 — swap_sides=True이면 에이전트B 라벨로 출력돼야 함
+        turns = [
+            self._make_turn(1, "agent_a", "주장A", {"schema_violation": 5}, 5),
+            self._make_turn(2, "agent_b", "주장B"),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B", swap_sides=True)
+
+        assert "[벌점 요약]" in log
+        # swap 시 agent_a → 에이전트B 라벨
+        assert "에이전트B" in log

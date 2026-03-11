@@ -37,6 +37,15 @@ fi
 
 COMPOSE_CMD="docker compose -p $PROJECT_NAME -f $COMPOSE_FILE --env-file $ENV_FILE"
 
+# 스크립트 내 모든 docker compose 호출이 반드시 -p $PROJECT_NAME을 포함하는지 보장하기 위해
+# raw `docker compose` 직접 호출을 금지하는 alias — 실수로 프로젝트명 없이 호출 시 즉시 오류
+docker() {
+  if [ "$1" = "compose" ] && [ "$2" != "-p" ] && [ "$2" != "--project-name" ]; then
+    err "docker compose 직접 호출 금지. 반드시 \$COMPOSE_CMD 변수를 사용하세요. (프로젝트 격리 보장)"
+  fi
+  command docker "$@"
+}
+
 # ────────────────────────────────────────────────────────────
 # 함수 정의
 # ────────────────────────────────────────────────────────────
