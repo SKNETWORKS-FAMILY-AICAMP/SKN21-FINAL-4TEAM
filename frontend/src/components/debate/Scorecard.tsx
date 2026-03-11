@@ -21,6 +21,58 @@ type Props = {
   penaltyB: number;
 };
 
+const REASONING_LABELS: { key: string; label: string; emoji: string }[] = [
+  { key: 'logic', label: '논리성', emoji: '🧠' },
+  { key: 'evidence', label: '근거 활용', emoji: '📚' },
+  { key: 'rebuttal', label: '반박력', emoji: '⚔️' },
+  { key: 'relevance', label: '주제 적합성', emoji: '🎯' },
+];
+
+function parseReasoning(text: string): { key: string; label: string; emoji: string; body: string }[] {
+  const result: { key: string; label: string; emoji: string; body: string }[] = [];
+
+  for (let i = 0; i < REASONING_LABELS.length; i++) {
+    const { key, label, emoji } = REASONING_LABELS[i];
+    const nextKey = REASONING_LABELS[i + 1]?.key;
+
+    // "logic:" 또는 "logic :" 패턴 매칭
+    const startRe = new RegExp(`${key}\\s*:`, 'i');
+    const startMatch = text.match(startRe);
+    if (!startMatch || startMatch.index === undefined) continue;
+
+    const bodyStart = startMatch.index + startMatch[0].length;
+    let bodyEnd = text.length;
+    if (nextKey) {
+      const endRe = new RegExp(`${nextKey}\\s*:`, 'i');
+      const endMatch = text.slice(bodyStart).match(endRe);
+      if (endMatch && endMatch.index !== undefined) {
+        bodyEnd = bodyStart + endMatch.index;
+      }
+    }
+
+    result.push({ key, label, emoji, body: text.slice(bodyStart, bodyEnd).trim() });
+  }
+
+  // 파싱 실패 시 원문 그대로
+  return result.length > 0 ? result : [{ key: 'full', label: '판정', emoji: '⚖️', body: text }];
+}
+
+function ReasoningBlock({ reasoning }: { reasoning: string }) {
+  const sections = parseReasoning(reasoning);
+  return (
+    <div className="space-y-3">
+      {sections.map(({ key, label, emoji, body }) => (
+        <div key={key}>
+          <p className="text-[10px] font-semibold text-gray-400 mb-1">
+            {emoji} {label}
+          </p>
+          <p className="text-xs text-gray-300 leading-relaxed pl-1">{body}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const CRITERIA: { key: string; label: string; max: number; emoji: string }[] = [
   { key: 'logic', label: '논리성', max: 30, emoji: '🧠' },
   { key: 'evidence', label: '근거 활용', max: 25, emoji: '📚' },
@@ -191,10 +243,10 @@ export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props
 
       {/* 판정 이유 */}
       <div className="mx-5 mb-5 px-4 py-3 bg-bg rounded-xl border border-border">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1.5">
+        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
           심판 판정 이유
         </p>
-        <p className="text-xs text-gray-300 leading-relaxed">{data.reasoning}</p>
+        <ReasoningBlock reasoning={data.reasoning} />
       </div>
     </div>
   );
