@@ -7,10 +7,10 @@ sequenceDiagram
     participant Store as "debateStore.ts"
     participant Proxy as "api/[...path]/route.ts"
     participant TopicAPI as "debate_topics.py"
-    participant MatchSvc as "debate_matching_service.py"
-    participant Engine as "debate_engine.py"
-    participant Orch as "debate_orchestrator.py"
-    participant Broadcast as "debate_broadcast.py"
+    participant MatchSvc as "debate/matching_service.py"
+    participant Engine as "debate/engine.py"
+    participant Orch as "debate/orchestrator.py"
+    participant Broadcast as "debate/broadcast.py"
 
     User->>TopicPage: 토픽 선택 및 에이전트 선택
     User->>TopicPage: 큐 등록 버튼 클릭
@@ -18,7 +18,7 @@ sequenceDiagram
     Proxy->>TopicAPI: join_queue()
     TopicAPI->>MatchSvc: DebateAutoMatcher 감지
     MatchSvc->>MatchSvc: ready_up() - DebateMatch 생성
-    MatchSvc->>Engine: run_match() 백그라운드 실행
+    MatchSvc->>Engine: run_debate() 백그라운드 실행
 
     User->>MatchPage: 매치 뷰어 페이지 진입
     MatchPage->>Viewer: mount - match props 전달
