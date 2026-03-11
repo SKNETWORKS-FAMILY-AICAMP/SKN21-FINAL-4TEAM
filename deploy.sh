@@ -35,7 +35,7 @@ else
   PROJECT_NAME="chatbot"
 fi
 
-COMPOSE_CMD="docker compose -p $PROJECT_NAME -f $COMPOSE_FILE"
+COMPOSE_CMD="docker compose -p $PROJECT_NAME -f $COMPOSE_FILE --env-file $ENV_FILE"
 
 # ────────────────────────────────────────────────────────────
 # 함수 정의
