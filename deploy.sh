@@ -18,7 +18,12 @@ MODE="${1:-fresh}"
 ENV="${2:-prod}"
 
 # 환경별 설정
-if [ "$ENV" = "dev" ]; then
+if [ "$ENV" = "staging" ]; then
+  REPO_DIR="/opt/chatbot"
+  COMPOSE_FILE="docker-compose.staging.yml"
+  ENV_FILE=".env.staging"
+  PROJECT_NAME="chatbot-staging"
+elif [ "$ENV" = "dev" ]; then
   REPO_DIR="/opt/chatbot"
   COMPOSE_FILE="docker-compose.dev.yml"
   ENV_FILE=".env.dev"
@@ -187,7 +192,9 @@ else
 
   log ""
   log "=== 배포 완료 (환경: $ENV) ==="
-  if [ "$ENV" = "dev" ]; then
+  if [ "$ENV" = "staging" ]; then
+    log "스테이징 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'EC2_IP'):8080"
+  elif [ "$ENV" = "dev" ]; then
     log "개발 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'DEV_EC2_IP'):8080"
   else
     log "운영 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'PROD_EC2_IP')"

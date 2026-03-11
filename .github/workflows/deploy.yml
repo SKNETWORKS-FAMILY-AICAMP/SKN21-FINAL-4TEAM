@@ -15,36 +15,37 @@ concurrency:
   cancel-in-progress: true  # 연속 push 시 이전 배포 취소
 
 jobs:
-  deploy-dev:
-    name: Deploy → Dev
+  deploy-staging:
+    name: Deploy → Staging
     runs-on: ubuntu-latest
     if: github.ref_name == 'develop'
-    environment: development    # GitHub 환경 보호 규칙 적용 가능
+    environment: staging
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Dev EC2
+      - name: Deploy to Staging (port 8080)
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DEV_EC2_IP }}
+          host: ${{ secrets.PROD_EC2_IP }}
           username: ubuntu
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           script_stop: true
           script: |
             set -e
-            echo "=== [DEV] 배포 시작: $(date) ==="
+            echo "=== [STAGING] 배포 시작: $(date) ==="
             cd /opt/chatbot
 
             # 최신 코드 pull
             git fetch origin develop
             git reset --hard origin/develop
 
-            # 코드 업데이트 배포 (dev 환경)
-            bash deploy.sh update dev
+            # staging 환경 배포 (포트 8080, 별도 볼륨)
+            bash deploy.sh update staging
 
-            echo "=== [DEV] 배포 완료: $(date) ==="
+            echo "=== [STAGING] 배포 완료: $(date) ==="
+            echo "스테이징 URL: http://$(curl -s ifconfig.me):8080"
 
   deploy-prod:
     name: Deploy → Prod
