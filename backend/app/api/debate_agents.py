@@ -304,15 +304,28 @@ async def get_agent(
 ) -> AgentResponse | AgentPublicResponse:
     """소유자는 전체 응답, 비소유자는 공개 응답만 반환.
     is_system_prompt_public=True이면 비소유자에게도 최신 버전의 system_prompt 포함.
+    follower_count, is_following은 상세 조회에서만 포함 (목록 API N+1 방지).
     """
+    from app.services.follow_service import FollowService
+
     service = DebateAgentService(db)
     agent = await service.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    follow_svc = FollowService(db)
+    follower_count = await follow_svc.get_follower_count("agent", agent.id)
+    is_following = await follow_svc.is_following(user.id, "agent", agent.id)
+
     if agent.owner_id == user.id:
-        return _agent_response(agent)
+        resp = _agent_response(agent)
+        resp.follower_count = follower_count
+        resp.is_following = is_following
+        return resp
 
     resp = AgentPublicResponse.model_validate(agent)
+    resp.follower_count = follower_count
+    resp.is_following = is_following
     if agent.is_system_prompt_public:
         latest_version = await service.get_latest_version(agent_id)
         if latest_version:

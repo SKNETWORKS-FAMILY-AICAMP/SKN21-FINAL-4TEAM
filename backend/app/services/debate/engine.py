@@ -814,6 +814,14 @@ async def run_debate(match_id: str) -> None:
     engine = create_async_engine(settings.database_url, echo=False)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+    async with session_factory() as notify_db:
+        try:
+            from app.services.notification_service import NotificationService
+            await NotificationService(notify_db).notify_match_event(match_id, "match_started")
+            await notify_db.commit()
+        except Exception:
+            logger.warning("Start notification failed for match %s", match_id, exc_info=True)
+
     async with session_factory() as db:
         try:
             await _execute_match(db, match_id)
@@ -845,6 +853,15 @@ async def run_debate(match_id: str) -> None:
             except Exception:
                 logger.error("Failed to mark match %s as error in DB", match_id)
             await publish_event(match_id, "error", {"message": str(exc)})
+        else:
+            # 정상 완료 후 매치 종료 알림 — 핵심 경로 세션과 별도 세션 사용
+            async with session_factory() as notify_db:
+                try:
+                    from app.services.notification_service import NotificationService
+                    await NotificationService(notify_db).notify_match_event(match_id, "match_finished")
+                    await notify_db.commit()
+                except Exception:
+                    logger.warning("Finish notification failed for match %s", match_id, exc_info=True)
         finally:
             await engine.dispose()
 
