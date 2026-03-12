@@ -310,6 +310,58 @@ def _apply_review_to_turn(
 
 # ── 몰수패 처리 ───────────────────────────────────────────────────────────────
 
+async def _settle_forfeit(
+    db: AsyncSession,
+    match: DebateMatch,
+    agent_a: DebateAgent,
+    agent_b: DebateAgent,
+    elo_result: str,
+    result_a: str,
+    result_b: str,
+    version_a_id: str | None = None,
+    version_b_id: str | None = None,
+) -> tuple[float, float]:
+    """부전패 공통 후처리: ELO + 에이전트 전적 갱신 + 시즌 ELO + 승급전 결과 반영.
+
+    is_test=True이면 모든 갱신을 건너뜀.
+    Returns: (new_a_elo, new_b_elo)
+    """
+    from app.services.debate.promotion_service import DebatePromotionService
+    from app.services.debate.season_service import DebateSeasonService
+
+    new_a, new_b = calculate_elo(
+        agent_a.elo_rating, agent_b.elo_rating, elo_result,
+        score_diff=settings.debate_elo_forfeit_score_diff,
+    )
+
+    if match.is_test:
+        return new_a, new_b
+
+    agent_service = DebateAgentService(db)
+    await agent_service.update_elo(str(agent_a.id), new_a, result_a, version_a_id)
+    await agent_service.update_elo(str(agent_b.id), new_b, result_b, version_b_id)
+
+    if match.season_id:
+        season_svc = DebateSeasonService(db)
+        stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
+        stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
+        s_new_a, s_new_b = calculate_elo(
+            stats_a.elo_rating, stats_b.elo_rating, elo_result,
+            score_diff=settings.debate_elo_forfeit_score_diff,
+        )
+        await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), s_new_a, result_a)
+        await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), s_new_b, result_b)
+
+    promo_svc = DebatePromotionService(db)
+    for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
+        active = await promo_svc.get_active_series(str(agent_obj.id))
+        if active:
+            series_result = await promo_svc.record_match_result(str(active.id), res)
+            await publish_event(str(match.id), "series_update", series_result)
+
+    return new_a, new_b
+
+
 async def _handle_forfeit(
     db: AsyncSession,
     match: DebateMatch,
@@ -318,50 +370,25 @@ async def _handle_forfeit(
     side: str,  # "agent_a" or "agent_b"
 ) -> None:
     """몰수패 처리 — 상태 갱신, ELO 계산, 이벤트 발행."""
-    from app.services.debate.season_service import DebateSeasonService
-
     match.status = "forfeit"
     match.finished_at = datetime.now(UTC)
     match.winner_id = winner_agent.id
     await db.commit()
 
-    loser_result = "loss"
-    winner_result = "win"
-    elo_outcome = "b_win" if side == "agent_a" else "a_win"
-    new_loser_elo, new_winner_elo = calculate_elo(
-        loser_agent.elo_rating,
-        winner_agent.elo_rating,
-        elo_outcome,
-        score_diff=settings.debate_elo_forfeit_score_diff,
+    if side == "agent_a":
+        agent_a_obj, agent_b_obj = loser_agent, winner_agent
+        elo_result, result_a, result_b = "b_win", "loss", "win"
+    else:
+        agent_a_obj, agent_b_obj = winner_agent, loser_agent
+        elo_result, result_a, result_b = "a_win", "win", "loss"
+
+    version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
+    version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
+
+    await _settle_forfeit(
+        db, match, agent_a_obj, agent_b_obj, elo_result, result_a, result_b,
+        version_a_id, version_b_id,
     )
-
-    # 테스트 매치는 ELO와 시즌 전적 갱신을 건너뜀 — 랭킹 오염 방지
-    if not match.is_test:
-        agent_service = DebateAgentService(db)
-        await agent_service.update_elo(str(loser_agent.id), new_loser_elo, loser_result)
-        await agent_service.update_elo(str(winner_agent.id), new_winner_elo, winner_result)
-
-        # 활성 시즌 매치인 경우 시즌 ELO도 별도 갱신 (누적 ELO와 독립적)
-        if match.season_id:
-            season_svc = DebateSeasonService(db)
-            stats_loser = await season_svc.get_or_create_season_stats(
-                str(loser_agent.id), str(match.season_id)
-            )
-            stats_winner = await season_svc.get_or_create_season_stats(
-                str(winner_agent.id), str(match.season_id)
-            )
-            s_loser_new, s_winner_new = calculate_elo(
-                stats_loser.elo_rating,
-                stats_winner.elo_rating,
-                elo_outcome,
-                score_diff=settings.debate_elo_forfeit_score_diff,
-            )
-            await season_svc.update_season_stats(
-                str(loser_agent.id), str(match.season_id), s_loser_new, loser_result
-            )
-            await season_svc.update_season_stats(
-                str(winner_agent.id), str(match.season_id), s_winner_new, winner_result
-            )
 
     await db.commit()
     await publish_event(str(match.id), "forfeit", {
@@ -389,22 +416,16 @@ async def _finalize_forfeit(
     from app.services.debate.match_service import DebateMatchService
 
     if forfeited_speaker == "agent_a":
-        forfeit_winner = agent_b
-        forfeit_loser = agent_a
+        forfeit_winner, forfeit_loser = agent_b, agent_a
         score_a, score_b = 0, 100
-        elo_result = "b_win"
+        elo_result, result_a, result_b = "b_win", "loss", "win"
     else:
-        forfeit_winner = agent_a
-        forfeit_loser = agent_b
+        forfeit_winner, forfeit_loser = agent_a, agent_b
         score_a, score_b = 100, 0
-        elo_result = "a_win"
+        elo_result, result_a, result_b = "a_win", "win", "loss"
 
     elo_a_before = agent_a.elo_rating
     elo_b_before = agent_b.elo_rating
-    new_a, new_b = calculate_elo(
-        elo_a_before, elo_b_before, elo_result,
-        score_diff=settings.debate_elo_forfeit_score_diff,
-    )
 
     match.status = "completed"
     match.finished_at = datetime.now(UTC)
@@ -412,32 +433,13 @@ async def _finalize_forfeit(
     match.score_a = score_a
     match.score_b = score_b
 
-    agent_service = DebateAgentService(db)
-    result_a = "win" if elo_result == "a_win" else "loss"
-    result_b = "win" if elo_result == "b_win" else "loss"
+    version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
+    version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
-    if not match.is_test:
-        await agent_service.update_elo(
-            str(agent_a.id), new_a, result_a,
-            str(match.agent_a_version_id) if match.agent_a_version_id else None,
-        )
-        await agent_service.update_elo(
-            str(agent_b.id), new_b, result_b,
-            str(match.agent_b_version_id) if match.agent_b_version_id else None,
-        )
-
-        # 활성 시즌 매치인 경우 시즌 ELO도 별도 갱신 (누적 ELO와 독립적)
-        if match.season_id:
-            from app.services.debate.season_service import DebateSeasonService
-            season_svc = DebateSeasonService(db)
-            stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
-            stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
-            season_new_a, season_new_b = calculate_elo(
-                stats_a.elo_rating, stats_b.elo_rating, elo_result,
-                score_diff=settings.debate_elo_forfeit_score_diff,
-            )
-            await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), season_new_a, result_a)
-            await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), season_new_b, result_b)
+    new_a, new_b = await _settle_forfeit(
+        db, match, agent_a, agent_b, elo_result, result_a, result_b,
+        version_a_id, version_b_id,
+    )
 
     await db.execute(
         update(DebateMatch)
@@ -461,6 +463,7 @@ async def _finalize_forfeit(
         "elo_a_after": new_a,
         "elo_b_before": elo_b_before,
         "elo_b_after": new_b,
+        # 하위 호환: 기존 필드명도 함께 포함
         "elo_a": new_a,
         "elo_b": new_b,
     })
@@ -778,18 +781,19 @@ async def _run_turn_loop(
                 )
                 await _publish_review_event(str(match.id), turn_num, "agent_a", review_a)
             else:
-                # 리뷰 비활성: B 순차 실행
+                # 리뷰 비활성: B 순차 실행. B 실행 시간을 딜레이에서 차감해 review-enabled와 동일한 속도 보장
+                b_exec_start = time.monotonic()
                 turn_b = await _execute_turn_with_retry(
                     db, client, match, topic, turn_num, "agent_b",
                     agent_b, version_b, key_b, claims_b, claims_a,
                     my_accumulated_penalty=total_penalty_b,
                 )
+                review_elapsed = time.monotonic() - b_exec_start
                 if turn_b is None:
                     raise ForfeitError(forfeited_speaker="agent_b")
                 total_penalty_b += turn_b.penalty_total
                 claims_b.append(turn_b.claim)
                 await _publish_turn_event(str(match.id), turn_b)
-                review_elapsed = 0.0
 
             # 라운드 사이 딜레이 (마지막 제외)
             if turn_num < topic.max_turns:
