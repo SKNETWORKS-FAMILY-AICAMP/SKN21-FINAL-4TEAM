@@ -565,11 +565,38 @@ async def _finalize_match(
         promo_svc = DebatePromotionService(db)
         series_updates: list[dict] = []
         # 양쪽 에이전트 각각 활성 승급전/강등전 시리즈 확인 후 결과 기록
-        for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
+        for agent_obj, res, elo_after in [(agent_a, result_a, new_a), (agent_b, result_b, new_b)]:
             active = await promo_svc.get_active_series(str(agent_obj.id))
             if active:
                 series_result = await promo_svc.record_match_result(str(active.id), res)
                 series_updates.append(series_result)
+                # 시리즈 완료 후 같은 매치의 ELO로 새 시리즈 트리거 기회 제공 (최대 1회)
+                # 드물게 단일 매치에서 ELO가 두 티어 경계를 동시에 넘는 경우 감지
+                if series_result.get("status") in ("won", "lost", "expired"):
+                    post_tier = series_result.get("new_tier") or agent_obj.tier
+                    if series_result.get("tier_changed") and series_result["series_type"] == "promotion":
+                        post_protection = 3
+                    elif series_result["series_type"] == "demotion" and series_result["status"] == "won":
+                        post_protection = 1
+                    else:
+                        post_protection = 0
+                    new_series = await promo_svc.check_and_trigger(
+                        str(agent_obj.id), 0, int(elo_after), post_tier, post_protection,
+                    )
+                    if new_series:
+                        series_updates.append({
+                            "series_id": str(new_series.id),
+                            "series_type": new_series.series_type,
+                            "status": new_series.status,
+                            "current_wins": 0,
+                            "current_losses": 0,
+                            "draw_count": 0,
+                            "required_wins": new_series.required_wins,
+                            "from_tier": new_series.from_tier,
+                            "to_tier": new_series.to_tier,
+                            "tier_changed": False,
+                            "new_tier": None,
+                        })
 
         for su in series_updates:
             await publish_event(str(match.id), "series_update", su)
@@ -1096,9 +1123,12 @@ async def _run_match_with_client(
     # 멀티 에이전트 포맷 분기 — 1v1이 아닌 경우 _execute_multi_and_finalize로 위임 후 반환
     match_format = getattr(match, "format", "1v1")
     if match_format != "1v1":
-        await _execute_multi_and_finalize(
-            match, topic, db, client, orchestrator, agent_a, agent_b
-        )
+        try:
+            await _execute_multi_and_finalize(
+                match, topic, db, client, orchestrator, agent_a, agent_b
+            )
+        except ForfeitError as forfeit:
+            await _finalize_forfeit(db, match, agent_a, agent_b, forfeit.forfeited_speaker)
         return
 
     try:
@@ -1517,11 +1547,13 @@ async def _execute_multi_and_finalize(
             ver_a = versions_cache.get(str(a_part.version_id)) if a_part.version_id else None
             ver_b = versions_cache.get(str(b_part.version_id)) if b_part.version_id else None
 
-            turn_a = await _execute_turn(
+            turn_a = await _execute_turn_with_retry(
                 db, client, match, topic, turn_num, "agent_a",
                 multi_agent_a, ver_a, key_a, claims_a, claims_b,
                 my_accumulated_penalty=total_penalty_a,
             )
+            if turn_a is None:
+                raise ForfeitError(forfeited_speaker="agent_a")
             total_penalty_a += turn_a.penalty_total
 
             if settings.debate_turn_review_enabled:
@@ -1555,11 +1587,13 @@ async def _execute_multi_and_finalize(
                 "penalty_total": turn_a.penalty_total,
             })
 
-            turn_b = await _execute_turn(
+            turn_b = await _execute_turn_with_retry(
                 db, client, match, topic, turn_num, "agent_b",
                 multi_agent_b, ver_b, key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
             )
+            if turn_b is None:
+                raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
 
             if settings.debate_turn_review_enabled:

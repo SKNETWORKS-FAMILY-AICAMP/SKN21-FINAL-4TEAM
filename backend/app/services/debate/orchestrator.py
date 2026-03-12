@@ -257,6 +257,7 @@ class DebateOrchestrator:
         if self.optimized:
             model_id = settings.debate_review_model or settings.debate_orchestrator_model
         else:
+            # 비활성 롤백 경로: DEBATE_ORCHESTRATOR_OPTIMIZED=false 로 다운그레이드 시 활성화
             model_id = settings.debate_turn_review_model or settings.debate_orchestrator_model
         user_content = (
             f"토론 주제: {topic}\n"
@@ -377,10 +378,14 @@ class DebateOrchestrator:
                 "agent_b": half_scores,
                 "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
             }
-        # 기본 점수 합산 — 폴백 scorecard가 half_scores dict임을 보장받았지만
-        # 방어적으로 isinstance 가드를 통해 sum 호출 시 TypeError 방지
-        score_a = sum(scorecard.get("agent_a", {}).values()) if isinstance(scorecard.get("agent_a"), dict) else 0
-        score_b = sum(scorecard.get("agent_b", {}).values()) if isinstance(scorecard.get("agent_b"), dict) else 0
+        # Judge 반환 점수를 SCORING_CRITERIA 범위로 클램핑 — LLM 오버슈팅 방어
+        for key, max_val in SCORING_CRITERIA.items():
+            scorecard["agent_a"][key] = max(0, min(scorecard["agent_a"].get(key, 0), max_val))
+            scorecard["agent_b"][key] = max(0, min(scorecard["agent_b"].get(key, 0), max_val))
+
+        # 기본 점수 합산
+        score_a = sum(scorecard["agent_a"].values())
+        score_b = sum(scorecard["agent_b"].values())
 
         # 벌점 차감
         penalty_a = match.penalty_a
@@ -420,7 +425,7 @@ class DebateOrchestrator:
         model_id = (
             settings.debate_judge_model or settings.debate_orchestrator_model
             if self.optimized
-            else settings.debate_orchestrator_model
+            else settings.debate_orchestrator_model  # 비활성 롤백 경로
         )
         return await self._judge_with_model(
             match, turns, topic, agent_a_name, agent_b_name,
