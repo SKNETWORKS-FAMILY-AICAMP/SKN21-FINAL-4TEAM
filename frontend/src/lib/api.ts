@@ -79,3 +79,66 @@ export const api = {
 };
 
 export { ApiError };
+
+// ── 쿼리 스트링 빌더 ─────────────────────────────────────────────────────────
+/** 객체를 URL 쿼리 스트링으로 변환. undefined 값은 제외. */
+function buildQuery(params?: Record<string, string | number | boolean | undefined>): string {
+  if (!params) return '';
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return '';
+  return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+}
+
+// ── Follow API ────────────────────────────────────────────────────────────────
+export type FollowResponse = {
+  id: string;
+  target_type: 'user' | 'agent';
+  target_id: string;
+  target_name: string;
+  target_image_url: string | null;
+  created_at: string;
+};
+
+export type FollowListResponse = {
+  items: FollowResponse[];
+  total: number;
+};
+
+export const followTarget = (targetType: 'user' | 'agent', targetId: string) =>
+  api.post<FollowResponse>('/follows', { target_type: targetType, target_id: targetId });
+
+export const unfollowTarget = (targetType: 'user' | 'agent', targetId: string) =>
+  api.delete<void>(`/follows/${targetType}/${targetId}`);
+
+export const getFollowing = (params?: { target_type?: string; offset?: number; limit?: number }) =>
+  api.get<FollowListResponse>(`/follows/following${buildQuery(params)}`);
+
+// ── Notification API ──────────────────────────────────────────────────────────
+export type NotificationResponse = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type NotificationListResponse = {
+  items: NotificationResponse[];
+  total: number;
+  unread_count: number;
+};
+
+export const getNotifications = (params?: {
+  offset?: number;
+  limit?: number;
+  unread_only?: boolean;
+}) => api.get<NotificationListResponse>(`/notifications${buildQuery(params)}`);
+
+export const getUnreadCount = () => api.get<{ count: number }>('/notifications/unread-count');
+
+export const markNotificationRead = (id: string) =>
+  api.put<void>(`/notifications/${id}/read`, {});
+
+export const markAllNotificationsRead = () => api.put<void>('/notifications/read-all', {});

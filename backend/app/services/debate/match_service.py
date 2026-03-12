@@ -320,6 +320,17 @@ class DebateMatchService:
         )
         await self.db.commit()
 
+        # 예측 결과 알림 — 핵심 경로 세션 커밋 완료 후 별도 세션으로 발송
+        from app.core.database import async_session
+
+        async with async_session() as notify_db:
+            try:
+                from app.services.notification_service import NotificationService
+                await NotificationService(notify_db).notify_prediction_result(match_id)
+                await notify_db.commit()
+            except Exception:
+                logger.warning("Prediction notification failed for match %s", match_id, exc_info=True)
+
     async def get_summary_status(self, match_id: str) -> dict:
         """요약 리포트 상태 조회. unavailable / generating / ready 반환."""
         result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))

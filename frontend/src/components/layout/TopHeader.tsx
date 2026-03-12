@@ -1,8 +1,9 @@
 'use client';
 
-import { Search, Bell, Sun, Moon } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 
 export function TopHeader() {
   const { user } = useUserStore();
@@ -44,9 +45,7 @@ export function TopHeader() {
         </button>
 
         {/* 알림 */}
-        <button className="p-2 rounded-full bg-bg border border-border text-text-muted hover:text-text transition-colors cursor-pointer">
-          <Bell size={16} />
-        </button>
+        <NotificationBell />
 
         {/* 유저 아바타 */}
         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold select-none">

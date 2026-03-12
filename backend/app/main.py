@@ -8,20 +8,20 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.core.exceptions import AppError
-
 from app.api import (
     auth,
+    follows,
     health,
     models,
+    notifications,
     uploads,
     usage,
 )
 from app.api.admin.debate import agents as admin_debate_agents
 from app.api.admin.debate import matches as admin_debate_matches
 from app.api.admin.debate import seasons as admin_debate_seasons
-from app.api.admin.debate import topics as admin_debate_topics
 from app.api.admin.debate import templates as admin_debate_templates
+from app.api.admin.debate import topics as admin_debate_topics
 from app.api.admin.debate import tournaments as admin_debate_tournaments
 from app.api.admin.system import llm_models as admin_llm_models
 from app.api.admin.system import monitoring as admin_monitoring
@@ -29,6 +29,7 @@ from app.api.admin.system import usage as admin_usage
 from app.api.admin.system import users as admin_users
 from app.core.config import settings
 from app.core.database import engine
+from app.core.exceptions import AppError
 from app.core.observability import flush_langfuse, init_sentry, setup_prometheus
 from app.core.rate_limit import RateLimitMiddleware
 
@@ -133,6 +134,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(models.router, prefix="/api/models", tags=["models"])
 app.include_router(usage.router, prefix="/api/usage", tags=["usage"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
+app.include_router(follows.router, prefix="/api/follows", tags=["follows"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 
 # Debate routes (feature flag)
 if settings.debate_enabled:

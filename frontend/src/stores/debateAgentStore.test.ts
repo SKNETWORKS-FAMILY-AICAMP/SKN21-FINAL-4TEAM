@@ -12,6 +12,39 @@ vi.mock('@/lib/api', () => ({
 
 import { api } from '@/lib/api';
 
+/** 테스트용 에이전트 목 팩토리 */
+function makeAgent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'a1',
+    owner_id: 'u1',
+    name: 'Agent 1',
+    description: null,
+    provider: 'openai',
+    model_id: 'gpt-4o',
+    image_url: null,
+    elo_rating: 1500,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    is_active: true,
+    is_connected: false,
+    is_system_prompt_public: false,
+    use_platform_credits: false,
+    tier: 'Iron',
+    tier_protection_count: 0,
+    active_series_id: null,
+    is_profile_public: true,
+    name_changed_at: null,
+    template_id: null,
+    customizations: null,
+    follower_count: 0,
+    is_following: false,
+    created_at: '2026-01-01',
+    updated_at: '2026-01-01',
+    ...overrides,
+  };
+}
+
 describe('debateAgentStore', () => {
   beforeEach(() => {
     useDebateAgentStore.setState({ agents: [], loading: false });
@@ -19,34 +52,7 @@ describe('debateAgentStore', () => {
   });
 
   it('fetchMyAgents should update agents state', async () => {
-    const mockAgents = [
-      {
-        id: 'a1',
-        owner_id: 'u1',
-        name: 'Agent 1',
-        description: null,
-        provider: 'openai',
-        model_id: 'gpt-4o',
-        image_url: null,
-        elo_rating: 1500,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        is_active: true,
-        is_connected: false,
-        is_system_prompt_public: false,
-        use_platform_credits: false,
-        tier: 'Iron',
-        tier_protection_count: 0,
-        active_series_id: null,
-        is_profile_public: true,
-        name_changed_at: null,
-        template_id: null,
-        customizations: null,
-        created_at: '2026-01-01',
-        updated_at: '2026-01-01',
-      },
-    ];
+    const mockAgents = [makeAgent({ name: 'Agent 1' })];
 
     vi.mocked(api.get).mockResolvedValueOnce(mockAgents);
 
@@ -59,31 +65,12 @@ describe('debateAgentStore', () => {
   });
 
   it('createAgent should add agent to state', async () => {
-    const newAgent = {
+    const newAgent = makeAgent({
       id: 'a2',
-      owner_id: 'u1',
       name: 'New Agent',
-      description: null,
       provider: 'anthropic',
       model_id: 'claude-sonnet-4-5-20250929',
-      image_url: null,
-      elo_rating: 1500,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      is_active: true,
-      is_connected: false,
-      is_system_prompt_public: false,
-      use_platform_credits: false,
-      tier: 'Iron',
-      tier_protection_count: 0,
-      is_profile_public: true,
-      name_changed_at: null,
-      template_id: null,
-      customizations: null,
-      created_at: '2026-01-01',
-      updated_at: '2026-01-01',
-    };
+    });
 
     vi.mocked(api.post).mockResolvedValueOnce(newAgent);
 
@@ -100,42 +87,9 @@ describe('debateAgentStore', () => {
   });
 
   it('updateAgent should update agent in state', async () => {
-    // 초기 상태 설정
-    useDebateAgentStore.setState({
-      agents: [
-        {
-          id: 'a1',
-          owner_id: 'u1',
-          name: 'Old Name',
-          description: null,
-          provider: 'openai',
-          model_id: 'gpt-4o',
-          image_url: null,
-          elo_rating: 1500,
-          wins: 0,
-          losses: 0,
-          draws: 0,
-          is_active: true,
-          is_connected: false,
-          is_system_prompt_public: false,
-          use_platform_credits: false,
-          tier: 'Iron',
-          tier_protection_count: 0,
-        active_series_id: null,
-          is_profile_public: true,
-          name_changed_at: null,
-          template_id: null,
-          customizations: null,
-          created_at: '2026-01-01',
-          updated_at: '2026-01-01',
-        },
-      ],
-    });
+    useDebateAgentStore.setState({ agents: [makeAgent({ id: 'a1', name: 'Old Name' })] });
 
-    const updated = {
-      ...useDebateAgentStore.getState().agents[0],
-      name: 'Updated Name',
-    };
+    const updated = { ...useDebateAgentStore.getState().agents[0], name: 'Updated Name' };
 
     vi.mocked(api.put).mockResolvedValueOnce(updated);
 
@@ -145,31 +99,12 @@ describe('debateAgentStore', () => {
   });
 
   it('createAgent should work for local provider without api_key', async () => {
-    const localAgent = {
+    const localAgent = makeAgent({
       id: 'a3',
-      owner_id: 'u1',
       name: 'Local Agent',
-      description: null,
       provider: 'local',
       model_id: 'custom',
-      image_url: null,
-      elo_rating: 1500,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      is_active: true,
-      is_connected: false,
-      is_system_prompt_public: false,
-      use_platform_credits: false,
-      tier: 'Iron',
-      tier_protection_count: 0,
-      is_profile_public: true,
-      name_changed_at: null,
-      template_id: null,
-      customizations: null,
-      created_at: '2026-01-01',
-      updated_at: '2026-01-01',
-    };
+    });
 
     vi.mocked(api.post).mockResolvedValueOnce(localAgent);
 
@@ -192,58 +127,8 @@ describe('debateAgentStore', () => {
   it('deleteAgent should remove agent from state', async () => {
     useDebateAgentStore.setState({
       agents: [
-        {
-          id: 'a1',
-          owner_id: 'u1',
-          name: 'Agent To Delete',
-          description: null,
-          provider: 'openai',
-          model_id: 'gpt-4o',
-          elo_rating: 1500,
-          wins: 0,
-          losses: 0,
-          draws: 0,
-          image_url: null,
-          is_active: true,
-          is_connected: false,
-          is_system_prompt_public: false,
-          use_platform_credits: false,
-          tier: 'Iron',
-          tier_protection_count: 0,
-        active_series_id: null,
-          is_profile_public: true,
-          name_changed_at: null,
-          template_id: null,
-          customizations: null,
-          created_at: '2026-01-01',
-          updated_at: '2026-01-01',
-        },
-        {
-          id: 'a2',
-          owner_id: 'u1',
-          name: 'Agent To Keep',
-          description: null,
-          provider: 'openai',
-          model_id: 'gpt-4o',
-          elo_rating: 1500,
-          wins: 0,
-          losses: 0,
-          draws: 0,
-          image_url: null,
-          is_active: true,
-          is_connected: false,
-          is_system_prompt_public: false,
-          use_platform_credits: false,
-          tier: 'Iron',
-          tier_protection_count: 0,
-        active_series_id: null,
-          is_profile_public: true,
-          name_changed_at: null,
-          template_id: null,
-          customizations: null,
-          created_at: '2026-01-01',
-          updated_at: '2026-01-01',
-        },
+        makeAgent({ id: 'a1', name: 'Agent To Delete' }),
+        makeAgent({ id: 'a2', name: 'Agent To Keep' }),
       ],
     });
 
@@ -258,36 +143,7 @@ describe('debateAgentStore', () => {
   });
 
   it('deleteAgent should throw on API error', async () => {
-    useDebateAgentStore.setState({
-      agents: [
-        {
-          id: 'a1',
-          owner_id: 'u1',
-          name: 'Agent',
-          description: null,
-          provider: 'openai',
-          model_id: 'gpt-4o',
-          elo_rating: 1500,
-          wins: 0,
-          losses: 0,
-          draws: 0,
-          image_url: null,
-          is_active: true,
-          is_connected: false,
-          is_system_prompt_public: false,
-          use_platform_credits: false,
-          tier: 'Iron',
-          tier_protection_count: 0,
-        active_series_id: null,
-          is_profile_public: true,
-          name_changed_at: null,
-          template_id: null,
-          customizations: null,
-          created_at: '2026-01-01',
-          updated_at: '2026-01-01',
-        },
-      ],
-    });
+    useDebateAgentStore.setState({ agents: [makeAgent({ id: 'a1', name: 'Agent' })] });
 
     vi.mocked(api.delete).mockRejectedValueOnce(new Error('Permission denied'));
 
