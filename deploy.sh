@@ -197,6 +197,7 @@ if [ "$MODE" = "update" ]; then
   log "이미지 빌드 중 (레이어 캐시 활용)..."
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."
+  cleanup_containers  # 빌드 후 up 직전 재정리 — 이름 충돌 방지
   $COMPOSE_CMD up -d --no-deps backend frontend nginx
   verify_service_running "backend" 30
   verify_service_running "frontend" 30
