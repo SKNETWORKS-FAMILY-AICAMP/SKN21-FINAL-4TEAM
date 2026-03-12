@@ -196,14 +196,14 @@ class TestJudge:
         assert result["score_b"] > result["score_a"]
 
     @pytest.mark.asyncio
-    async def test_judge_draw_when_diff_lt_5(self):
-        """점수차 5 미만이면 무승부 (winner_id=None)."""
+    async def test_judge_draw_when_scores_equal(self):
+        """점수가 동일하면 무승부 (winner_id=None)."""
         orch = DebateOrchestrator()
-        # A=80, B=78 → diff=2 < 5 → draw
+        # A=80, B=80 → diff=0 < 1 → draw
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
-                a_logic=22, a_evidence=20, a_rebuttal=20, a_relevance=18,
-                b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=18,
+                a_logic=20, a_evidence=20, a_rebuttal=20, a_relevance=20,
+                b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=20,
             )}
         )
         import random
@@ -215,7 +215,7 @@ class TestJudge:
             random.random = original_random
 
         assert result["winner_id"] is None
-        assert abs(result["score_a"] - result["score_b"]) < 5
+        assert result["score_a"] == result["score_b"]
 
     @pytest.mark.asyncio
     async def test_judge_exact_5_diff_is_not_draw(self):
@@ -303,10 +303,10 @@ class TestJudge:
         assert result["winner_id"] == "bbb"
 
     @pytest.mark.asyncio
-    async def test_judge_penalty_causes_draw(self):
-        """벌점으로 점수차가 5 미만이 되면 무승부로 처리된다."""
+    async def test_judge_penalty_small_diff_still_wins(self):
+        """벌점 후 점수차가 1이어도 승/패로 처리된다."""
         orch = DebateOrchestrator()
-        # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 < 5 → draw
+        # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 ≥ 1 → A wins
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
@@ -319,7 +319,7 @@ class TestJudge:
             random.random = original_random
 
         assert result["score_a"] == 64
-        assert result["winner_id"] is None
+        assert result["winner_id"] == "aaa"
 
     @pytest.mark.asyncio
     async def test_judge_score_capped_at_zero_with_large_penalty(self):
@@ -626,3 +626,82 @@ class TestOrchestratorUnification:
         """OptimizedDebateOrchestrator 클래스가 더 이상 존재하지 않는다."""
         import app.services.debate.orchestrator as mod
         assert not hasattr(mod, "OptimizedDebateOrchestrator")
+
+
+class TestFormatDebateLog:
+    """_format_debate_log 벌점 요약 섹션 검증."""
+
+    def _make_turn(
+        self,
+        turn_number: int,
+        speaker: str,
+        claim: str,
+        penalties: dict | None = None,
+        penalty_total: int = 0,
+    ) -> MagicMock:
+        turn = MagicMock()
+        turn.turn_number = turn_number
+        turn.speaker = speaker
+        turn.claim = claim
+        turn.evidence = None
+        turn.action = "argue"
+        turn.review_result = None
+        turn.penalties = penalties or {}
+        turn.penalty_total = penalty_total
+        return turn
+
+    def test_no_violations_shows_no_violations(self):
+        """위반 없는 경우 벌점 요약에 '위반 없음'이 표시된다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turns = [
+            self._make_turn(1, "agent_a", "AI는 발전해야 한다"),
+            self._make_turn(2, "agent_b", "AI 발전은 위험하다"),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "[벌점 요약]" in log
+        assert "에이전트A: 위반 없음" in log
+        assert "에이전트B: 위반 없음" in log
+
+    def test_schema_violations_aggregated_per_agent(self):
+        """JSON 형식 위반이 여러 번 발생하면 에이전트별로 누적 집계된다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turns = [
+            self._make_turn(1, "agent_a", "주장A1", {"schema_violation": 5}, 5),
+            self._make_turn(2, "agent_b", "주장B1"),
+            self._make_turn(3, "agent_a", "주장A2", {"schema_violation": 5}, 5),
+            self._make_turn(4, "agent_b", "주장B2"),
+            self._make_turn(5, "agent_a", "주장A3", {"schema_violation": 5}, 5),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "[벌점 요약]" in log
+        assert "에이전트A" in log
+        assert "JSON 형식 위반 3회" in log
+        assert "에이전트B: 위반 없음" in log
+
+    def test_swap_sides_correctly_assigns_violations(self):
+        """swap_sides=True이면 A/B 라벨이 뒤바뀐 상태로 위반 집계가 일치한다."""
+        orch = DebateOrchestrator()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        # agent_a가 위반 — swap_sides=True이면 에이전트B 라벨로 출력돼야 함
+        turns = [
+            self._make_turn(1, "agent_a", "주장A", {"schema_violation": 5}, 5),
+            self._make_turn(2, "agent_b", "주장B"),
+        ]
+        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B", swap_sides=True)
+
+        assert "[벌점 요약]" in log
+        # swap 시 agent_a → 에이전트B 라벨
+        assert "에이전트B" in log

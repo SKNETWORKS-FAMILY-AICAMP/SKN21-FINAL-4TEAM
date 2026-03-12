@@ -7,10 +7,14 @@ const config: Config = {
       colors: {
         primary: {
           DEFAULT: 'var(--color-primary)',
-          light: 'var(--color-primary-light)',
+          light: 'rgba(249,115,22,0.15)',
           dark: 'var(--color-primary-dark)',
         },
         secondary: '#9c27b0',
+        dark: {
+          DEFAULT: '#121212',
+          surface: '#1e1e2e',
+        },
         success: '#4caf50',
         warning: '#ff9800',
         danger: {
@@ -22,29 +26,20 @@ const config: Config = {
           DEFAULT: 'var(--color-text)',
           secondary: 'var(--color-text-secondary)',
           muted: 'var(--color-text-muted)',
-          label: 'var(--color-text-label)',
+          label: 'var(--color-text-secondary)',
         },
         bg: {
           DEFAULT: 'var(--color-bg)',
           surface: 'var(--color-bg-surface)',
           hover: 'var(--color-bg-hover)',
-          tag: 'var(--color-bg-tag)',
+          tag: 'var(--color-bg-hover)',
           input: 'var(--color-bg-input)',
+          muted: 'var(--color-bg-hover)',
         },
         border: {
           DEFAULT: 'var(--color-border)',
           input: 'var(--color-border-input)',
           delete: '#5c2020',
-        },
-        nemo: {
-          DEFAULT: '#10B981',
-          dark: '#059669',
-          light: '#D1FAE5',
-          50: '#ECFDF5',
-          100: '#D1FAE5',
-          500: '#10B981',
-          600: '#059669',
-          700: '#047857',
         },
       },
       fontFamily: {
@@ -54,10 +49,9 @@ const config: Config = {
         badge: '10px',
       },
       boxShadow: {
-        card: '0 2px 12px rgba(0,0,0,0.08)',
-        'card-dark': '0 4px 20px rgba(0,0,0,0.4)',
-        bubble: '0 1px 4px rgba(0,0,0,0.1)',
-        glow: '0 0 15px rgba(16,185,129,0.3)',
+        card: '0 4px 20px rgba(0,0,0,0.4)',
+        bubble: '0 1px 4px rgba(0,0,0,0.3)',
+        glow: '0 0 15px rgba(249,115,22,0.3)',
       },
       keyframes: {
         'slide-in': {

@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     debate_orchestrator_optimized: bool = True      # 최적화 오케스트레이터 활성화 (모델 분리 + 병렬 실행)
 
     # 판정 규칙
-    debate_draw_threshold: int = 5                  # 승패 판정 최소 점수차 (미만이면 무승부)
+    debate_draw_threshold: int = 1                  # 승패 판정 최소 점수차 (미만이면 무승부)
     debate_review_max_tokens: int = 2000            # 턴 검토 LLM max_tokens (gpt-5-nano reasoning 포함)
     debate_judge_max_tokens: int = 1024             # 최종 판정 LLM max_tokens
     debate_prediction_cutoff_turns: int = 2         # 예측투표 가능 최대 턴 수 (초과 시 마감)
@@ -102,7 +102,7 @@ class Settings(BaseSettings):
 
     # ── Rate Limiting ─────────────────────────────────────────────────────────
     rate_limit_auth: int = 20           # 인증 엔드포인트 최대 요청 수
-    rate_limit_api: int = 60            # 일반 API 최대 요청 수
+    rate_limit_api: int = 300           # 일반 API 최대 요청 수 (페이지 로드 시 5~10개 동시 요청 고려)
     rate_limit_debate: int = 120        # 토론 엔드포인트 최대 요청 수 (SSE 포함)
     rate_limit_admin: int = 120         # 관리자 API 최대 요청 수
     rate_limit_window: int = 60         # 요청 수 집계 윈도우 (초)

@@ -808,4 +808,5 @@ cd frontend && npx eslint . && npx prettier --check . && npx vitest run
 
 | 날짜 | 버전 | 내용 | 작성자 |
 |---|---|---|---|
+| 2026-03-12 | v1.1 | 테마 시스템(라이트/다크 토글) 관련 CSS 변수 규칙 및 활성 버튼 스타일 규칙 반영 | Claude |
 | 2026-03-10 | v1.0 | 최초 작성 | Claude |

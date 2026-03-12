@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_CLASSES: Record<string, string> = {
-  pending: 'bg-gray-500/20 text-gray-400',
+  pending: 'bg-bg-hover text-text-muted',
   in_progress: 'bg-yellow-500/20 text-yellow-400',
   completed: 'bg-green-500/20 text-green-400',
   error: 'bg-red-500/20 text-red-400',
@@ -135,7 +135,7 @@ export default function MatchPage() {
       bannerClass = 'bg-yellow-500/20 border-b border-yellow-500/30';
     } else {
       bannerText = '토론 종료 — 무승부';
-      bannerClass = 'bg-gray-500/20 border-b border-gray-500/30';
+      bannerClass = 'bg-bg-hover border-b border-border';
     }
   }
 
@@ -167,7 +167,7 @@ export default function MatchPage() {
                   </span>
                 )}
               </span>
-              <span className="text-gray-500">|</span>
+              <span className="text-text-muted">|</span>
               <span>
                 {currentMatch.agent_b.name}{' '}
                 {eloDeltaB != null && (
@@ -184,13 +184,13 @@ export default function MatchPage() {
 
       {/* 배틀 헤더 — 항상 화면 상단 고정 (sticky top-0) */}
       <div
-        className={`sticky top-0 z-30 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900
+        className={`sticky top-0 z-30 bg-gradient-to-b from-bg via-bg-surface to-bg
           border-b shadow-lg shadow-black/40 ${
             currentMatch.match_type === 'promotion'
               ? 'border-yellow-400/60 shadow-yellow-400/10'
               : currentMatch.match_type === 'demotion'
                 ? 'border-red-500/60 shadow-red-500/20'
-                : 'border-gray-700/50'
+                : 'border-border'
           }`}
       >
         <div className="max-w-[700px] mx-auto px-5 pt-4 pb-4">
@@ -212,7 +212,7 @@ export default function MatchPage() {
               <Swords size={18} className="text-primary" />
               <span
                 className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap
-                  ${STATUS_CLASSES[currentMatch.status] ?? 'bg-gray-500/20 text-gray-400'}`}
+                  ${STATUS_CLASSES[currentMatch.status] ?? 'bg-bg-hover text-text-muted'}`}
               >
                 {STATUS_LABELS[currentMatch.status] ?? currentMatch.status}
               </span>
@@ -220,12 +220,12 @@ export default function MatchPage() {
                 <PromotionBadge type={currentMatch.match_type as 'promotion' | 'demotion'} size="sm" />
               )}
               {isCompleted && (
-                <span className="text-sm font-mono font-bold text-gray-100 mt-0.5">
-                  {hpA} <span className="text-gray-600 font-normal">:</span> {hpB}
+                <span className="text-sm font-mono font-bold text-text mt-0.5">
+                  {hpA} <span className="text-text-muted font-normal">:</span> {hpB}
                 </span>
               )}
               {!isCompleted && turns.length > 0 && (
-                <span className="text-[11px] font-mono text-gray-500">{turns.length}턴</span>
+                <span className="text-[11px] font-mono text-text-muted">{turns.length}턴</span>
               )}
             </div>
 
@@ -242,8 +242,8 @@ export default function MatchPage() {
           </div>
 
           {/* 토론 주제 */}
-          <div className="mt-3 pt-3 border-t border-gray-700/50 text-center">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">토론 주제</p>
+          <div className="mt-3 pt-3 border-t border-border text-center">
+            <p className="text-[10px] text-text-muted uppercase tracking-widest mb-1">토론 주제</p>
             <h1 className="text-sm font-bold text-white leading-snug">
               「{currentMatch.topic_title}」
             </h1>
@@ -266,7 +266,7 @@ export default function MatchPage() {
             } : null);
             if (!activeSeries || !activeSeries.from_tier) return null;
             return (
-              <div className="mt-2 pt-2 border-t border-gray-700/50 flex justify-center">
+              <div className="mt-2 pt-2 border-t border-border flex justify-center">
                 <PromotionSeriesProgress series={activeSeries} />
               </div>
             );

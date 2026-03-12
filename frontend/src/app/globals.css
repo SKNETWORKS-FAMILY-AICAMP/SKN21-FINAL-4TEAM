@@ -2,44 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Light mode (default) ─── */
 :root {
-  --color-bg: #f8f9fa;
-  --color-bg-surface: #ffffff;
-  --color-bg-hover: #f0f1f3;
-  --color-bg-input: #f3f4f6;
-  --color-bg-tag: #e5e7eb;
-  --color-text: #1f2937;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: #9ca3af;
-  --color-text-label: #4b5563;
-  --color-border: #e5e7eb;
-  --color-border-input: #d1d5db;
-  --color-primary: #10b981;
-  --color-primary-light: rgba(16, 185, 129, 0.15);
-  --color-primary-dark: #059669;
-  --color-sidebar-bg: #ffffff;
-  --color-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --color-bg: #1a1a1a;
+  --color-bg-surface: #262626;
+  --color-bg-hover: #333333;
+  --color-bg-input: #1e1e1e;
+  --color-text: #e0e0e0;
+  --color-text-secondary: #9e9e9e;
+  --color-text-muted: #616161;
+  --color-border: #333333;
+  --color-border-input: #444444;
+  --color-primary: #f97316;
+  --color-primary-dark: #ea6c0a;
 }
 
-/* ─── Dark mode ─── */
-[data-theme='dark'] {
-  --color-bg: #0b0e14;
-  --color-bg-surface: #1a1d23;
-  --color-bg-hover: #252830;
-  --color-bg-input: #1e2028;
-  --color-bg-tag: #2a2d35;
-  --color-text: #e5e7eb;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #6b7280;
-  --color-text-label: #d1d5db;
-  --color-border: #2a2d35;
-  --color-border-input: #3a3d45;
-  --color-primary: #10b981;
-  --color-primary-light: rgba(16, 185, 129, 0.15);
-  --color-primary-dark: #059669;
-  --color-sidebar-bg: #1a1d23;
-  --color-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+[data-theme='light'] {
+  --color-bg: #f0fdfb;
+  --color-bg-surface: #ffffff;
+  --color-bg-hover: #ccfbf1;
+  --color-bg-input: #ffffff;
+  --color-text: #134e4a;
+  --color-text-secondary: #0f766e;
+  --color-text-muted: #5eead4;
+  --color-border: #99f6e4;
+  --color-border-input: #5eead4;
+  --color-primary: #0d9488;
+  --color-primary-dark: #0f766e;
 }
 
 @layer base {
@@ -48,9 +36,6 @@
     font-family: 'Pretendard', sans-serif;
     background-color: var(--color-bg);
     color: var(--color-text);
-    transition:
-      background-color 0.3s ease,
-      color 0.3s ease;
   }
 }
 
@@ -59,36 +44,25 @@
     background-color: var(--color-bg-surface);
     @apply rounded-xl p-5;
     border: 1px solid var(--color-border);
-    box-shadow: var(--color-card-shadow);
   }
 
   .btn-primary {
-    @apply px-5 py-2.5 border-none rounded-xl text-white text-sm font-semibold cursor-pointer transition-all duration-200;
+    @apply px-5 py-2.5 border-none rounded-lg text-white text-sm font-semibold cursor-pointer transition-colors duration-200;
     background-color: var(--color-primary);
   }
   .btn-primary:hover {
     background-color: var(--color-primary-dark);
-    transform: translateY(-1px);
   }
 
   .btn-secondary {
-    @apply px-3 py-2 rounded-xl text-sm cursor-pointer transition-all duration-200;
+    @apply px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors duration-200;
     background-color: var(--color-bg-hover);
     color: var(--color-text-secondary);
     border: 1px solid var(--color-border-input);
   }
 
-  .btn-dark {
-    @apply px-5 py-2.5 border-none rounded-xl text-white text-sm font-semibold cursor-pointer transition-all duration-200;
-    background-color: #1f2937;
-  }
-  .btn-dark:hover {
-    background-color: #111827;
-    transform: translateY(-1px);
-  }
-
   .input {
-    @apply px-3 py-2.5 rounded-xl text-sm outline-none transition-all duration-200;
+    @apply px-3 py-2.5 rounded-lg text-sm outline-none transition-colors duration-200;
     background-color: var(--color-bg-input);
     color: var(--color-text);
     border: 1px solid var(--color-border-input);
@@ -98,11 +72,10 @@
   }
   .input:focus {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-primary-light);
   }
 
   .textarea {
-    @apply px-3 py-2.5 rounded-xl text-sm outline-none font-[inherit] resize-y transition-all duration-200;
+    @apply px-3 py-2.5 rounded-lg text-sm outline-none font-[inherit] resize-y transition-colors duration-200;
     background-color: var(--color-bg-input);
     color: var(--color-text);
     border: 1px solid var(--color-border-input);
@@ -112,16 +85,15 @@
   }
   .textarea:focus {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-primary-light);
   }
 
   .page-title {
-    @apply m-0 mb-6 text-2xl font-bold;
+    @apply m-0 mb-6 text-2xl;
     color: var(--color-text);
   }
 
   .section-title {
-    @apply text-lg m-0 mb-4 font-bold;
+    @apply text-lg m-0 mb-4;
     color: var(--color-text);
   }
 
@@ -136,56 +108,18 @@
   }
 
   .badge {
-    @apply px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply px-2 py-0.5 rounded-badge text-white text-xs font-semibold;
   }
 
   .modal-overlay {
     @apply fixed inset-0 flex justify-center items-center z-[100];
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.7);
   }
 
   .modal-content {
     @apply rounded-2xl p-6 md:p-8 text-center max-w-[90vw];
     background-color: var(--color-bg-surface);
     color: var(--color-text);
-    box-shadow: var(--color-card-shadow);
-  }
-
-  /* Nemo-specific card styles */
-  .nemo-hero {
-    @apply rounded-2xl p-8 text-white;
-    background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
-  }
-
-  .nemo-stat-card {
-    @apply rounded-2xl p-5;
-    background-color: var(--color-bg-surface);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--color-card-shadow);
-  }
-
-  .nemo-topic-card {
-    @apply rounded-2xl p-5 transition-all duration-200 cursor-pointer;
-    background-color: var(--color-bg-surface);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--color-card-shadow);
-  }
-  .nemo-topic-card:hover {
-    border-color: var(--color-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
-  }
-
-  .nemo-rank-card {
-    @apply rounded-2xl px-5 py-4 flex items-center gap-4 transition-all duration-200;
-    background-color: var(--color-bg-surface);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--color-card-shadow);
-  }
-
-  .nemo-gradient-card {
-    @apply rounded-2xl p-6 text-white;
-    background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%);
   }
 }
 

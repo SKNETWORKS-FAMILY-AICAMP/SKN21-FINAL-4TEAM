@@ -18,7 +18,12 @@ MODE="${1:-fresh}"
 ENV="${2:-prod}"
 
 # 환경별 설정
-if [ "$ENV" = "dev" ]; then
+if [ "$ENV" = "staging" ]; then
+  REPO_DIR="/opt/chatbot"
+  COMPOSE_FILE="docker-compose.staging.yml"
+  ENV_FILE=".env.staging"
+  PROJECT_NAME="chatbot-staging"
+elif [ "$ENV" = "dev" ]; then
   REPO_DIR="/opt/chatbot"
   COMPOSE_FILE="docker-compose.dev.yml"
   ENV_FILE=".env.dev"
@@ -30,7 +35,16 @@ else
   PROJECT_NAME="chatbot"
 fi
 
-COMPOSE_CMD="docker compose -p $PROJECT_NAME -f $COMPOSE_FILE"
+COMPOSE_CMD="docker compose -p $PROJECT_NAME -f $COMPOSE_FILE --env-file $ENV_FILE"
+
+# 스크립트 내 모든 docker compose 호출이 반드시 -p $PROJECT_NAME을 포함하는지 보장하기 위해
+# raw `docker compose` 직접 호출을 금지하는 alias — 실수로 프로젝트명 없이 호출 시 즉시 오류
+docker() {
+  if [ "$1" = "compose" ] && [ "$2" != "-p" ] && [ "$2" != "--project-name" ]; then
+    err "docker compose 직접 호출 금지. 반드시 \$COMPOSE_CMD 변수를 사용하세요. (프로젝트 격리 보장)"
+  fi
+  command docker "$@"
+}
 
 # ────────────────────────────────────────────────────────────
 # 함수 정의
@@ -97,10 +111,32 @@ run_migrations() {
   log "마이그레이션 완료"
 }
 
+verify_service_running() {
+  local service="$1"
+  local max_wait="${2:-30}"
+  local elapsed=0
+
+  log "$service 시작 확인 중 (최대 ${max_wait}초)..."
+  while [ "$elapsed" -lt "$max_wait" ]; do
+    local state
+    state=$(docker inspect --format '{{.State.Status}}' "${PROJECT_NAME}-${service}" 2>/dev/null || echo "missing")
+    if [ "$state" = "running" ]; then
+      log "$service 정상 기동 확인"
+      return 0
+    fi
+    if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+      err "$service 컨테이너가 종료됨 (state=$state). 로그 확인: docker logs ${PROJECT_NAME}-${service}"
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  err "$service 시작 타임아웃 (${max_wait}초 초과). 수동 확인 필요."
+}
+
 cleanup_containers() {
-  # 1) 종료된 컨테이너 제거
+  # 1) 종료/생성만 된 컨테이너 제거 (created 상태도 포함 — orphan 충돌 방지)
   local stopped
-  stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" 2>/dev/null)
+  stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" --filter "status=created" 2>/dev/null)
   [ -n "$stopped" ] && echo "$stopped" | xargs docker rm -f 2>/dev/null || true
 
   # 2) 실행 중인 docker compose run 잔재(-run- 패턴) 제거
@@ -161,7 +197,10 @@ if [ "$MODE" = "update" ]; then
   log "이미지 빌드 중 (레이어 캐시 활용)..."
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."
+  cleanup_containers  # 빌드 후 up 직전 재정리 — 이름 충돌 방지
   $COMPOSE_CMD up -d --no-deps backend frontend nginx
+  verify_service_running "backend" 30
+  verify_service_running "frontend" 30
   # backend/frontend 재시작 후 컨테이너 IP가 바뀔 수 있으므로 nginx도 강제 재시작
   $COMPOSE_CMD restart nginx
   run_migrations
@@ -187,7 +226,9 @@ else
 
   log ""
   log "=== 배포 완료 (환경: $ENV) ==="
-  if [ "$ENV" = "dev" ]; then
+  if [ "$ENV" = "staging" ]; then
+    log "스테이징 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'EC2_IP'):8080"
+  elif [ "$ENV" = "dev" ]; then
     log "개발 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'DEV_EC2_IP'):8080"
   else
     log "운영 서버: http://$(curl -s ifconfig.me 2>/dev/null || echo 'PROD_EC2_IP')"

@@ -82,7 +82,7 @@ class DebateMatchService:
         result = await self.db.execute(
             select(DebateTurnLog)
             .where(DebateTurnLog.match_id == match_id)
-            .order_by(DebateTurnLog.turn_number)
+            .order_by(DebateTurnLog.turn_number, DebateTurnLog.speaker)
         )
         return list(result.scalars().all())
 

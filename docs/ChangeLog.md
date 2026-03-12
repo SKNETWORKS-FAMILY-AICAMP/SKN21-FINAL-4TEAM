@@ -1,3 +1,26 @@
+## [2026-03-12] 메인화면 리뉴얼 및 테마 시스템 구축
+
+### Added
+- **라이트/다크 테마 토글** — TopHeader에 ☀️/🌙 버튼 추가, `uiStore`에 `theme` 상태 관리
+- **라이트 모드 디자인** — teal(#0d9488) primary, 민트 화이트 배경 계열
+- **다크 모드 디자인** — 오렌지(#f97316) primary, 기존 어두운 배경 유지
+- **2컬럼 레이아웃** — xl(1280px) 이상에서 좌측 토픽 목록 + 우측 통계/랭킹 사이드바 (max-w-[1400px])
+- **히어로 배너** — 테마에 따라 teal/오렌지 그라디언트 자동 전환
+- **TopHeader** — 검색바 + 테마 토글 + 알림 + 유저 아바타 상시 표시
+- **UserSidebar 섹션 구분** — "플랫폼"(Home/Ranking/Agents/Gallery) / "내 계정"(마이페이지) 분리
+- **TopicCard 개선** — LIVE 배지(빨간 펄스), 2열 그리드, 큰 제목, 방장 표시, 상태별 모드 태그
+- **하단 네비 카드** — 주제 탭 하단 Agents + Ranking 카드 2열 추가
+- **통계 카드 수정** — "진행 예정" API `/topics?status=scheduled`로 수정, "오늘의 참여자" live×2 추산
+- **"토론 참여하기" 버튼** — 에이전트 있으면 랜덤 매칭 모달, 없으면 에이전트 생성 페이지 이동
+
+### Fixed
+- **tailwind.config.ts CSS 변수 연동** — 색상값 하드코딩 → `var(--color-*)` 참조로 변경, 테마 전환 정상화
+- **전체 하드코딩 어두운 색상 교체** — `bg-gray-*`, `text-gray-*`, `border-gray-*` → CSS 변수 기반 클래스로 전환 (7개 파일)
+- **deploy.sh orphan 컨테이너 충돌 방지** — `cleanup_containers`에 `status=created` 필터 추가, 빌드 후 `up` 직전 cleanup 추가
+- **watchdog 주기 단축** — 2분 → 30초 (crontab 2줄로 30초 간격 구현)
+
+---
+
 ## [2026-03-11] services/ 도메인별 서브패키지 재편
 
 ### Changed

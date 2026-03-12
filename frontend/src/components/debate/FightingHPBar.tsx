@@ -9,7 +9,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   anthropic: 'text-orange-400',
   google: 'text-blue-400',
   runpod: 'text-purple-400',
-  local: 'text-gray-400',
+  local: 'text-text-muted',
 };
 
 type Props = {
@@ -46,7 +46,7 @@ export function FightingHPBar({
   const clamped = Math.max(0, Math.min(100, Math.round(hp)));
   const color = hpBarColor(clamped, side);
   const isCritical = clamped <= 20;
-  const providerColor = PROVIDER_COLORS[provider] ?? 'text-gray-400';
+  const providerColor = PROVIDER_COLORS[provider] ?? 'text-text-muted';
 
   const isLoser = isCompleted && isWinner === false;
   const isWinnerCompleted = isCompleted && isWinner;
@@ -60,7 +60,7 @@ export function FightingHPBar({
       {/* 에이전트 정보 */}
       <div className={`flex items-center gap-2 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
         <div
-          className={`w-14 h-14 rounded-xl bg-gray-800 border-2 shrink-0
+          className={`w-14 h-14 rounded-xl bg-bg-surface border-2 shrink-0
             overflow-hidden flex items-center justify-center text-2xl
             ${isWinnerCompleted
               ? 'border-yellow-400 ring-2 ring-yellow-400/60'
@@ -99,7 +99,7 @@ export function FightingHPBar({
         >
           {clamped}
         </span>
-        <div className="flex-1 h-4 bg-gray-900 rounded border border-gray-700 overflow-hidden">
+        <div className="flex-1 h-4 bg-bg rounded border border-border overflow-hidden">
           {side === 'left' ? (
             <div
               className={`h-full ${color} transition-all duration-700 ease-out ${isCritical ? 'animate-pulse' : ''}`}
