@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
+import { useUIStore } from '@/stores/uiStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
@@ -102,6 +103,7 @@ export default function DebateTopicsPage() {
   } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
   const { user } = useUserStore();
+  const { theme } = useUIStore();
 
   const [activeTab, setActiveTab] = useState<'topics' | 'popular' | 'ranking'>('topics');
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -135,7 +137,8 @@ export default function DebateTopicsPage() {
   useEffect(() => {
     fetchMyAgents();
     fetchFeatured();
-  }, [fetchMyAgents, fetchFeatured]);
+    fetchRanking();
+  }, [fetchMyAgents, fetchFeatured, fetchRanking]);
 
   // 통계 데이터 로드
   useEffect(() => {
@@ -291,13 +294,18 @@ export default function DebateTopicsPage() {
   const currentUserId = user?.id ?? null;
 
   return (
-    <div className="max-w-[760px] mx-auto py-6 px-4">
+    <div className="max-w-[1400px] mx-auto py-6 px-4 xl:px-8">
       <SeasonBanner />
 
       {/* 히어로 배너 */}
       <div
         className="relative rounded-2xl overflow-hidden mb-6"
-        style={{ background: 'linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fdba74 100%)' }}
+        style={{
+          background:
+            theme === 'light'
+              ? 'linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #5eead4 100%)'
+              : 'linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fdba74 100%)',
+        }}
       >
         <div className="px-8 py-8 md:py-10 max-w-[60%]">
           <p className="text-white/80 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5 m-0">
@@ -421,8 +429,8 @@ export default function DebateTopicsPage() {
         </div>
       </div>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      {/* 통계 카드 — xl 미만(모바일/태블릿)에서만 표시 */}
+      <div className="grid grid-cols-3 gap-4 mb-8 xl:hidden">
         <StatCard
           icon={<MessageSquare size={20} className="text-white" />}
           iconBg="bg-primary"
@@ -442,6 +450,11 @@ export default function DebateTopicsPage() {
           value={stats.scheduled}
         />
       </div>
+
+      {/* 2컬럼 본문 */}
+      <div className="mt-6 flex gap-6 items-start">
+        {/* 왼쪽: 탭 + 토픽 목록 */}
+        <div className="flex-1 min-w-0">
 
       {/* 상단 액션 버튼 */}
       <div className="flex items-center justify-between mb-5">
@@ -673,6 +686,64 @@ export default function DebateTopicsPage() {
           )}
         </div>
       )}
+
+        </div>
+        {/* 오른쪽: 위젯 사이드바 (xl 이상에서만 표시) */}
+        <div className="hidden xl:flex flex-col gap-4 w-[300px] shrink-0">
+          <StatCard
+            icon={<MessageSquare size={20} className="text-white" />}
+            iconBg="bg-primary"
+            label="실시간 토론"
+            value={stats.live}
+          />
+          <StatCard
+            icon={<Users size={20} className="text-white" />}
+            iconBg="bg-teal-500"
+            label="오늘의 참여자"
+            value={stats.todayParticipants > 0 ? stats.todayParticipants.toLocaleString() : '-'}
+          />
+          <StatCard
+            icon={<Clock size={20} className="text-white" />}
+            iconBg="bg-amber-500"
+            label="진행 예정"
+            value={stats.scheduled}
+          />
+          {ranking.length > 0 && (
+            <div className="bg-bg-surface border border-border rounded-2xl p-4">
+              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+                🏆 랭킹 Top 5
+              </p>
+              <div className="flex flex-col gap-2">
+                {ranking.slice(0, 5).map((entry, idx) => (
+                  <div key={entry.id} className="flex items-center gap-2 text-sm">
+                    <span
+                      className={`w-5 text-center font-bold text-xs ${
+                        idx === 0
+                          ? 'text-yellow-400'
+                          : idx === 1
+                            ? 'text-gray-300'
+                            : idx === 2
+                              ? 'text-orange-400'
+                              : 'text-text-muted'
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                    <span className="text-text truncate flex-1">{entry.name}</span>
+                    <span className="text-text-muted text-xs shrink-0">{entry.elo_rating}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/debate/ranking"
+                className="block mt-3 text-center text-xs text-primary hover:underline no-underline"
+              >
+                전체 랭킹 보기 →
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 주제 제안 모달 */}
       {showModal && (
