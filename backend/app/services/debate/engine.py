@@ -8,7 +8,6 @@ import re
 import time
 import uuid
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # create_async_engine: 독립 세션용
@@ -80,7 +79,7 @@ async def _log_orchestrator_usage(
 
 # 에이전트 LLM에 주입하는 응답 형식 지시문 — _execute_turn() 내 user 메시지 끝에 추가됨
 # 에이전트가 임의 텍스트 대신 구조화 JSON을 반환하도록 강제.
-# validate_response_schema()가 이 형식을 검증하며, 불일치 시 PENALTY_SCHEMA_VIOLATION 부여.
+# validate_response_schema()가 이 형식을 검증하며, 불일치 시 파싱 실패로 처리.
 RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변하세요. 영어 사용 금지.
 
 다음 형식의 JSON만 응답하세요 (다른 텍스트 없이):
@@ -101,11 +100,16 @@ action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
 
 # 코드 기반 벌점 — LLM 검토 이전에 즉시 적용 (debate_engine 단독 처리)
 # LLM 기반 벌점은 debate_orchestrator.LLM_VIOLATION_PENALTIES 참조
-PENALTY_SCHEMA_VIOLATION = 5   # validate_response_schema() 실패 시 부여 (JSON 파싱 불가 또는 필드 누락)
 PENALTY_REPETITION = 3         # detect_repetition()이 단어 중복 70%+ 감지 시 부여
-PENALTY_TIMEOUT = 5            # debate_turn_timeout_seconds 초과 또는 LLM 호출 에러 시 부여
 PENALTY_FALSE_SOURCE = 7       # tool_result를 실제 도구 호출 없이 허위로 반환한 경우
-PENALTY_TOKEN_LIMIT = 3        # finish_reason="length" — 토픽 turn_token_limit 초과로 응답 절삭
+
+
+class ForfeitError(Exception):
+    """재시도를 모두 소진한 에이전트의 부전패를 알리는 예외."""
+
+    def __init__(self, forfeited_speaker: str) -> None:
+        self.forfeited_speaker = forfeited_speaker
+        super().__init__(f"Forfeit by {forfeited_speaker}")
 
 
 def detect_repetition(new_claim: str, previous_claims: list[str], threshold: float = 0.7) -> bool:
@@ -370,6 +374,111 @@ async def _handle_forfeit(
 
 # ── 판정 후처리 ───────────────────────────────────────────────────────────────
 
+async def _finalize_forfeit(
+    db: AsyncSession,
+    match: DebateMatch,
+    agent_a: DebateAgent,
+    agent_b: DebateAgent,
+    forfeited_speaker: str,
+) -> None:
+    """재시도 소진으로 인한 부전패 처리. judge() 없이 바로 매치를 종료한다.
+
+    부전패 에이전트에게 점수 0, 상대방에게 점수 100 부여.
+    ELO는 최대 점수차(100)로 계산한다.
+    """
+    from app.services.debate.match_service import DebateMatchService
+
+    if forfeited_speaker == "agent_a":
+        forfeit_winner = agent_b
+        forfeit_loser = agent_a
+        score_a, score_b = 0, 100
+        elo_result = "b_win"
+    else:
+        forfeit_winner = agent_a
+        forfeit_loser = agent_b
+        score_a, score_b = 100, 0
+        elo_result = "a_win"
+
+    elo_a_before = agent_a.elo_rating
+    elo_b_before = agent_b.elo_rating
+    new_a, new_b = calculate_elo(
+        elo_a_before, elo_b_before, elo_result,
+        score_diff=settings.debate_elo_forfeit_score_diff,
+    )
+
+    match.status = "completed"
+    match.finished_at = datetime.now(UTC)
+    match.winner_id = forfeit_winner.id
+    match.score_a = score_a
+    match.score_b = score_b
+
+    agent_service = DebateAgentService(db)
+    result_a = "win" if elo_result == "a_win" else "loss"
+    result_b = "win" if elo_result == "b_win" else "loss"
+
+    if not match.is_test:
+        await agent_service.update_elo(
+            str(agent_a.id), new_a, result_a,
+            str(match.agent_a_version_id) if match.agent_a_version_id else None,
+        )
+        await agent_service.update_elo(
+            str(agent_b.id), new_b, result_b,
+            str(match.agent_b_version_id) if match.agent_b_version_id else None,
+        )
+
+        # 활성 시즌 매치인 경우 시즌 ELO도 별도 갱신 (누적 ELO와 독립적)
+        if match.season_id:
+            from app.services.debate.season_service import DebateSeasonService
+            season_svc = DebateSeasonService(db)
+            stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
+            stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
+            season_new_a, season_new_b = calculate_elo(
+                stats_a.elo_rating, stats_b.elo_rating, elo_result,
+                score_diff=settings.debate_elo_forfeit_score_diff,
+            )
+            await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), season_new_a, result_a)
+            await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), season_new_b, result_b)
+
+    await db.execute(
+        update(DebateMatch)
+        .where(DebateMatch.id == match.id)
+        .values(elo_a_before=elo_a_before, elo_b_before=elo_b_before, elo_a_after=new_a, elo_b_after=new_b)
+    )
+    await db.commit()
+
+    await publish_event(str(match.id), "forfeit", {
+        "forfeited_speaker": forfeited_speaker,
+        "winner_id": str(forfeit_winner.id),
+        "loser_id": str(forfeit_loser.id),
+        "reason": "Turn execution failed after all retries",
+    })
+
+    await publish_event(str(match.id), "finished", {
+        "winner_id": str(forfeit_winner.id),
+        "score_a": score_a,
+        "score_b": score_b,
+        "elo_a_before": elo_a_before,
+        "elo_a_after": new_a,
+        "elo_b_before": elo_b_before,
+        "elo_b_after": new_b,
+        "elo_a": new_a,
+        "elo_b": new_b,
+    })
+
+    match_service = DebateMatchService(db)
+    await match_service.resolve_predictions(
+        str(match.id),
+        str(forfeit_winner.id),
+        str(match.agent_a_id),
+        str(match.agent_b_id),
+    )
+
+    logger.info(
+        "Match %s ended by forfeit. %s failed after retries, winner: %s",
+        match.id, forfeit_loser.name, forfeit_winner.name,
+    )
+
+
 async def _finalize_match(
     db: AsyncSession,
     match: DebateMatch,
@@ -379,7 +488,6 @@ async def _finalize_match(
     orchestrator: DebateOrchestrator,
     model_cache: dict,
     usage_batch: list,
-    use_optimized: bool,
 ) -> None:
     """판정 결과를 DB에 저장하고 후속 처리를 순서대로 실행한다.
 
@@ -401,13 +509,8 @@ async def _finalize_match(
     from app.services.debate.season_service import DebateSeasonService
 
     # 판정 오케스트레이터 토큰 로깅
-    _judge_model_str = (
-        settings.debate_judge_model or settings.debate_orchestrator_model
-        if use_optimized
-        else settings.debate_orchestrator_model
-    )
     await _log_orchestrator_usage(
-        db, agent_a.owner_id, _judge_model_str,
+        db, agent_a.owner_id, judgment.get("model_id", ""),
         judgment["input_tokens"], judgment["output_tokens"],
         model_cache=model_cache, usage_batch=usage_batch,
     )
@@ -545,15 +648,16 @@ async def _run_turn_loop(
     usage_batch: list,
     parallel: bool,
 ) -> tuple[list[str], list[str], int, int]:
-    """통합 턴 루프. parallel=True면 롤링 B 리뷰 + create_task 병렬 실행, False면 순차 실행."""
+    """통합 턴 루프. parallel=True면 롤링 B 리뷰 + create_task 병렬 실행, False면 순차 실행.
+
+    에이전트 발언이 재시도를 모두 소진하면 ForfeitError을 raise한다.
+    """
     claims_a: list[str] = []
     claims_b: list[str] = []
     total_penalty_a = 0
     total_penalty_b = 0
 
     if parallel:
-        # parallel 모드: debate_review_model 사용 (경량 모델로 A 검토와 B 실행을 병렬화)
-        review_model = settings.debate_review_model or settings.debate_orchestrator_model
         # 롤링 병렬 패턴: B 리뷰를 백그라운드로 시작하고 다음 턴 A 실행 후 await
         # B 리뷰가 10-15초이므로 다음 턴 A 실행(동일 규모) 동안 숨겨져 순수 대기 없음
         prev_b_review_task: asyncio.Task | None = None
@@ -578,18 +682,20 @@ async def _run_turn_loop(
                         total_penalty_b, update_last_claim=True
                     )
                     await _log_orchestrator_usage(
-                        db, agent_b.owner_id, review_model,
+                        db, agent_b.owner_id, review_prev_b.get("model_id", ""),
                         review_prev_b["input_tokens"], review_prev_b["output_tokens"],
                         model_cache=model_cache, usage_batch=usage_batch,
                     )
                     await _publish_review_event(str(match.id), prev_b_turn_num, "agent_b", review_prev_b)
 
             # Agent A 턴
-            turn_a = await _execute_turn(
+            turn_a = await _execute_turn_with_retry(
                 db, client, match, topic, turn_num, "agent_a",
                 agent_a, version_a, key_a, claims_a, claims_b,
                 my_accumulated_penalty=total_penalty_a,
             )
+            if turn_a is None:
+                raise ForfeitError(forfeited_speaker="agent_a")
             total_penalty_a += turn_a.penalty_total
 
             # B가 참조할 수 있도록 A 발언을 먼저 큐에 등록 (검토 전 원본)
@@ -618,11 +724,13 @@ async def _run_turn_loop(
                 )
 
                 # B 실행 (A 검토와 병렬)
-                turn_b = await _execute_turn(
+                turn_b = await _execute_turn_with_retry(
                     db, client, match, topic, turn_num, "agent_b",
                     agent_b, version_b, key_b, claims_b, claims_a,
                     my_accumulated_penalty=total_penalty_b,
                 )
+                if turn_b is None:
+                    raise ForfeitError(forfeited_speaker="agent_b")
                 total_penalty_b += turn_b.penalty_total
 
                 # B 발언을 검토 전에 즉시 등록 — 다음 턴 A가 원본 클레임을 참조할 수 있도록
@@ -664,18 +772,20 @@ async def _run_turn_loop(
                     total_penalty_a, update_last_claim=True
                 )
                 await _log_orchestrator_usage(
-                    db, agent_a.owner_id, review_model,
+                    db, agent_a.owner_id, review_a.get("model_id", ""),
                     review_a["input_tokens"], review_a["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
                 )
                 await _publish_review_event(str(match.id), turn_num, "agent_a", review_a)
             else:
                 # 리뷰 비활성: B 순차 실행
-                turn_b = await _execute_turn(
+                turn_b = await _execute_turn_with_retry(
                     db, client, match, topic, turn_num, "agent_b",
                     agent_b, version_b, key_b, claims_b, claims_a,
                     my_accumulated_penalty=total_penalty_b,
                 )
+                if turn_b is None:
+                    raise ForfeitError(forfeited_speaker="agent_b")
                 total_penalty_b += turn_b.penalty_total
                 claims_b.append(turn_b.claim)
                 await _publish_turn_event(str(match.id), turn_b)
@@ -704,23 +814,23 @@ async def _run_turn_loop(
                     total_penalty_b, update_last_claim=True
                 )
                 await _log_orchestrator_usage(
-                    db, agent_b.owner_id, review_model,
+                    db, agent_b.owner_id, review_last_b.get("model_id", ""),
                     review_last_b["input_tokens"], review_last_b["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
                 )
                 await _publish_review_event(str(match.id), prev_b_turn_num, "agent_b", review_last_b)
 
     else:
-        # sequential 모드: debate_turn_review_model 사용 (순차 실행)
-        review_model = settings.debate_turn_review_model or settings.debate_orchestrator_model
 
         for turn_num in range(1, topic.max_turns + 1):
             # Agent A 턴
-            turn_a = await _execute_turn(
+            turn_a = await _execute_turn_with_retry(
                 db, client, match, topic, turn_num, "agent_a",
                 agent_a, version_a, key_a, claims_a, claims_b,
                 my_accumulated_penalty=total_penalty_a,
             )
+            if turn_a is None:
+                raise ForfeitError(forfeited_speaker="agent_a")
             total_penalty_a += turn_a.penalty_total
 
             if settings.debate_turn_review_enabled:
@@ -741,7 +851,7 @@ async def _run_turn_loop(
                     turn_a, review_a, claims_a, total_penalty_a, update_last_claim=False
                 )
                 await _log_orchestrator_usage(
-                    db, agent_a.owner_id, review_model,
+                    db, agent_a.owner_id, review_a.get("model_id", ""),
                     review_a["input_tokens"], review_a["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
                 )
@@ -760,11 +870,13 @@ async def _run_turn_loop(
                 await asyncio.sleep(remaining_delay)
 
             # Agent B 턴
-            turn_b = await _execute_turn(
+            turn_b = await _execute_turn_with_retry(
                 db, client, match, topic, turn_num, "agent_b",
                 agent_b, version_b, key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
             )
+            if turn_b is None:
+                raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
 
             if settings.debate_turn_review_enabled:
@@ -785,7 +897,7 @@ async def _run_turn_loop(
                     turn_b, review_b, claims_b, total_penalty_b, update_last_claim=False
                 )
                 await _log_orchestrator_usage(
-                    db, agent_b.owner_id, review_model,
+                    db, agent_b.owner_id, review_b.get("model_id", ""),
                     review_b["input_tokens"], review_b["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
                 )
@@ -995,11 +1107,15 @@ async def _run_match_with_client(
         )
         return
 
-    claims_a, claims_b, total_penalty_a, total_penalty_b = await _run_turn_loop(
-        db, match, topic, agent_a, agent_b, version_a, version_b,
-        key_a, key_b, client, orchestrator, model_cache, usage_batch,
-        parallel=orchestrator.optimized,
-    )
+    try:
+        claims_a, claims_b, total_penalty_a, total_penalty_b = await _run_turn_loop(
+            db, match, topic, agent_a, agent_b, version_a, version_b,
+            key_a, key_b, client, orchestrator, model_cache, usage_batch,
+            parallel=orchestrator.optimized,
+        )
+    except ForfeitError as forfeit:
+        await _finalize_forfeit(db, match, agent_a, agent_b, forfeit.forfeited_speaker)
+        return
 
     match.penalty_a = total_penalty_a
     match.penalty_b = total_penalty_b
@@ -1012,7 +1128,7 @@ async def _run_match_with_client(
 
     await _finalize_match(
         db, match, judgment, agent_a, agent_b,
-        orchestrator, model_cache, usage_batch, orchestrator.optimized,
+        orchestrator, model_cache, usage_batch,
     )
 
 
@@ -1135,10 +1251,7 @@ async def _execute_turn(
             output_tokens = usage_out.get("output_tokens", 0)
 
             if usage_out.get("finish_reason") == "length":
-                # 토픽 turn_token_limit 초과로 응답이 절삭됨 — JSON 파싱 실패는 예상된 결과이므로
-                # schema_violation 대신 token_limit 감점만 부여
-                penalties["token_limit"] = PENALTY_TOKEN_LIMIT
-                penalty_total += PENALTY_TOKEN_LIMIT
+                # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 파싱 가능하면 그대로 사용, 불가하면 원문 절삭
                 if parsed is None:
                     claim = response_text[:500]
                     raw_response = {"raw": response_text}
@@ -1154,8 +1267,7 @@ async def _execute_turn(
                         "tool_result": parsed.get("tool_result"),
                     }
             elif parsed is None:
-                penalties["schema_violation"] = PENALTY_SCHEMA_VIOLATION
-                penalty_total += PENALTY_SCHEMA_VIOLATION
+                # JSON 파싱 불가 또는 스키마 불일치 — 원문을 발언으로 사용
                 claim = response_text[:500]
                 raw_response = {"raw": response_text}
             else:
@@ -1175,18 +1287,9 @@ async def _execute_turn(
             penalties["repetition"] = PENALTY_REPETITION
             penalty_total += PENALTY_REPETITION
 
-    except TimeoutError:
-        penalties["timeout"] = PENALTY_TIMEOUT
-        penalty_total += PENALTY_TIMEOUT
-        claim = "[TIMEOUT: No response within time limit]"
-        input_tokens = 0
-        output_tokens = 0
-
-    except Exception as exc:
-        logger.error("Turn execution error: %s", exc)
-        claim = f"[ERROR: {str(exc)[:200]}]"
-        input_tokens = 0
-        output_tokens = 0
+    except Exception:
+        # TimeoutError 포함 모든 예외를 그대로 전파 — _execute_turn_with_retry가 재시도·부전패 처리
+        raise
 
     # BYOK 에이전트 턴 토큰 사용량 기록 (테스트 매치 포함)
     if agent.provider != "local":
@@ -1210,6 +1313,43 @@ async def _execute_turn(
     db.add(turn)
     await db.flush()
     return turn
+
+
+async def _execute_turn_with_retry(
+    db: AsyncSession,
+    client: InferenceClient,
+    match: DebateMatch,
+    topic: DebateTopic,
+    turn_number: int,
+    speaker: str,
+    agent: DebateAgent,
+    version: DebateAgentVersion | None,
+    api_key: str,
+    my_claims: list[str],
+    opponent_claims: list[str],
+    my_accumulated_penalty: int = 0,
+) -> DebateTurnLog | None:
+    """재시도 포함 턴 실행. 모든 재시도 실패 시 None 반환."""
+    for attempt in range(settings.debate_turn_max_retries + 1):
+        try:
+            return await _execute_turn(
+                db, client, match, topic, turn_number, speaker,
+                agent, version, api_key, my_claims, opponent_claims,
+                my_accumulated_penalty=my_accumulated_penalty,
+            )
+        except Exception as exc:
+            if attempt < settings.debate_turn_max_retries:
+                logger.warning(
+                    "Turn %d %s failed (attempt %d/%d): %s — retrying",
+                    turn_number, speaker, attempt + 1, settings.debate_turn_max_retries + 1, exc,
+                )
+            else:
+                logger.error(
+                    "Turn %d %s failed after %d attempts: %s — forfeit",
+                    turn_number, speaker, settings.debate_turn_max_retries + 1, exc,
+                )
+                return None
+    return None
 
 
 def _build_messages(
@@ -1428,13 +1568,8 @@ async def _execute_multi_and_finalize(
         match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
     )
 
-    _judge_model_str = (
-        settings.debate_judge_model or settings.debate_orchestrator_model
-        if settings.debate_orchestrator_optimized
-        else settings.debate_orchestrator_model
-    )
     await _log_orchestrator_usage(
-        db, agent_a.owner_id, _judge_model_str,
+        db, agent_a.owner_id, judgment.get("model_id", ""),
         judgment["input_tokens"], judgment["output_tokens"],
     )
 

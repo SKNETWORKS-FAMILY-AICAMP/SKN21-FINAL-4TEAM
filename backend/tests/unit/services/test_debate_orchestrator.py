@@ -160,14 +160,7 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        # swap을 비활성화하기 위해 random.random을 패치
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0  # swap=False 강제
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "aaa"
         assert result["score_a"] == 84
@@ -184,13 +177,7 @@ class TestJudge:
                 b_logic=25, b_evidence=20, b_rebuttal=22, b_relevance=17,
             )}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0  # swap=False 강제
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "bbb"
         assert result["score_b"] > result["score_a"]
@@ -206,13 +193,7 @@ class TestJudge:
                 b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=20,
             )}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] is None
         assert result["score_a"] == result["score_b"]
@@ -228,13 +209,7 @@ class TestJudge:
                 b_logic=22, b_evidence=19, b_rebuttal=21, b_relevance=17,
             )}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(), [], self._make_topic())
 
         assert result["score_a"] - result["score_b"] == 5
         assert result["winner_id"] == "aaa"
@@ -271,13 +246,7 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(penalty_a=10), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(penalty_a=10), [], self._make_topic())
 
         assert result["score_a"] == 74
         assert result["penalty_a"] == 10
@@ -291,13 +260,7 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(penalty_a=30), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(penalty_a=30), [], self._make_topic())
 
         assert result["score_a"] == 54
         assert result["winner_id"] == "bbb"
@@ -310,13 +273,7 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(penalty_a=20), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(penalty_a=20), [], self._make_topic())
 
         assert result["score_a"] == 64
         assert result["winner_id"] == "aaa"
@@ -329,13 +286,7 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(penalty_a=100), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(penalty_a=100), [], self._make_topic())
 
         assert result["score_a"] == 0
         assert result["winner_id"] == "bbb"
@@ -348,13 +299,7 @@ class TestJudge:
         wrapped = f"```json\n{raw}\n```"
         orch.client.generate_byok = AsyncMock(return_value={"content": wrapped})
 
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "aaa"
         assert result["score_a"] == 84
@@ -366,44 +311,12 @@ class TestJudge:
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        import random
-        original_random = random.random
-        random.random = lambda: 1.0
-        try:
-            result = await orch.judge(self._make_match(penalty_a=5, penalty_b=3), [], self._make_topic())
-        finally:
-            random.random = original_random
+        result = await orch.judge(self._make_match(penalty_a=5, penalty_b=3), [], self._make_topic())
 
         assert result["penalty_a"] == 5
         assert result["penalty_b"] == 3
         assert result["score_a"] == 79   # 84 - 5
         assert result["score_b"] == 60   # 63 - 3
-
-    @pytest.mark.asyncio
-    async def test_judge_swap_reverses_scorecard(self):
-        """A/B 스왑 시 scorecard가 역변환되어 원래 에이전트에 올바른 점수가 할당된다."""
-        orch = DebateOrchestrator()
-        # 스왑 시 LLM은 B의 내용을 "agent_a"로 보고 채점 → 이를 역변환
-        # 원래 A=84, B=63이 되어야 함
-        orch.client.generate_byok = AsyncMock(
-            return_value={"content": self._scorecard(
-                # 스왑된 상태에서 LLM이 받는 응답: "agent_a"=B의 점수, "agent_b"=A의 점수
-                a_logic=18, a_evidence=16, a_rebuttal=15, a_relevance=14,  # B의 점수
-                b_logic=25, b_evidence=20, b_rebuttal=22, b_relevance=17,  # A의 점수
-            )}
-        )
-        import random
-        original_random = random.random
-        random.random = lambda: 0.0  # swap=True 강제 (0.0 < 0.5)
-        try:
-            result = await orch.judge(self._make_match(), [], self._make_topic())
-        finally:
-            random.random = original_random
-
-        # 역변환 후 A=84, B=63
-        assert result["score_a"] == 84
-        assert result["score_b"] == 63
-        assert result["winner_id"] == "aaa"
 
 
 class TestReviewTurn:
@@ -565,21 +478,17 @@ class TestReviewTurn:
         assert result["block"] is True
 
     @pytest.mark.asyncio
-    async def test_new_fallacy_violations_map_penalties(self):
-        """신규 논리 오류 7종이 벌점 맵에 반영된다."""
+    async def test_known_fallacy_violations_map_penalties(self):
+        """현재 등록된 논리 오류 유형이 LLM_VIOLATION_PENALTIES에 올바르게 반영된다."""
         orch = self._make_orch()
-        new_types = [
-            "hasty_generalization",
-            "accent",
-            "genetic_fallacy",
-            "appeal",
-            "slippery_slope",
-            "division",
-            "composition",
+        # 현재 LLM_VIOLATION_PENALTIES에 등록된 5종
+        known_types = [
+            "straw_man",
+            "off_topic",
         ]
         violations = [
             {"type": v_type, "severity": "minor", "detail": f"{v_type} 테스트"}
-            for v_type in new_types
+            for v_type in known_types
         ]
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(logic_score=6, violations=violations)}
@@ -594,7 +503,7 @@ class TestReviewTurn:
             action="argue",
         )
 
-        expected_penalties = {k: LLM_VIOLATION_PENALTIES[k] for k in new_types}
+        expected_penalties = {k: LLM_VIOLATION_PENALTIES[k] for k in known_types}
         assert result["penalties"] == expected_penalties
         assert result["penalty_total"] == sum(expected_penalties.values())
         assert result["block"] is False
@@ -703,7 +612,11 @@ class TestFormatDebateLog:
         assert "에이전트B: 위반 없음" in log
 
     def test_schema_violations_aggregated_per_agent(self):
-        """JSON 형식 위반이 여러 번 발생하면 에이전트별로 누적 집계된다."""
+        """벌점 키가 여러 번 발생하면 에이전트별로 누적 집계된다.
+
+        schema_violation은 US-004에서 PENALTY_KO_LABELS에서 제거됐으므로
+        영문 키 이름 그대로 출력된다.
+        """
         orch = DebateOrchestrator()
         topic = MagicMock()
         topic.title = "AI 발전"
@@ -720,23 +633,7 @@ class TestFormatDebateLog:
 
         assert "[벌점 요약]" in log
         assert "에이전트A" in log
-        assert "JSON 형식 위반 3회" in log
+        # schema_violation은 PENALTY_KO_LABELS에 없으므로 영문 키로 출력됨
+        assert "schema_violation 3회" in log
         assert "에이전트B: 위반 없음" in log
 
-    def test_swap_sides_correctly_assigns_violations(self):
-        """swap_sides=True이면 A/B 라벨이 뒤바뀐 상태로 위반 집계가 일치한다."""
-        orch = DebateOrchestrator()
-        topic = MagicMock()
-        topic.title = "AI 발전"
-        topic.description = "테스트 주제"
-
-        # agent_a가 위반 — swap_sides=True이면 에이전트B 라벨로 출력돼야 함
-        turns = [
-            self._make_turn(1, "agent_a", "주장A", {"schema_violation": 5}, 5),
-            self._make_turn(2, "agent_b", "주장B"),
-        ]
-        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B", swap_sides=True)
-
-        assert "[벌점 요약]" in log
-        # swap 시 agent_a → 에이전트B 라벨
-        assert "에이전트B" in log

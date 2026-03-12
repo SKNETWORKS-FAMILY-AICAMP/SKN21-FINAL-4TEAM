@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-import random
+
 import re
 
 from app.core.config import settings
@@ -33,27 +33,18 @@ def _platform_api_key(provider: str) -> str:
     return settings.openai_api_key
 
 # 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
-# 접두사 없음: 코드 기반 탐지 (debate_engine 정규식/타임아웃)
+# 접두사 없음: 코드 기반 탐지 (debate_engine 정규식)
 # "llm_" 접두사: LLM review_turn()이 탐지한 시맨틱 위반 — 코드로 잡을 수 없는 맥락 의존 패턴
 PENALTY_KO_LABELS: dict[str, str] = {
-    "schema_violation": "JSON 형식 위반",        # debate_engine: PENALTY_SCHEMA_VIOLATION=5
-    "token_limit": "토큰 제한 초과",             # debate_engine: PENALTY_TOKEN_LIMIT=3 (turn_token_limit 절삭)
-    "repetition": "주장 반복",                   # debate_engine: PENALTY_REPETITION=3 (단어 중복 70%+)
-    "off_topic": "주제 이탈",                    # 코드 패턴 탐지 경로 (현재 LLM 탐지로 대체)
-    "false_claim": "허위 주장",                  # 코드 패턴 탐지 경로 (현재 LLM 탐지로 대체)
-    "llm_prompt_injection": "프롬프트 인젝션(LLM)",  # 시스템 프롬프트 무력화 시도 — 가장 높은 벌점(10)
-    "llm_ad_hominem": "인신공격(LLM)",               # 논거 없이 상대방 비하 — 맥락 이해 필요(8)
-    "llm_off_topic": "주제 이탈(LLM)",               # 토론 주제와 무관한 내용(5)
-    "llm_false_claim": "허위 주장(LLM)",             # 사실 확인 불가능하거나 명백히 허위인 주장(7)
-    "llm_straw_man": "허수아비 논증(LLM)",            # 상대 주장 왜곡 반박
-    "llm_circular_reasoning": "순환논증(LLM)",        # 결론=전제 논리 오류
-    "llm_hasty_generalization": "성급한 일반화(LLM)",  # 특정 사례로 섣불리 일반화
-    "llm_accent": "강조의 오류(LLM)",                # 특정 표현 강조/맥락 제거로 의미 왜곡
-    "llm_genetic_fallacy": "유전적 오류(LLM)",        # 출처·기원만으로 가치/진위를 판단
-    "llm_appeal": "부적절한 호소(LLM)",              # 동정·힘에 호소해 결론 수용 유도
-    "llm_slippery_slope": "미끄러운 경사(LLM)",       # 근거 없이 연쇄적 파국을 단정
-    "llm_division": "분할의 오류(LLM)",              # 전체 성질을 부분에 그대로 적용
-    "llm_composition": "합성의 오류(LLM)",           # 부분 속성을 전체 속성으로 일반화
+    # 코드 기반 탐지 (engine.py)
+    "repetition": "주장 반복",       # PENALTY_REPETITION=3 (단어 중복 70%+)
+    "false_source": "허위 출처",      # PENALTY_FALSE_SOURCE=7 (tool_result 위조)
+    # LLM review_turn() 탐지 — "llm_" 접두사
+    "llm_prompt_injection": "프롬프트 인젝션(LLM)",
+    "llm_ad_hominem": "인신공격(LLM)",
+    "llm_false_claim": "허위 주장(LLM)",
+    "llm_straw_man": "허수아비 논증(LLM)",
+    "llm_off_topic": "주제 이탈(LLM)",
 }
 
 # 채점 기준 (총 100점 만점) — JUDGE_SYSTEM_PROMPT의 항목 정의와 반드시 일치해야 함
@@ -92,10 +83,12 @@ JUDGE_SYSTEM_PROMPT = (
     "(1) 더 구체적인 사례·데이터·수치를 제시한 쪽\n"
     "(2) 상대 논거의 핵심에 더 직접적으로 대응한 쪽\n"
     "(3) 논점의 우선순위를 더 명확히 설정한 쪽\n\n"
-    "⚠️ 지시 불이행 페널티:\n"
-    "transcript 하단 '[벌점 요약]' 섹션에 에이전트별 누적 위반이 표시됩니다.\n"
-    "JSON 형식 위반이 2회 이상인 에이전트는 토론 규칙을 반복적으로 어긴 것이므로"
-    " relevance 항목에서 위반 횟수 × 2점을 추가 감점하세요 (최대 10점).\n\n"
+    "🎯 편향 배제 원칙:\n"
+    "1. 발언 길이가 아닌 논증 밀도를 평가하라. 더 긴 발언이 더 나은 논증이 아니다."
+    " 핵심 논거의 수와 근거의 구체성을 기준으로 삼아라.\n"
+    "2. 토론 주제에 대한 개인적 견해나 에이전트의 찬성/반대 입장과 무관하게,"
+    " 제시된 논증의 내적 일관성과 근거만으로 채점하라.\n"
+    "3. 각 에이전트를 상대방과 비교하기 전에 절대 기준으로 먼저 독립 평가한 후 비교하라.\n\n"
     "⚠️ 채점 원칙:\n"
     "1. 각 항목에서 더 잘한 측에 더 높은 점수를 부여하세요. 동일 점수는 최소화하세요.\n"
     "2. 한 쪽이 더 우세하다면 점수 차이가 명확히 드러나도록 채점하세요.\n"
@@ -113,23 +106,14 @@ JUDGE_SYSTEM_PROMPT = (
 
 
 # 위반 유형 → 벌점 매핑 (LLM review_turn 탐지 기반)
-# 벌점 크기 근거: 토론 구조 훼손 정도에 비례
-#   prompt_injection(10) > false_claim(7) > ad_hominem(8) > off_topic(5)
+# 탐지 신뢰도가 높고 토론 구조 훼손이 명확한 5종만 유지
 # PENALTY_KO_LABELS에서 "llm_" 접두사로 참조됨
 LLM_VIOLATION_PENALTIES: dict[str, int] = {
-    "prompt_injection": 10,  # 시스템 지시 무력화 — 에이전트 행동 자체를 변조하는 최고 위반
-    "ad_hominem": 8,         # 인신공격 — 논거 없이 상대를 공격, 토론 품질 직접 저하
-    "false_claim": 7,        # 허위 주장 — 사실 왜곡으로 청중 오도, 검증 어려워 높은 패널티
-    "off_topic": 5,          # 주제 이탈 — 경미하지만 반복 시 토론 집중도 누적 훼손
-    "straw_man": 6,          # 상대 주장 왜곡·과장 후 반박 — 토론 공정성 훼손
-    "circular_reasoning": 4,  # 결론을 전제로 사용하는 순환논증 — 논리 구조 결함
-    "hasty_generalization": 5,  # 제한된 사례를 일반화 — 논증 신뢰도 저하
-    "accent": 4,                # 강조/맥락 제거로 의미 왜곡 — 해석 신뢰도 저하
-    "genetic_fallacy": 5,       # 출처 중심 판단 — 내용 검증 회피
-    "appeal": 5,                # 감정/위력에 호소 — 논거 없는 결론 유도
-    "slippery_slope": 5,        # 도미노식 파국 단정 — 인과 비약
-    "division": 4,              # 전체→부분 속성 전이 오류
-    "composition": 4,           # 부분→전체 속성 전이 오류
+    "prompt_injection": 10,  # 시스템 지시 무력화 — 탐지 명확, 최고 위반
+    "ad_hominem": 8,         # 인신공격 — 맥락 명확, 탐지 신뢰도 높음
+    "false_claim": 7,        # 허위 주장 — 명백한 허위, 탐지 가능
+    "straw_man": 6,          # 상대 주장 왜곡·과장 — 탐지 가능
+    "off_topic": 5,          # 주제 이탈 — 탐지 가장 쉬움
 }
 
 # Review LLM 시스템 프롬프트 — debate_review_model (기본: gpt-4o-mini) 에 주입
@@ -231,6 +215,7 @@ class DebateOrchestrator:
         input_tokens: int,
         output_tokens: int,
         skipped: bool | None = None,
+        model_id: str = "",
     ) -> dict:
         """파싱된 review dict를 최종 결과 dict로 변환."""
         penalties: dict[str, int] = {}
@@ -254,6 +239,7 @@ class DebateOrchestrator:
             "blocked_claim": blocked_claim,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "model_id": model_id,
         }
         # skipped 플래그는 명시적으로 전달된 경우에만 포함
         if skipped is not None:
@@ -325,7 +311,7 @@ class DebateOrchestrator:
 
         # optimized 모드에서는 skipped=False를 명시 — 관전자 UI에서 "검토됨" 표시용
         skipped = False if self.optimized else None
-        return self._build_review_result(review, input_tokens, output_tokens, skipped=skipped)
+        return self._build_review_result(review, input_tokens, output_tokens, skipped=skipped, model_id=model_id)
 
     def _review_fallback(self) -> dict:
         """검토 실패 시 토론을 중단하지 않기 위한 안전 폴백."""
@@ -339,6 +325,7 @@ class DebateOrchestrator:
             "blocked_claim": None,
             "input_tokens": 0,
             "output_tokens": 0,
+            "model_id": "",
         }
 
     async def _judge_with_model(
@@ -352,14 +339,8 @@ class DebateOrchestrator:
     ) -> dict:
         """지정된 model_id로 LLM 판정을 수행하고 스코어카드·점수·승패를 반환한다.
 
-        A/B 라벨을 50% 확률로 스왑하여 발언 순서 편향을 제거한다.
-        스왑 시 scorecard를 역변환하여 원래 A/B 에이전트에 점수를 복원한다.
         """
-        # 50% 확률로 A/B 라벨 스왑 (발언 순서 편향 제거)
-        swap = random.random() < 0.5
-        debate_log = self._format_debate_log(
-            turns, topic, agent_a_name, agent_b_name, swap_sides=swap
-        )
+        debate_log = self._format_debate_log(turns, topic, agent_a_name, agent_b_name)
 
         messages = [
             {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
@@ -404,28 +385,6 @@ class DebateOrchestrator:
                 "agent_b": half_scores,
                 "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
             }
-            swap = False  # 폴백 시 스왑 비활성화
-
-        # 스왑했다면 scorecard를 역변환 — 원래 A/B 에이전트 점수 복원
-        if swap and isinstance(scorecard.get("agent_a"), dict) and isinstance(scorecard.get("agent_b"), dict):
-            scorecard["agent_a"], scorecard["agent_b"] = scorecard["agent_b"], scorecard["agent_a"]
-            # reasoning 텍스트의 에이전트 이름도 역변환.
-            # LLM은 뒤바뀐 이름(agent_a_name→실제 B, agent_b_name→실제 A)으로 작성했으므로
-            # 점수 역변환과 동일하게 이름 참조도 교체해야 코멘트와 점수가 일치한다.
-            reasoning = scorecard.get("reasoning", "")
-            # 이름이 비어있거나 동일하면 교체 불필요 (조건 전체가 True일 때만 문자열 조작)
-            if reasoning and agent_a_name and agent_b_name and agent_a_name != agent_b_name:
-                _pa = "\x00__AGENT_A__\x00"
-                _pb = "\x00__AGENT_B__\x00"
-                reasoning = (
-                    reasoning
-                    .replace(agent_a_name, _pa)
-                    .replace(agent_b_name, _pb)
-                    .replace(_pa, agent_b_name)
-                    .replace(_pb, agent_a_name)
-                )
-                scorecard["reasoning"] = reasoning
-
         # 기본 점수 합산 — 폴백 scorecard가 half_scores dict임을 보장받았지만
         # 방어적으로 isinstance 가드를 통해 sum 호출 시 TypeError 방지
         score_a = sum(scorecard.get("agent_a", {}).values()) if isinstance(scorecard.get("agent_a"), dict) else 0
@@ -450,6 +409,7 @@ class DebateOrchestrator:
             "winner_id": winner_id,
             "input_tokens": judge_input_tokens,
             "output_tokens": judge_output_tokens,
+            "model_id": model_id,
         }
 
     async def judge(
@@ -481,22 +441,15 @@ class DebateOrchestrator:
         topic: DebateTopic,
         agent_a_name: str = "에이전트 A",
         agent_b_name: str = "에이전트 B",
-        swap_sides: bool = False,
     ) -> str:
         lines = [f"토론 주제: {topic.title}", f"설명: {topic.description or '없음'}", ""]
 
         # 에이전트별 위반 횟수 집계 (벌점 요약 섹션에 사용)
         violation_counts: dict[str, dict[str, int]] = {"agent_a": {}, "agent_b": {}}
 
-        # 각 턴 로그를 Judge가 읽을 수 있는 텍스트 블록으로 변환
         for turn in turns:
-            # swap_sides=True 이면 A/B 라벨 스왑 — LLM의 발언 순서 편향 제거
-            if swap_sides:
-                label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_b" else f"{agent_b_name} (반대)"
-                penalty_key = "agent_b" if turn.speaker == "agent_a" else "agent_a"
-            else:
-                label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_a" else f"{agent_b_name} (반대)"
-                penalty_key = turn.speaker  # "agent_a" or "agent_b"
+            label = f"{agent_a_name} (찬성)" if turn.speaker == "agent_a" else f"{agent_b_name} (반대)"
+            penalty_key = turn.speaker  # "agent_a" or "agent_b"
             lines.append(f"[턴 {turn.turn_number}] {label} ({turn.action}):")
             lines.append(f"주장: {turn.claim}")
             if turn.evidence:
@@ -520,16 +473,9 @@ class DebateOrchestrator:
                     violation_counts[penalty_key] = counts
             lines.append("")
 
-        # 벌점 요약 섹션 — Judge가 에이전트별 누적 위반을 한눈에 파악하도록
-        # swap_sides 적용 후 레이블 기준으로 출력
-        a_label = agent_a_name if not swap_sides else agent_b_name
-        b_label = agent_b_name if not swap_sides else agent_a_name
-        a_violations = violation_counts.get("agent_a" if not swap_sides else "agent_b", {})
-        b_violations = violation_counts.get("agent_b" if not swap_sides else "agent_a", {})
-
         lines.append("[벌점 요약]")
-        lines.append(self._format_violation_summary(a_label, a_violations))
-        lines.append(self._format_violation_summary(b_label, b_violations))
+        lines.append(self._format_violation_summary(agent_a_name, violation_counts.get("agent_a", {})))
+        lines.append(self._format_violation_summary(agent_b_name, violation_counts.get("agent_b", {})))
 
         return "\n".join(lines)
 
