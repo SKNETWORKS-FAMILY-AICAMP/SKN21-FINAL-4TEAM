@@ -134,9 +134,9 @@ verify_service_running() {
 }
 
 cleanup_containers() {
-  # 1) 종료된 컨테이너 제거
+  # 1) 종료/생성만 된 컨테이너 제거 (created 상태도 포함 — orphan 충돌 방지)
   local stopped
-  stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" 2>/dev/null)
+  stopped=$(docker ps -aq --filter "status=exited" --filter "status=dead" --filter "status=created" 2>/dev/null)
   [ -n "$stopped" ] && echo "$stopped" | xargs docker rm -f 2>/dev/null || true
 
   # 2) 실행 중인 docker compose run 잔재(-run- 패턴) 제거
