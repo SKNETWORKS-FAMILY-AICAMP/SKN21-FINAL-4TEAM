@@ -23,9 +23,6 @@ class TestGetRouteGroup:
         assert _get_route_group("/api/auth/login") == "auth"
         assert _get_route_group("/api/auth/register") == "auth"
 
-    def test_chat_prefix(self):
-        assert _get_route_group("/api/chat/sessions/123/messages") == "chat"
-
     def test_admin_prefix(self):
         assert _get_route_group("/api/admin/users") == "admin"
         assert _get_route_group("/api/admin/models") == "admin"
@@ -47,11 +44,6 @@ class TestGetRateLimitConfig:
     def test_auth_tier(self):
         limit, window = _get_rate_limit_config("auth")
         assert limit == 20
-        assert window == 60
-
-    def test_chat_tier(self):
-        limit, window = _get_rate_limit_config("chat")
-        assert limit == 30
         assert window == 60
 
     def test_api_tier(self):
@@ -165,7 +157,7 @@ class TestCheckRateLimit:
 
     @pytest.mark.asyncio
     async def test_different_route_groups_have_different_limits(self):
-        """auth(20), chat(30), api(60), admin(120) 각각 확인."""
+        """auth(20), api(60), debate(120), admin(120) 각각 확인."""
 
         async def _check(group: str, count: int) -> tuple[bool, int]:
             mock_redis = self._make_mock_redis(zcard_count=count)
@@ -177,13 +169,13 @@ class TestCheckRateLimit:
         allowed, limit = await _check("auth", 21)
         assert not allowed and limit == 20
 
-        # chat: 30 limit, 25 requests → allowed
-        allowed, limit = await _check("chat", 25)
-        assert allowed and limit == 30
-
         # api: 60 limit, 61 requests → blocked
         allowed, limit = await _check("api", 61)
         assert not allowed and limit == 60
+
+        # debate: 120 limit, 100 requests → allowed
+        allowed, limit = await _check("debate", 100)
+        assert allowed and limit == 120
 
         # admin: 120 limit, 100 requests → allowed
         allowed, limit = await _check("admin", 100)

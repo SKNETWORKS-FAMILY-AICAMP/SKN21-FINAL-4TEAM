@@ -70,5 +70,12 @@ frontend/public/assets/live2d/CubismSdkForWeb/
 # 웹툰/챗봇 관련 레거시 문서 (AI 토론과 무관, git 제외)
 docs/legacy/
 
+# E2E 테스트 결과물 (로컬 전용, git 제외)
+frontend/screenshots/
+frontend/playwright-report/
+
+# 과제 제출 문서 (레거시, git 제외)
+*.docx
+
 # Claude Office Skills (로컬 전용, git 제외)
 claude-office-skills/

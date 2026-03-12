@@ -19,7 +19,7 @@ class DebateTopic(Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="debate")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="open")
     max_turns: Mapped[int] = mapped_column(Integer, nullable=False, server_default="6")
-    turn_token_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default="500")
+    turn_token_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1500")
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_admin_topic: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))

@@ -28,14 +28,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_password_hash
 from app.core.encryption import encrypt_api_key
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
+from app.models.debate_agent import DebateAgent, DebateAgentVersion
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
 from app.models.user import User
-from app.services.debate_engine import _execute_match
-from app.services.debate_orchestrator import calculate_elo
+from app.services.debate.engine import _execute_match
+from app.services.debate.orchestrator import calculate_elo
 
 # ---------------------------------------------------------------------------
 # 시나리오 정의: 주제 — "AI는 의료 진단을 인간 의사보다 더 잘 수행할 수 있다"
@@ -185,6 +184,7 @@ async def two_users(db_session: AsyncSession):
     """에이전트 owner로 쓸 두 사용자 생성."""
     user_a = User(
         id=uuid.uuid4(),
+        login_id="pro_debater",
         nickname="pro_debater",
         password_hash=get_password_hash("pass"),
         role="user",
@@ -192,6 +192,7 @@ async def two_users(db_session: AsyncSession):
     )
     user_b = User(
         id=uuid.uuid4(),
+        login_id="con_debater",
         nickname="con_debater",
         password_hash=get_password_hash("pass"),
         role="user",
@@ -347,15 +348,15 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     # ── 실행 ──
     with (
         patch(
-            "app.services.inference_client.InferenceClient.generate_byok",
+            "app.services.llm.inference_client.InferenceClient.generate_byok",
             side_effect=mock_generate_byok,
         ),
         patch(
-            "app.services.inference_client.InferenceClient._call_openai_byok",
+            "app.services.llm.inference_client.InferenceClient._call_openai_byok",
             new=AsyncMock(return_value=judge_response),
         ),
         patch(
-            "app.services.debate_engine.publish_event",
+            "app.services.debate.engine.publish_event",
             side_effect=mock_publish_event,
         ),
     ):

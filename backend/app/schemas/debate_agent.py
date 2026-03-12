@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ---------------------------------------------------------------------------
 # 템플릿 스키마
 # ---------------------------------------------------------------------------
@@ -86,7 +85,7 @@ class AgentUpdate(BaseModel):
     provider: str | None = Field(None, pattern="^(openai|anthropic|google|runpod|local)$")
     model_id: str | None = Field(None, min_length=1, max_length=100)
     api_key: str | None = Field(None, min_length=1)
-    system_prompt: str | None = None
+    system_prompt: str | None = Field(None, min_length=1)
     version_tag: str | None = None
     parameters: dict | None = None
     image_url: str | None = None
@@ -230,6 +229,7 @@ class GalleryEntry(BaseModel):
     draws: int
     tier: str
     owner_nickname: str
+    is_system_prompt_public: bool = False
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -252,3 +252,21 @@ class PromotionSeriesResponse(BaseModel):
     completed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# 페이지네이션 래퍼
+# ---------------------------------------------------------------------------
+
+class AgentRankingListResponse(BaseModel):
+    items: list[AgentRankingResponse]
+    total: int
+
+
+class GalleryListResponse(BaseModel):
+    items: list[GalleryEntry]
+    total: int
+
+
+class HeadToHeadListResponse(BaseModel):
+    items: list[HeadToHeadEntry]

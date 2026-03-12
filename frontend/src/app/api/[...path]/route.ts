@@ -17,6 +17,8 @@ async function proxy(req: NextRequest): Promise<Response> {
       headers.set(key, value);
     }
   });
+  // gzip 압축 비활성화 — Node.js fetch가 gzip 블록 단위로 버퍼링하면 SSE가 지연됨
+  headers.set('accept-encoding', 'identity');
 
   // 요청 바디 읽기 (스트리밍 없이 버퍼로)
   let body: ArrayBuffer | undefined;
@@ -28,6 +30,8 @@ async function proxy(req: NextRequest): Promise<Response> {
     method: req.method,
     headers,
     body: body && body.byteLength > 0 ? body : undefined,
+    // SSE 스트림 버퍼링 방지 — Next.js fetch 캐시가 body를 소비하면 "한번에 출력" 현상 발생
+    cache: 'no-store',
   });
 
   // 응답 헤더 복사

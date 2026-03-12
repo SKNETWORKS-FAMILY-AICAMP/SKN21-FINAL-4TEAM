@@ -1,45 +1,30 @@
 /** 관리자 사이드바 네비게이션. 모바일에서는 드로어, 데스크톱에서는 고정 사이드바. */
 'use client';
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
-  Drama,
-  Library,
-  Shield,
-  ShieldAlert,
   Bot,
   DollarSign,
   Activity,
-  Video,
-  Globe,
   User,
   LogOut,
   Swords,
-  ToggleLeft,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
-import { api } from '@/lib/api';
 
 const MENU_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: '사용자 관리', icon: Users },
-  { href: '/admin/personas', label: '페르소나 검수', icon: Drama },
-  { href: '/admin/reports', label: '신고 관리', icon: ShieldAlert, badgeKey: 'reports' },
-  { href: '/admin/content', label: '콘텐츠 관리', icon: Library },
-  { href: '/admin/policy', label: '정책 설정', icon: Shield },
   { href: '/admin/models', label: 'LLM 모델', icon: Bot },
   { href: '/admin/usage', label: '사용량/과금', icon: DollarSign },
   { href: '/admin/monitoring', label: '모니터링', icon: Activity },
-  { href: '/admin/video-gen', label: '영상 생성', icon: Video },
-  { href: '/admin/world-events', label: '세계관 이벤트', icon: Globe },
   { href: '/admin/debate', label: 'AI 토론 관리', icon: Swords },
-  { href: '/admin/features', label: '화면 관리', icon: ToggleLeft },
 ];
 
 export const Sidebar = memo(function Sidebar() {
@@ -47,20 +32,11 @@ export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
   const { user, logout } = useUserStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
-  const [pendingReports, setPendingReports] = useState(0);
 
   // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
     closeSidebar();
   }, [pathname, closeSidebar]);
-
-  // 대기 중인 신고 건수 조회
-  useEffect(() => {
-    api
-      .get<{ pending: number }>('/admin/reports/stats')
-      .then((res) => setPendingReports(res.pending))
-      .catch(() => {});
-  }, [pathname]);
 
   const handleLogout = () => {
     logout();
@@ -95,7 +71,6 @@ export const Sidebar = memo(function Sidebar() {
           {MENU_ITEMS.map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
-            const badgeCount = item.badgeKey === 'reports' ? pendingReports : 0;
             return (
               <Link
                 key={item.href}
@@ -109,11 +84,6 @@ export const Sidebar = memo(function Sidebar() {
               >
                 <Icon size={20} />
                 <span className="flex-1">{item.label}</span>
-                {badgeCount > 0 && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-danger text-white font-semibold min-w-[20px] text-center">
-                    {badgeCount}
-                  </span>
-                )}
               </Link>
             );
           })}

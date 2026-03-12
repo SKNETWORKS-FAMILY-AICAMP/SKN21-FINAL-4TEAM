@@ -1,817 +1,897 @@
-import { Page } from '@playwright/test';
+import { Page, Route } from '@playwright/test';
 
-// ---------------------------------------------------------------------------
-// Mock data constants
-// ---------------------------------------------------------------------------
+// -- Mock Data --------------------------------------------------------------
+
+export const MOCK_TOKEN = 'mock-jwt-token-for-testing';
 
 export const MOCK_USER = {
   id: 'user-001',
-  nickname: 'testuser',
+  login_id: 'testuser',
+  nickname: '테스트유저',
   role: 'user' as const,
-  age_group: 'unverified',
+  age_group: 'adult',
   adult_verified_at: null,
-  preferred_llm_model_id: 'model-001',
+  preferred_llm_model_id: null,
+  credit_balance: 1000,
+  subscription_plan_key: null,
 };
 
-export const MOCK_ADMIN = {
+export const MOCK_ADMIN_USER = {
   id: 'admin-001',
-  nickname: 'adminuser',
-  role: 'admin' as const,
-  age_group: 'adult_verified',
+  login_id: 'admin',
+  nickname: '관리자',
+  role: 'superadmin' as const,
+  age_group: 'adult',
   adult_verified_at: '2026-01-01T00:00:00Z',
-  preferred_llm_model_id: 'model-001',
+  preferred_llm_model_id: null,
+  credit_balance: 9999,
+  subscription_plan_key: null,
 };
 
-export const MOCK_ADULT_VERIFIED_USER = {
-  id: 'user-002',
-  nickname: 'verifieduser',
-  role: 'user' as const,
-  age_group: 'adult_verified',
-  adult_verified_at: '2026-01-15T00:00:00Z',
-  preferred_llm_model_id: 'model-001',
-};
-
-export const MOCK_TOKEN = { access_token: 'mock-jwt-token-abc123', token_type: 'bearer' };
-
-export const MOCK_PERSONAS = [
+export const MOCK_AGENTS = [
   {
-    id: 'persona-001',
-    display_name: '미니',
-    age_rating: 'all' as const,
-    visibility: 'public',
-    type: 'system',
-    system_prompt: '밝고 활발한 성격의 웹툰 리뷰어입니다. 항상 긍정적으로 리뷰합니다.',
-    background_image_url: null,
-    created_by: null,
-  },
-  {
-    id: 'persona-002',
-    display_name: '다크나이트',
-    age_rating: '15+' as const,
-    visibility: 'public',
-    type: 'user_created',
-    system_prompt: '냉소적이고 날카로운 비평가입니다. 작품의 약점을 잘 찾아냅니다.',
-    background_image_url: '/assets/backgrounds/dark.jpg',
-    created_by: 'user-001',
-  },
-  {
-    id: 'persona-003',
-    display_name: '성인전용 캐릭터',
-    age_rating: '18+' as const,
-    visibility: 'public',
-    type: 'user_created',
-    system_prompt: '성인 전용 캐릭터입니다. 성숙한 리뷰를 제공합니다.',
-    background_image_url: null,
-    created_by: 'user-002',
-  },
-];
-
-export const MOCK_SESSIONS = [
-  {
-    id: 'session-001',
-    persona_display_name: '미니',
-    persona_age_rating: 'all',
-    llm_model_name: 'Llama 3 70B',
-    last_message_at: '2026-02-13T10:00:00Z',
-    message_count: 12,
-  },
-  {
-    id: 'session-002',
-    persona_display_name: '다크나이트',
-    persona_age_rating: '15+',
-    llm_model_name: 'GPT-4o',
-    last_message_at: '2026-02-12T15:30:00Z',
-    message_count: 5,
-  },
-];
-
-export const MOCK_MESSAGES = [
-  { role: 'user', content: '안녕하세요!', emotion_signal: null },
-  {
-    role: 'assistant',
-    content: '안녕하세요! 무슨 웹툰에 대해 이야기하고 싶으세요?',
-    emotion_signal: 'happy',
-  },
-];
-
-export const MOCK_MODELS = [
-  {
-    id: 'model-001',
-    display_name: 'Llama 3 70B',
-    provider: 'runpod',
-    model_id: 'llama-3-70b',
-    input_cost_per_1m: 0.59,
-    output_cost_per_1m: 0.79,
-    max_context_length: 128000,
-    is_adult_only: false,
-    is_active: true,
-  },
-  {
-    id: 'model-002',
-    display_name: 'GPT-4o',
+    id: 'agent-001',
+    name: '논리왕 Alpha',
+    description: '논리적 추론을 기반으로 토론하는 에이전트',
     provider: 'openai',
-    model_id: 'gpt-4o',
-    input_cost_per_1m: 2.5,
-    output_cost_per_1m: 10.0,
-    max_context_length: 128000,
-    is_adult_only: false,
+    model_name: 'gpt-4.1',
+    elo_rating: 1250,
+    wins: 15,
+    losses: 5,
+    draws: 2,
+    tier: 'gold',
+    is_profile_public: true,
     is_active: true,
+    is_connected: false,
+    owner_id: 'user-001',
+    owner_nickname: '테스트유저',
+    image_url: null,
+    use_platform_credits: false,
+    created_at: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'model-003',
-    display_name: 'Adult Model X',
-    provider: 'runpod',
-    model_id: 'adult-model-x',
-    input_cost_per_1m: 1.0,
-    output_cost_per_1m: 2.0,
-    max_context_length: 64000,
-    is_adult_only: true,
+    id: 'agent-002',
+    name: '감성봇 Beta',
+    description: '감성적 호소로 청중을 설득하는 에이전트',
+    provider: 'anthropic',
+    model_name: 'claude-sonnet-4-6',
+    elo_rating: 1100,
+    wins: 8,
+    losses: 10,
+    draws: 1,
+    tier: 'silver',
+    is_profile_public: true,
     is_active: true,
+    is_connected: false,
+    owner_id: 'user-001',
+    owner_nickname: '테스트유저',
+    image_url: null,
+    use_platform_credits: false,
+    created_at: '2026-01-02T00:00:00Z',
   },
 ];
 
-export const MOCK_LOREBOOK_ENTRIES = [
-  {
-    id: 'lore-001',
-    title: '세계관 설정',
-    content: '이 세계는 마법과 과학이 공존하는 세계입니다.',
-    tags: ['세계관', '판타지'],
-  },
-  {
-    id: 'lore-002',
-    title: '주인공 설정',
-    content: '주인공은 용감한 모험가입니다.',
-    tags: ['캐릭터', '주인공'],
-  },
-];
+export const MOCK_LOCAL_AGENT = {
+  id: 'agent-local-1',
+  name: 'My Local Agent',
+  description: 'Test local agent',
+  provider: 'local',
+  model_name: 'custom',
+  elo_rating: 1500,
+  wins: 0,
+  losses: 0,
+  draws: 0,
+  tier: 'iron',
+  is_profile_public: true,
+  is_active: true,
+  is_connected: false,
+  owner_id: 'user-001',
+  owner_nickname: 'devuser',
+  image_url: null,
+  use_platform_credits: false,
+  created_at: '2026-01-01T00:00:00Z',
+};
 
-export const MOCK_ADMIN_USERS = [
+export const MOCK_TOPICS = [
   {
-    id: 'user-001',
-    nickname: 'testuser',
-    role: 'user',
-    age_group: 'unverified',
-    adult_verified_at: null,
+    id: 'topic-001',
+    title: '원자력 발전은 친환경 에너지인가?',
+    description: '핵에너지의 환경적 영향을 토론합니다',
+    mode: 'debate',
+    status: 'open',
+    max_turns: 6,
+    turn_token_limit: 500,
+    tools_enabled: true,
+    creator_id: 'user-001',
+    creator_nickname: '테스트유저',
+    queue_count: 3,
+    match_count: 12,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
     created_at: '2026-01-10T00:00:00Z',
   },
   {
-    id: 'user-002',
-    nickname: 'verifieduser',
-    role: 'user',
-    age_group: 'adult_verified',
-    adult_verified_at: '2026-01-15T00:00:00Z',
-    created_at: '2026-01-05T00:00:00Z',
-  },
-  {
-    id: 'admin-001',
-    nickname: 'adminuser',
-    role: 'admin',
-    age_group: 'adult_verified',
-    adult_verified_at: '2026-01-01T00:00:00Z',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-];
-
-export const MOCK_ADMIN_PERSONAS = [
-  {
-    id: 'persona-002',
-    display_name: '다크나이트',
-    type: 'user_created',
-    age_rating: '15+',
-    visibility: 'public',
-    moderation_status: 'pending',
-    created_by_nickname: 'testuser',
-  },
-  {
-    id: 'persona-004',
-    display_name: '대기중 페르소나',
-    type: 'user_created',
-    age_rating: 'all',
-    visibility: 'public',
-    moderation_status: 'pending',
-    created_by_nickname: 'verifieduser',
+    id: 'topic-002',
+    title: 'AI가 인간의 일자리를 대체할 것인가?',
+    description: 'AI 기술 발전과 고용 시장의 변화',
+    mode: 'persuasion',
+    status: 'in_progress',
+    max_turns: 8,
+    turn_token_limit: 800,
+    tools_enabled: false,
+    creator_id: 'user-002',
+    creator_nickname: '다른유저',
+    queue_count: 1,
+    match_count: 5,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    created_at: '2026-01-11T00:00:00Z',
   },
 ];
 
-export const MOCK_MONITORING_STATS = {
-  total_users: 150,
-  total_sessions: 420,
-  total_messages: 8500,
-  daily_messages: 230,
-  weekly_messages: 1250,
-  moderation_pending: 3,
-};
-
-export const MOCK_DASHBOARD_STATS = {
-  total_users: 150,
-  daily_active_users: 42,
-  total_sessions: 420,
-  total_messages: 8500,
-  daily_messages: 230,
-  total_personas: 35,
-  moderation_pending: 3,
-};
-
-export const MOCK_MONITORING_LOGS = [
+export const MOCK_MATCHES = [
   {
-    id: 'log-001',
-    user_nickname: 'testuser',
-    model_name: 'Llama 3 70B',
-    input_tokens: 1200,
-    output_tokens: 450,
-    cost: 0.0011,
-    created_at: '2026-02-13T09:30:00Z',
+    id: 'match-001',
+    topic_id: 'topic-001',
+    topic_title: '원자력 발전은 친환경 에너지인가?',
+    status: 'in_progress' as const,
+    agent_a: {
+      id: 'agent-001',
+      name: '논리왕 Alpha',
+      provider: 'openai',
+      model_id: 'gpt-4.1',
+      elo_rating: 1250,
+      image_url: null,
+    },
+    agent_b: {
+      id: 'agent-002',
+      name: '감성봇 Beta',
+      provider: 'anthropic',
+      model_id: 'claude-sonnet-4-6',
+      elo_rating: 1100,
+      image_url: null,
+    },
+    winner_id: null,
+    score_a: 0,
+    score_b: 0,
+    penalty_a: 0,
+    penalty_b: 0,
+    is_featured: true,
+    match_type: 'ranked' as const,
+    series_id: null,
+    turn_count: 3,
+    started_at: '2026-01-15T10:00:00Z',
+    finished_at: null,
+    created_at: '2026-01-15T10:00:00Z',
+    elo_a_before: null,
+    elo_b_before: null,
+    elo_a_after: null,
+    elo_b_after: null,
+    viewers: 5,
   },
   {
-    id: 'log-002',
-    user_nickname: 'verifieduser',
-    model_name: 'GPT-4o',
-    input_tokens: 800,
-    output_tokens: 320,
-    cost: 0.0052,
-    created_at: '2026-02-13T08:15:00Z',
+    id: 'match-002',
+    topic_id: 'topic-002',
+    topic_title: 'AI가 인간의 일자리를 대체할 것인가?',
+    status: 'completed' as const,
+    agent_a: {
+      id: 'agent-001',
+      name: '논리왕 Alpha',
+      provider: 'openai',
+      model_id: 'gpt-4.1',
+      elo_rating: 1250,
+      image_url: null,
+    },
+    agent_b: {
+      id: 'agent-002',
+      name: '감성봇 Beta',
+      provider: 'anthropic',
+      model_id: 'claude-sonnet-4-6',
+      elo_rating: 1100,
+      image_url: null,
+    },
+    winner_id: 'agent-001',
+    score_a: 75,
+    score_b: 60,
+    penalty_a: 5,
+    penalty_b: 10,
+    is_featured: false,
+    match_type: 'ranked' as const,
+    series_id: null,
+    turn_count: 6,
+    started_at: '2026-01-14T09:00:00Z',
+    finished_at: '2026-01-14T09:30:00Z',
+    created_at: '2026-01-14T09:00:00Z',
+    elo_a_before: 1230,
+    elo_b_before: 1120,
+    elo_a_after: 1250,
+    elo_b_after: 1100,
+    viewers: 0,
   },
 ];
 
-export const MOCK_USAGE_SUMMARY = {
-  total_tokens: 50000,
-  total_cost: 0.45,
-  daily_tokens: 2000,
-  daily_cost: 0.018,
-  monthly_tokens: 35000,
-  monthly_cost: 0.31,
+export const MOCK_TURN_LOGS = [
+  {
+    id: 'turn-001',
+    match_id: 'match-001',
+    turn_number: 1,
+    speaker: 'agent_a',
+    agent_id: 'agent-001',
+    action: 'claim',
+    claim: '원자력 발전은 탄소 배출이 거의 없어 기후 변화 대응에 효과적인 에너지원입니다.',
+    evidence: null,
+    tool_used: null,
+    tool_result: null,
+    penalties: null,
+    penalty_total: 0,
+    human_suspicion_score: 0,
+    response_time_ms: null,
+    input_tokens: 100,
+    output_tokens: 50,
+    review_result: { logic_score: 8, violations: [], feedback: '논리적', blocked: false },
+    is_blocked: false,
+    created_at: '2026-01-15T10:01:00Z',
+  },
+  {
+    id: 'turn-002',
+    match_id: 'match-001',
+    turn_number: 2,
+    speaker: 'agent_b',
+    agent_id: 'agent-002',
+    action: 'rebuttal',
+    claim: '핵폐기물 처리 문제와 안전 위험을 고려하면 진정한 친환경이라 보기 어렵습니다.',
+    evidence: null,
+    tool_used: null,
+    tool_result: null,
+    penalties: null,
+    penalty_total: 0,
+    human_suspicion_score: 0,
+    response_time_ms: null,
+    input_tokens: 120,
+    output_tokens: 60,
+    review_result: { logic_score: 7, violations: [], feedback: '좋음', blocked: false },
+    is_blocked: false,
+    created_at: '2026-01-15T10:02:00Z',
+  },
+];
+
+export const MOCK_RANKING = MOCK_AGENTS.map((a, i) => ({ ...a, rank: i + 1 }));
+
+export const MOCK_SEASONS = [
+  {
+    id: 'season-001',
+    season_number: 1,
+    title: 'Season 1',
+    status: 'active',
+    start_at: '2026-01-01T00:00:00Z',
+    end_at: '2026-03-31T00:00:00Z',
+  },
+];
+
+export const MOCK_TOURNAMENTS = [
+  {
+    id: 'tournament-001',
+    name: '3월 챔피언십',
+    status: 'in_progress',
+    max_participants: 8,
+    current_participants: 6,
+    created_at: '2026-03-01T00:00:00Z',
+  },
+];
+
+export const MOCK_LLM_MODELS = [
+  {
+    id: 'model-001',
+    provider: 'openai',
+    model_name: 'gpt-4.1',
+    display_name: 'GPT-4.1',
+    is_active: true,
+    input_cost_per_1m: 2.0,
+    output_cost_per_1m: 8.0,
+    credit_per_1k_tokens: 4,
+  },
+  {
+    id: 'model-002',
+    provider: 'anthropic',
+    model_name: 'claude-sonnet-4-6',
+    display_name: 'Claude Sonnet 4.6',
+    is_active: true,
+    input_cost_per_1m: 3.0,
+    output_cost_per_1m: 15.0,
+    credit_per_1k_tokens: 6,
+  },
+];
+
+export const MOCK_USAGE_ME = {
+  total_input_tokens: 125000,
+  total_output_tokens: 45000,
+  total_cost: 1.23,
+  daily_input_tokens: 5000,
+  daily_output_tokens: 1800,
+  daily_cost: 0.05,
+  monthly_input_tokens: 80000,
+  monthly_output_tokens: 30000,
+  monthly_cost: 0.82,
   by_model: [
     {
-      model_name: 'Llama 3 70B',
-      input_cost_per_1m: 0.59,
-      output_cost_per_1m: 0.79,
-      total_tokens: 30000,
-      total_cost: 0.02,
-    },
-    {
-      model_name: 'GPT-4o',
-      input_cost_per_1m: 2.5,
-      output_cost_per_1m: 10.0,
-      total_tokens: 20000,
-      total_cost: 0.43,
+      model_name: 'gpt-4.1',
+      provider: 'openai',
+      tier: 'standard',
+      credit_per_1k_tokens: 4,
+      input_cost_per_1m: 2.0,
+      output_cost_per_1m: 8.0,
+      input_tokens: 80000,
+      output_tokens: 30000,
+      cost: 0.82,
+      request_count: 40,
+      daily_input_tokens: 3000,
+      daily_output_tokens: 1000,
+      daily_cost: 0.03,
+      daily_request_count: 5,
+      monthly_input_tokens: 50000,
+      monthly_output_tokens: 20000,
+      monthly_cost: 0.5,
+      monthly_request_count: 25,
     },
   ],
 };
 
-export const MOCK_USAGE_HISTORY = [
-  { date: '2026-02-10', tokens: 5000, cost: 0.05 },
-  { date: '2026-02-11', tokens: 8000, cost: 0.07 },
-  { date: '2026-02-12', tokens: 6000, cost: 0.06 },
-  { date: '2026-02-13', tokens: 2000, cost: 0.02 },
-];
-
-export const MOCK_ADMIN_USAGE_SUMMARY = {
-  total_tokens: 500000,
-  total_cost: 4.5,
-  daily_tokens: 20000,
-  daily_cost: 0.18,
-  monthly_tokens: 350000,
-  monthly_cost: 3.1,
+export const MOCK_ADMIN_MONITORING_STATS = {
+  totals: { users: 42, agents: 150, matches: 380 },
+  weekly: { new_users: 7 },
 };
 
-export const MOCK_ADMIN_USER_USAGES = [
-  { user_id: 'user-001', nickname: 'testuser', total_tokens: 30000, total_cost: 0.28 },
-  { user_id: 'user-002', nickname: 'verifieduser', total_tokens: 20000, total_cost: 0.17 },
-];
-
-export const MOCK_FAVORITES = [
+export const MOCK_ADMIN_USERS = [
   {
-    id: 'fav-001',
-    persona_id: 'persona-001',
-    persona_display_name: '미니',
-    persona_age_rating: 'all',
-    created_at: '2026-02-10T00:00:00Z',
+    id: 'user-001',
+    login_id: 'testuser',
+    nickname: '테스트유저',
+    role: 'user',
+    created_at: '2026-01-01T00:00:00Z',
+    last_login_at: '2026-03-09T08:00:00Z',
+  },
+  {
+    id: 'admin-001',
+    login_id: 'admin',
+    nickname: '관리자',
+    role: 'superadmin',
+    created_at: '2025-12-01T00:00:00Z',
+    last_login_at: '2026-03-09T09:00:00Z',
   },
 ];
 
-export const MOCK_NOTIFICATIONS = [
-  {
-    id: 'notif-001',
-    type: 'system',
-    title: '환영합니다!',
-    message: '서비스에 가입해 주셔서 감사합니다.',
-    is_read: false,
-    created_at: '2026-02-13T10:00:00Z',
-  },
-  {
-    id: 'notif-002',
-    type: 'persona',
-    title: '페르소나 승인됨',
-    message: '다크나이트 페르소나가 승인되었습니다.',
-    is_read: true,
-    created_at: '2026-02-12T15:00:00Z',
-  },
-];
-
-export const MOCK_CREDITS = {
-  balance: 120,
-  daily_earned: 50,
-  total_spent: 380,
-};
-
-export const MOCK_CREDIT_TRANSACTIONS = [
-  {
-    id: 'tx-001',
-    type: 'daily_grant',
-    amount: 50,
-    balance_after: 120,
-    description: '일일 무료 크레딧',
-    created_at: '2026-02-13T00:00:00Z',
-  },
-  {
-    id: 'tx-002',
-    type: 'chat_usage',
-    amount: -5,
-    balance_after: 70,
-    description: '채팅 사용',
-    created_at: '2026-02-12T14:30:00Z',
-  },
-];
-
-export const MOCK_COMMUNITY_POSTS = [
-  {
-    id: 'post-001',
-    title: '미니와 대화한 후기',
-    content: '정말 재밌었어요!',
-    author_nickname: 'testuser',
-    like_count: 5,
-    comment_count: 2,
-    created_at: '2026-02-13T09:00:00Z',
-  },
-  {
-    id: 'post-002',
-    title: '추천 페르소나 공유',
-    content: '이 페르소나 추천합니다.',
-    author_nickname: 'verifieduser',
-    like_count: 12,
-    comment_count: 4,
-    created_at: '2026-02-12T18:00:00Z',
-  },
-];
-
-export const MOCK_RELATIONSHIPS = [
-  {
-    id: 'rel-001',
-    persona_id: 'persona-001',
-    persona_display_name: '미니',
-    affinity_score: 450,
-    relationship_stage: 'friend',
-    updated_at: '2026-02-13T10:00:00Z',
-  },
-  {
-    id: 'rel-002',
-    persona_id: 'persona-002',
-    persona_display_name: '다크나이트',
-    affinity_score: 120,
-    relationship_stage: 'acquaintance',
-    updated_at: '2026-02-12T08:00:00Z',
-  },
-];
-
-export const MOCK_SUBSCRIPTION_PLANS = [
-  { id: 'plan-free', name: '무료', price: 0, daily_credits: 50, features: ['기본 채팅', '페르소나 생성'] },
-  { id: 'plan-premium', name: '프리미엄', price: 9900, daily_credits: 300, features: ['무제한 채팅', '우선 응답', 'TTS'] },
-];
-
-// ---------------------------------------------------------------------------
-// API mock setup
-// ---------------------------------------------------------------------------
+// -- Setup Helpers ----------------------------------------------------------
 
 /**
- * Sets up API route interception so tests run without a real backend.
- * The user parameter determines what /api/auth/me returns.
+ * 토론 플랫폼 전체 API mock 등록.
+ *
+ * Playwright route 우선순위: 마지막 등록 route가 가장 높은 우선순위를 가짐.
+ * broad(광범위) 패턴을 먼저 등록하고, specific(구체적) 패턴을 나중에 등록한다.
+ * 예: broad(agents) 먼저 등록, specific(agents/ranking) 나중 등록
  */
-export async function setupMockAPI(
-  page: Page,
-  user: typeof MOCK_USER | typeof MOCK_ADMIN | typeof MOCK_ADULT_VERIFIED_USER = MOCK_USER,
-) {
-  // --- Auth ---
-  await page.route('**/api/auth/login', (route) => {
-    const request = route.request();
-    if (request.method() === 'POST') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TOKEN) });
-    }
-    return route.fallback();
-  });
+export async function setupApiMocks(page: Page, role: 'user' | 'admin' = 'user') {
+  const mockUser = role === 'admin' ? MOCK_ADMIN_USER : MOCK_USER;
 
-  await page.route('**/api/auth/register', async (route) => {
-    const request = route.request();
-    if (request.method() === 'POST') {
-      const body = JSON.parse(request.postData() ?? '{}');
-      if (body.nickname === 'duplicate') {
-        return route.fulfill({
-          status: 409,
-          contentType: 'application/json',
-          body: JSON.stringify({ detail: '이미 존재하는 닉네임입니다', error_code: 'AUTH_NICKNAME_EXISTS' }),
-        });
-      }
-      return route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: 'new-user-001', nickname: body.nickname, role: 'user', age_group: 'unverified', adult_verified_at: null, preferred_llm_model_id: null }),
-      });
-    }
-    return route.fallback();
-  });
+  // window.fetch 패치로 /auth/me 요청을 항상 모킹 (page.route보다 확실)
+  await page.addInitScript(
+    ({ user }) => {
+      const realFetch = window.fetch;
+      window.fetch = function (url, ...args) {
+        const urlStr = typeof url === 'string' ? url : (url as Request)?.url ?? '';
+        if (urlStr.includes('/api/auth/me') || urlStr.endsWith('/auth/me')) {
+          return Promise.resolve(
+            new Response(JSON.stringify(user), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return realFetch(url, ...args);
+      };
+    },
+    { user: mockUser },
+  );
 
-  await page.route('**/api/auth/me', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      const authHeader = request.headers()['authorization'];
-      if (!authHeader) {
-        return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
-      }
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(user) });
-    }
-    if (request.method() === 'PUT') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...user, ...JSON.parse(request.postData() ?? '{}') }) });
-    }
-    return route.fallback();
-  });
+  // -- 1단계: 광범위 catch-all 패턴 (낮은 우선순위) --------------------------
 
-  await page.route('**/api/auth/adult-verify', (route) => {
-    return route.fulfill({
+  // Admin catch-all (가장 낮은 우선순위 - 아무것도 매치 안 될 때 fallback)
+  await page.route('**/api/admin/**', async (route: Route) => {
+    await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ message: '성인인증이 완료되었습니다' }),
+      body: JSON.stringify({ items: [], total: 0 }),
     });
   });
 
-  // --- Personas ---
-  await page.route('**/api/personas', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PERSONAS) });
-    }
-    if (request.method() === 'POST') {
-      const body = JSON.parse(request.postData() ?? '{}');
-      const newPersona = { id: 'persona-new-001', ...body, created_by: user.id, type: 'user_created' };
-      return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(newPersona) });
-    }
-    return route.fallback();
-  });
-
-  await page.route('**/api/personas/*/lorebook', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_LOREBOOK_ENTRIES) });
-    }
-    if (request.method() === 'POST') {
-      const body = JSON.parse(request.postData() ?? '{}');
-      return route.fulfill({
+  // Broad agent routes
+  await page.route('**/api/agents/**', async (route: Route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      await route.fulfill({
         status: 201,
         contentType: 'application/json',
-        body: JSON.stringify({ id: 'lore-new-001', ...body }),
+        body: JSON.stringify({ ...MOCK_AGENTS[0], id: 'agent-new' }),
       });
-    }
-    return route.fallback();
-  });
-
-  // Persona detail (GET for editing, PUT for update) -- must come after /lorebook route
-  await page.route(/\/api\/personas\/[^/]+$/, (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({
+    } else {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          display_name: '다크나이트',
-          system_prompt: '냉소적이고 날카로운 비평가입니다.',
-          style_rules: '',
-          catchphrases: '',
-          age_rating: '15+',
-          visibility: 'public',
-          live2d_model_id: '',
-          background_image_url: '',
-        }),
+        body: JSON.stringify(MOCK_AGENTS[0]),
       });
     }
-    if (request.method() === 'PUT') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'persona-002', message: 'updated' }) });
-    }
-    return route.fallback();
   });
 
-  // --- Lorebook CRUD ---
-  await page.route('**/api/lorebook/*', (route) => {
-    const request = route.request();
-    if (request.method() === 'PUT') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'updated' }) });
-    }
-    if (request.method() === 'DELETE') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'deleted' }) });
-    }
-    return route.fallback();
-  });
+  // Use pathname predicate to match /api/agents with/without query params
+  await page.route(
+    (url) => url.pathname === '/api/agents',
+    async (route: Route) => {
+      const method = route.request().method();
+      if (method === 'POST') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_AGENTS[0], id: 'agent-new' }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: MOCK_AGENTS, total: MOCK_AGENTS.length }),
+        });
+      }
+    },
+  );
 
-  // --- Chat sessions ---
-  await page.route('**/api/chat/sessions', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SESSIONS) });
-    }
-    if (request.method() === 'POST') {
-      return route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: 'session-new-001' }),
-      });
-    }
-    return route.fallback();
-  });
-
-  await page.route('**/api/chat/sessions/*/messages', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGES) });
-  });
-
-  // SSE streaming endpoint
-  await page.route('**/api/chat/sessions/*/messages/stream', (route) => {
-    const sseBody = [
-      'data: {"type":"chunk","content":"안녕"}',
-      '',
-      'data: {"type":"chunk","content":"하세요! "}',
-      '',
-      'data: {"type":"chunk","content":"오늘 어떤 웹툰을 리뷰할까요?"}',
-      '',
-      'data: {"type":"emotion","emotion":"happy"}',
-      '',
-      'data: {"type":"done"}',
-      '',
-      'data: [DONE]',
-      '',
-    ].join('\n');
-
-    return route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      headers: { 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
-      body: sseBody,
-    });
-  });
-
-  // --- Models ---
-  await page.route('**/api/models', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MODELS) });
-  });
-
-  // --- Usage ---
-  await page.route('**/api/usage/me', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE_SUMMARY) });
-  });
-
-  await page.route('**/api/usage/me/history', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE_HISTORY) });
-  });
-
-  // --- Admin APIs ---
-  await page.route('**/api/admin/monitoring/stats', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_DASHBOARD_STATS) });
-  });
-
-  await page.route('**/api/admin/monitoring/logs*', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MONITORING_LOGS) });
-  });
-
-  await page.route('**/api/admin/users', (route) => {
-    const request = route.request();
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_USERS) });
-    }
-    return route.fallback();
-  });
-
-  await page.route('**/api/admin/users/*', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'updated' }) });
-  });
-
-  await page.route('**/api/admin/personas*', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_PERSONAS) });
-  });
-
-  await page.route('**/api/admin/personas/*/moderate', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'moderated' }) });
-  });
-
-  await page.route('**/api/admin/usage/summary', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_USAGE_SUMMARY) });
-  });
-
-  await page.route('**/api/admin/usage/users', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_USER_USAGES) });
-  });
-
-  await page.route('**/api/admin/usage/history', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE_HISTORY) });
-  });
-
-  await page.route('**/api/admin/llm-models', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MODELS) });
-  });
-
-  await page.route('**/api/admin/llm-models/*', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'updated' }) });
-  });
-
-  await page.route('**/api/admin/content/webtoons', (route) => {
-    if (user.role !== 'admin') {
-      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) });
-    }
-    return route.fulfill({
+  // Broad match routes
+  await page.route('**/api/matches/**', async (route: Route) => {
+    await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        { id: 'wt-001', title: '테스트 웹툰', author: '작가A', platform: 'naver', episode_count: 50, created_at: '2026-01-01T00:00:00Z' },
-      ]),
+      body: JSON.stringify(MOCK_MATCHES[0]),
     });
   });
 
-  // --- Favorites ---
-  await page.route('**/api/favorites', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_FAVORITES) });
-    }
-    if (request.method() === 'POST') {
-      return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ message: 'added' }) });
-    }
-    return route.fallback();
+  await page.route(
+    (url) => url.pathname === '/api/matches',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_MATCHES, total: MOCK_MATCHES.length }),
+      });
+    },
+  );
+
+  // Broad usage routes
+  await page.route('**/api/usage/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], total: 0 }),
+    });
   });
 
-  await page.route('**/api/favorites/*', (route) => {
-    if (route.request().method() === 'DELETE') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'removed' }) });
-    }
-    return route.fallback();
+  // Broad topic routes — use pathname predicate to match with/without query params
+  await page.route(
+    (url) => url.pathname === '/api/topics',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_TOPICS, total: MOCK_TOPICS.length }),
+      });
+    },
+  );
+
+  await page.route('**/api/topics/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_TOPICS[0]),
+    });
   });
 
-  // --- Notifications ---
-  await page.route('**/api/notifications', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_NOTIFICATIONS) });
+  // Broad models routes
+  await page.route('**/api/models/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_LLM_MODELS[0]),
+    });
   });
 
-  await page.route('**/api/notifications/*/read', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'read' }) });
+  await page.route(
+    (url) => url.pathname === '/api/models',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_LLM_MODELS, total: MOCK_LLM_MODELS.length }),
+      });
+    },
+  );
+
+  // Broad tournament/season routes
+  await page.route('**/api/tournaments/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_TOURNAMENTS[0]),
+    });
   });
 
-  await page.route('**/api/notifications/read-all', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ message: 'all read' }) });
+  await page.route(
+    (url) => url.pathname === '/api/tournaments',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_TOURNAMENTS, total: MOCK_TOURNAMENTS.length }),
+      });
+    },
+  );
+
+  await page.route('**/api/seasons/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_SEASONS[0]),
+    });
   });
 
-  // --- Credits ---
-  await page.route('**/api/credits/balance', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_CREDITS) });
+  await page.route(
+    (url) => url.pathname === '/api/seasons',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_SEASONS, total: MOCK_SEASONS.length }),
+      });
+    },
+  );
+
+  // Health
+  await page.route('**/api/health', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok' }),
+    });
   });
 
-  await page.route('**/api/credits/transactions', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_CREDIT_TRANSACTIONS) });
+  // Uploads
+  await page.route('**/api/uploads/**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ url: '/uploads/test.png' }),
+    });
   });
 
-  // --- Community Board ---
-  await page.route('**/api/board/posts', (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: MOCK_COMMUNITY_POSTS, total: MOCK_COMMUNITY_POSTS.length }) });
-    }
-    if (request.method() === 'POST') {
-      const body = JSON.parse(request.postData() ?? '{}');
-      return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 'post-new-001', ...body }) });
-    }
-    return route.fallback();
+  // -- 2단계: 구체적 패턴 (높은 우선순위) ------------------------------------
+
+  // Admin specific routes
+  await page.route('**/api/admin/monitoring/stats', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_ADMIN_MONITORING_STATS),
+    });
   });
 
-  await page.route('**/api/board/posts/*', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMUNITY_POSTS[0]) });
+  await page.route('**/api/admin/users', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: MOCK_ADMIN_USERS, total: MOCK_ADMIN_USERS.length }),
+    });
   });
 
-  // --- Relationships ---
-  await page.route('**/api/relationships', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RELATIONSHIPS) });
+  await page.route('**/api/admin/models', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: MOCK_LLM_MODELS, total: MOCK_LLM_MODELS.length }),
+    });
   });
 
-  // --- Subscriptions ---
-  await page.route('**/api/subscriptions/plans', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SUBSCRIPTION_PLANS) });
+  await page.route('**/api/admin/usage', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_USAGE_ME),
+    });
   });
 
-  await page.route('**/api/subscriptions/me', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ plan: 'free', status: 'active' }) });
+  await page.route('**/api/admin/matches', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: MOCK_MATCHES, total: MOCK_MATCHES.length }),
+    });
   });
 
-  // --- TTS ---
-  await page.route('**/api/tts/synthesize-message', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ audio_url: '/uploads/audio/test.mp3', characters_count: 20, provider: 'openai', voice: 'alloy' }) });
+  await page.route('**/api/admin/agents', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: MOCK_AGENTS, total: MOCK_AGENTS.length }),
+    });
   });
 
-  await page.route('**/api/tts/voices', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ voices: [{ voice_id: 'alloy', name: 'Alloy', language: 'multilingual' }], provider: 'openai' }) });
+  // Agents specific routes
+  await page.route('**/api/agents/templates', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
   });
 
-  // --- Image Gen ---
-  await page.route('**/api/image-gen/generate', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ image_url: '/uploads/images/generated/test.png', prompt: 'test', style: 'anime', width: 1024, height: 1024, seed: null, provider: 'openai' }) });
+  await page.route('**/api/agents/me', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_AGENTS),
+    });
   });
 
-  // --- User Personas ---
-  await page.route('**/api/user-personas', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+  await page.route('**/api/agents/gallery', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: MOCK_AGENTS, total: MOCK_AGENTS.length }),
+    });
   });
 
-  // --- Memories ---
-  await page.route('**/api/memories', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+  // fetchRanking expects RankingEntry[] directly (not wrapped)
+  await page.route(
+    (url) => url.pathname === '/api/agents/ranking',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_RANKING),
+      });
+    },
+  );
+
+  await page.route('**/api/agents/season/current', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ season: MOCK_SEASONS[0] }),
+    });
   });
 
-  // --- Health ---
-  await page.route('**/api/health', (route) => {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok' }) });
+  // Match specific routes
+  await page.route(
+    (url) => url.pathname === '/api/matches/featured',
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_MATCHES, total: MOCK_MATCHES.length }),
+      });
+    },
+  );
+
+  await page.route(/\/api\/matches\/[^/?]+\/stream/, async (route: Route) => {
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+  });
+
+  await page.route(/\/api\/matches\/[^/?]+\/turns/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_TURN_LOGS),
+    });
+  });
+
+  await page.route(/\/api\/matches\/[^/?]+\/viewers/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ count: 5 }),
+    });
+  });
+
+  await page.route(/\/api\/matches\/[^/?]+\/predictions/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(null),
+    });
+  });
+
+  // Usage specific routes
+  await page.route('**/api/usage/me', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_USAGE_ME),
+    });
+  });
+
+  // Topics specific routes
+  await page.route('**/api/topics/popular', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_TOPICS),
+    });
+  });
+
+  // -- 3단계: Auth routes (항상 정확하게 동작해야 함) -------------------------
+
+  await page.route('**/api/auth/check-login-id', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ available: true }),
+    });
+  });
+
+  await page.route('**/api/auth/check-nickname', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ available: true }),
+    });
+  });
+
+  await page.route('**/api/auth/logout', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ message: 'logged out' }),
+    });
+  });
+
+  await page.route('**/api/auth/register', async (route: Route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ access_token: MOCK_TOKEN, token_type: 'bearer' }),
+    });
+  });
+
+  await page.route('**/api/auth/login', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ access_token: MOCK_TOKEN, token_type: 'bearer' }),
+    });
+  });
+
+  // /auth/me: 최우선 - 모든 페이지 초기화에 사용됨
+  await page.route('**/api/auth/me', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockUser),
+    });
   });
 }
 
 /**
- * Performs login flow on the landing page by filling the form and clicking submit.
- * After login, sets the token in localStorage and navigates based on role.
+ * 로그인 폼을 통한 인증 (login 페이지에서만 사용).
+ * setupApiMocks 호출 후 사용할 것.
  */
-export async function login(page: Page, nickname: string, password: string) {
+export async function loginViaForm(
+  page: Page,
+  loginId = 'testuser',
+  password = 'password123',
+) {
   await page.goto('/');
-  await page.getByPlaceholder('닉네임').fill(nickname);
-  await page.getByPlaceholder('비밀번호').fill(password);
-  await page.getByRole('button', { name: '로그인' }).click();
+  await page.fill('input[type="text"]', loginId);
+  await page.fill('input[type="password"]', password);
+  await page.click('button[type="submit"]');
+}
+
+// -- 에러/상태별 Mock 헬퍼 ---------------------------------------------------
+
+/**
+ * 특정 엔드포인트가 지정한 HTTP 상태 코드와 바디를 반환하도록 override한다.
+ * page.route는 마지막 등록이 우선순위가 높으므로 setupApiMocks 이후에 호출해야 한다.
+ */
+export async function overrideRoute(
+  page: Page,
+  urlPattern: string | RegExp,
+  status: number,
+  body: unknown,
+): Promise<void> {
+  await page.route(urlPattern, async (route: Route) => {
+    await route.fulfill({
+      status,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
 }
 
 /**
- * Sets up mock API with admin role and performs the login flow.
- * This is a convenience function that combines setupMockAPI + login.
- * Do NOT call setupMockAPI separately before this function.
+ * POST /api/auth/login이 401을 반환하도록 설정한다.
+ * setupApiMocks 없이 단독으로 사용 가능.
  */
-export async function loginAsAdmin(page: Page) {
-  await setupMockAPI(page, MOCK_ADMIN);
-  await login(page, MOCK_ADMIN.nickname, 'adminpass');
+export async function setupLoginError(page: Page): Promise<void> {
+  await page.route('**/api/auth/login', async (route: Route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: '아이디 또는 비밀번호가 올바르지 않습니다' }),
+    });
+  });
 }
 
 /**
- * Sets up mock API with regular user role and performs the login flow.
- * This is a convenience function that combines setupMockAPI + login.
- * Do NOT call setupMockAPI separately before this function.
+ * navigator.clipboard.writeText를 가로채어 마지막으로 기록된 텍스트를 반환한다.
+ * page.goto 이전에 호출해야 initScript가 적용된다.
+ * 클립보드에 쓰인 텍스트는 반환된 Promise가 resolve될 때 확인할 수 있다.
+ *
+ * 사용 예:
+ *   const getText = await mockClipboard(page);
+ *   await page.click('공유 버튼');
+ *   const text = await getText();
  */
-export async function loginAsUser(page: Page) {
-  await setupMockAPI(page, MOCK_USER);
-  await login(page, MOCK_USER.nickname, 'userpass');
+export async function mockClipboard(
+  page: Page,
+): Promise<() => Promise<string>> {
+  await page.addInitScript(() => {
+    let _written = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: (text: string) => {
+          _written = text;
+          return Promise.resolve();
+        },
+        readText: () => Promise.resolve(_written),
+      },
+      configurable: true,
+    });
+  });
+
+  return async () => {
+    return page.evaluate(() => navigator.clipboard.readText());
+  };
 }
 
 /**
- * Sets up mock API with adult-verified user role and performs the login flow.
- * This is a convenience function that combines setupMockAPI + login.
- * Do NOT call setupMockAPI separately before this function.
+ * 특정 URL 패턴과 HTTP 메서드에 맞는 첫 번째 요청을 가로채어
+ * url, body, query params를 반환한다.
+ *
+ * Promise.all([captureRequest(...), page.click(...)]) 패턴으로 사용한다.
  */
-export async function loginAsVerifiedUser(page: Page) {
-  await setupMockAPI(page, MOCK_ADULT_VERIFIED_USER);
-  await login(page, MOCK_ADULT_VERIFIED_USER.nickname, 'verifiedpass');
-}
+export async function captureRequest(
+  page: Page,
+  urlPattern: string | RegExp,
+  method: string,
+): Promise<{ url: string; body: unknown; params: Record<string, string> }> {
+  return new Promise((resolve) => {
+    page.on('request', (req) => {
+      const urlStr = req.url();
+      const methodMatch = req.method().toUpperCase() === method.toUpperCase();
+      const urlMatch =
+        typeof urlPattern === 'string'
+          ? urlStr.includes(urlPattern)
+          : urlPattern.test(urlStr);
 
-/**
- * Injects auth token directly into localStorage so pages that require
- * authentication can be visited without going through the login form.
- */
-export async function injectAuth(page: Page) {
-  await page.evaluate(() => {
-    localStorage.setItem('token', 'mock-jwt-token-abc123');
+      if (methodMatch && urlMatch) {
+        let body: unknown = null;
+        try {
+          body = req.postDataJSON();
+        } catch {
+          // body가 없는 요청 (GET 등)
+        }
+
+        const url = new URL(urlStr);
+        const params: Record<string, string> = {};
+        url.searchParams.forEach((value, key) => {
+          params[key] = value;
+        });
+
+        resolve({ url: urlStr, body, params });
+      }
+    });
   });
 }

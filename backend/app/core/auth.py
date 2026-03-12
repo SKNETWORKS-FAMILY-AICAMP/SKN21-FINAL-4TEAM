@@ -40,7 +40,6 @@ def decode_access_token(token: str) -> dict | None:
 
 
 # --- 토큰 블랙리스트 (Redis 기반) ---
-
 _BLACKLIST_PREFIX = "token_blacklist:"
 
 
@@ -69,16 +68,6 @@ async def is_token_blacklisted(token: str) -> bool:
     except Exception:
         logger.warning("Failed to check token blacklist (Redis unavailable)")
         return False
-
-
-async def blacklist_all_user_tokens(user_id: str) -> None:
-    """사용자의 모든 토큰을 무효화 (비밀번호 변경 등). 토큰 버전 번호로 처리."""
-    from app.core.redis import redis_client
-
-    try:
-        await redis_client.set(f"user_token_revoked:{user_id}", str(datetime.now(UTC).timestamp()))
-    except Exception:
-        logger.warning("Failed to revoke user tokens (Redis unavailable)")
 
 
 # --- 단일 세션 관리 (Redis 기반) ---

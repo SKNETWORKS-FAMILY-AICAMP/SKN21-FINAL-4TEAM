@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog, TurnReview, PromotionSeries } from '@/stores/debateStore';
@@ -11,6 +11,8 @@ import { LiveBadge } from './LiveBadge';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
 import { api } from '@/lib/api';
+import { useDebateStream } from '@/hooks/useDebateStream';
+import { useDebateReplay } from '@/hooks/useDebateReplay';
 
 type Props = {
   match: DebateMatch;
@@ -27,17 +29,21 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
   const replayIndex = useDebateStore((s) => s.replayIndex);
   const replaySpeed = useDebateStore((s) => s.replaySpeed);
   const setReplayTyping = useDebateStore((s) => s.setReplayTyping);
+  const nextSpeaker = useDebateStore((s) => s.nextSpeaker);
   const debateShowAll = useDebateStore((s) => s.debateShowAll);
   const setDebateShowAll = useDebateStore((s) => s.setDebateShowAll);
   const startReplay = useDebateStore((s) => s.startReplay);
   const stopReplay = useDebateStore((s) => s.stopReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
-  const fetchMatch = useDebateStore((s) => s.fetchMatch);
-  const addTurnFromSSE = useDebateStore((s) => s.addTurnFromSSE);
-  const appendChunk = useDebateStore((s) => s.appendChunk);
-  const clearStreamingTurn = useDebateStore((s) => s.clearStreamingTurn);
-  const setStreaming = useDebateStore((s) => s.setStreaming);
-  const addTurnReview = useDebateStore((s) => s.addTurnReview);
+  const pendingTurnLogs = useDebateStore((s) => s.pendingTurnLogs);
+  const flushPendingTurn = useDebateStore((s) => s.flushPendingTurn);
+
+  // SSE 스트리밍 — 연결/이벤트 처리 로직을 훅으로 분리
+  useDebateStream(match.id, match.status, { onSeriesUpdate });
+
+  // 리플레이 재생 interval 관리를 훅으로 분리
+  useDebateReplay();
+
   // turnIdx: 현재 타이핑 중인 replayIndex, text: 타이핑된 부분 텍스트
   // turnIdx가 replayIndex와 다를 때 displayClaim을 적용하지 않아 stale text 방지
   const [replayTyped, setReplayTyped] = useState<{ turnIdx: number; text: string }>({ turnIdx: -1, text: '' });
@@ -45,6 +51,9 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
   const lastTurnRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // streamingTurn 최신값을 ref로 유지 — turns.length 효과에서 스냅샷으로 읽기 위함
+  const streamingTurnRef = useRef(streamingTurn);
+  streamingTurnRef.current = streamingTurn;
 
   // 관전자 수 (in_progress 매치만)
   const [viewerCount, setViewerCount] = useState(0);
@@ -87,89 +96,12 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // SSE 실시간 스트리밍 (in_progress 매치)
-  useEffect(() => {
-    if (match.status !== 'in_progress') return;
-
-    // SSE 연결 시점에 기존 턴 재조회 — pending → in_progress 전환 중 생성된 턴을 보정
-    fetchTurns(match.id);
-
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const controller = new AbortController();
-    setStreaming(true);
-
-    (async () => {
-      try {
-        const response = await fetch(`/api/matches/${match.id}/stream`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: controller.signal,
-        });
-
-        const reader = response.body?.getReader();
-        if (!reader) return;
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data: ')) continue;
-            const payload = trimmed.slice(6);
-            try {
-              const event = JSON.parse(payload);
-              if (event.event === 'turn_chunk') {
-                const { turn_number, speaker, chunk } = event.data as {
-                  turn_number: number;
-                  speaker: string;
-                  chunk: string;
-                };
-                appendChunk(turn_number, speaker, chunk);
-              } else if (event.event === 'turn') {
-                addTurnFromSSE(event.data as TurnLog);
-              } else if (event.event === 'turn_review') {
-                addTurnReview(event.data as TurnReview);
-              } else if (event.event === 'series_update') {
-                onSeriesUpdate?.(event.data as PromotionSeries);
-              } else if (event.event === 'finished' || event.event === 'error') {
-                clearStreamingTurn();
-                // 결과창 즉시 표시 — fetchMatch 후에도 debateShowAll이 리셋되지 않도록 먼저 설정
-                setDebateShowAll(true);
-                // 매치 상태를 서버에서 재조회해 최종 점수/상태 반영
-                fetchMatch(match.id);
-              }
-            } catch {
-              // skip parse errors
-            }
-          }
-        }
-      } catch {
-        // aborted or error
-      } finally {
-        clearStreamingTurn();
-        setStreaming(false);
-        // SSE가 finished 이벤트 없이 종료된 경우(race condition, 엔진 크래시, 서버 재시작 등)에도
-        // 최종 매치 상태를 서버에서 재조회해 UI를 일치시킨다.
-        setDebateShowAll(true);
-        fetchMatch(match.id);
-      }
-    })();
-
-    return () => controller.abort();
-  }, [match.id, match.status, addTurnFromSSE, appendChunk, clearStreamingTurn, fetchMatch, fetchTurns, setStreaming, addTurnReview, onSeriesUpdate]);
-
   // 스마트 자동 스크롤: 완료 턴이 추가될 때만 (스트리밍 청크는 스크롤 안 함)
+  // 스트리밍 중 smooth scroll은 타이핑으로 늘어나는 콘텐츠와 충돌해 화면 흔들림 발생 — instant 사용
   useEffect(() => {
-    if (isNearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (!isNearBottomRef.current) return;
+    const behavior = streamingTurnRef.current ? 'instant' : 'smooth';
+    bottomRef.current?.scrollIntoView({ behavior });
   }, [turns.length]);
 
 
@@ -228,13 +160,25 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
     };
   }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // turnReviews를 Map으로 캐싱 — visibleTurns.map 안의 find()를 O(1) 조회로 전환
+  // SSE 청크 수신(appendChunk)마다 find()가 반복 실행되는 O(n*m) 탐색 방지
+  const turnReviewMap = useMemo(
+    () => new Map(turnReviews.map((r) => [`${r.turn_number}:${r.speaker}`, r])),
+    [turnReviews],
+  );
+
   // 리플레이 모드일 때 표시할 턴 슬라이스
   // in_progress: 항상 전체 표시 / completed: debateShowAll(전체보기 or 리플레이 종료 후)만 표시
-  const visibleTurns = replayMode
-    ? turns.slice(0, replayIndex + 1)
-    : match.status === 'in_progress' || debateShowAll
-      ? turns
-      : [];
+  // useMemo: streamingTurn 업데이트(매 SSE 청크)마다 재계산되지 않도록 메모이제이션
+  const visibleTurns = useMemo(
+    () =>
+      replayMode
+        ? turns.slice(0, replayIndex + 1)
+        : match.status === 'in_progress' || debateShowAll
+          ? turns
+          : [],
+    [replayMode, replayIndex, turns, match.status, debateShowAll],
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -276,6 +220,7 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
       {/* 리플레이 컨트롤 */}
       <ReplayControls />
 
+
       {match.status === 'waiting_agent' && (
         <div className="text-center py-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 text-sm">
@@ -302,9 +247,7 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
 
       {visibleTurns.map((turn, idx) => {
         const review =
-          turnReviews.find(
-            (r) => r.turn_number === turn.turn_number && r.speaker === turn.speaker,
-          ) ??
+          turnReviewMap.get(`${turn.turn_number}:${turn.speaker}`) ??
           turn.review_result ??
           null;
         const isLastTurn = idx === visibleTurns.length - 1;
@@ -339,13 +282,36 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
           agentBName={match.agent_b.name}
           agentAImageUrl={match.agent_a.image_url}
           agentBImageUrl={match.agent_b.image_url}
+          onTypingDone={() => flushPendingTurn(streamingTurn.turn_number, streamingTurn.speaker)}
+          turnComplete={pendingTurnLogs.some(
+            (t) => t.turn_number === streamingTurn.turn_number && t.speaker === streamingTurn.speaker,
+          )}
         />
       )}
 
-      {streaming && !streamingTurn && (
-        <div className="text-center text-xs text-primary animate-pulse py-2">
-          토론 진행 중...
-        </div>
+      {streaming && !streamingTurn && !debateShowAll && (
+        nextSpeaker ? (
+          <div className={`flex ${nextSpeaker === 'agent_b' ? 'justify-end' : 'justify-start'} px-2`}>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-bg-surface border border-border text-sm text-text-muted">
+              <span className="font-medium text-text">
+                {nextSpeaker === 'agent_a' ? match.agent_a.name : match.agent_b.name}
+              </span>
+              <span className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
+                ))}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center text-xs text-primary animate-pulse py-2">
+            토론 진행 중...
+          </div>
+        )
       )}
 
       <div ref={bottomRef} />

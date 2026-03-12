@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.schemas.debate_ws import WSTurnRequest, WSTurnResponse
-from app.services.debate_ws_manager import WSConnectionManager
+from app.services.debate.ws_manager import WSConnectionManager
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +45,7 @@ def _make_turn_request(match_id: uuid.UUID | None = None) -> WSTurnRequest:
 
 class TestWSConnectionManager:
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_connect_registers_agent(self, mock_presence):
         """접속 시 _connections에 등록된다."""
         manager = WSConnectionManager.get_instance()
@@ -58,7 +58,7 @@ class TestWSConnectionManager:
         mock_presence.assert_called_once_with(agent_id, True)
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_disconnect_clears_agent(self, mock_presence):
         """해제 시 정리되고 Queue에 _disconnect 신호가 전달된다."""
         manager = WSConnectionManager.get_instance()
@@ -82,7 +82,7 @@ class TestWSConnectionManager:
         assert sentinel == {"type": "_disconnect"}
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_request_turn_resolves_on_response(self, mock_presence):
         """턴 요청 후 응답 수신 시 Future가 resolve된다."""
         manager = WSConnectionManager.get_instance()
@@ -118,7 +118,7 @@ class TestWSConnectionManager:
         assert result.claim == "Test claim"
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_request_turn_timeout(self, mock_presence):
         """타임아웃 시 TimeoutError가 발생한다."""
         manager = WSConnectionManager.get_instance()
@@ -136,7 +136,7 @@ class TestWSConnectionManager:
             )
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_handle_invalid_message(self, mock_presence):
         """잘못된 메시지는 에러 없이 무시된다."""
         manager = WSConnectionManager.get_instance()
@@ -163,10 +163,10 @@ class TestWSConnectionManager:
             await manager.request_turn(uuid.uuid4(), uuid.uuid4(), _make_turn_request())
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_request_turn_handles_tool_request(self, mock_presence):
         """턴 중 tool_request를 처리하고 tool_result를 전송한 후 turn_response를 반환한다."""
-        from app.services.debate_tool_executor import DebateToolExecutor, ToolContext
+        from app.services.debate.tool_executor import DebateToolExecutor, ToolContext
 
         manager = WSConnectionManager.get_instance()
         agent_id = uuid.uuid4()
@@ -213,7 +213,7 @@ class TestWSConnectionManager:
         assert ws.send_json.call_count >= 2
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_request_turn_sends_error_tool_result_without_executor(self, mock_presence):
         """tool_executor 없이 tool_request가 오면 error tool_result를 전송하고 계속 대기한다."""
         manager = WSConnectionManager.get_instance()
@@ -260,7 +260,7 @@ class TestWSConnectionManager:
         assert tool_result_calls[0].args[0]["error"] is not None
 
     @pytest.mark.asyncio
-    @patch("app.services.debate_ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
+    @patch("app.services.debate.ws_manager.WSConnectionManager._set_presence", new_callable=AsyncMock)
     async def test_request_turn_raises_on_agent_disconnect(self, mock_presence):
         """턴 대기 중 에이전트가 접속 해제되면 ConnectionError가 발생한다."""
         manager = WSConnectionManager.get_instance()

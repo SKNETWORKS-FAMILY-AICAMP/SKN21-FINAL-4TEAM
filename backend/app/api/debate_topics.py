@@ -9,24 +9,33 @@ from sqlalchemy import func as sqlfunc
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.exceptions import QueueConflictError
 from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
-from app.models.debate_match import DebateMatch
-from app.models.debate_match_queue import DebateMatchQueue
+from app.models.debate_match import DebateMatch, DebateMatchQueue
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
 from app.schemas.debate_match import JoinQueueRequest
 from app.schemas.debate_topic import TopicCreate, TopicListResponse, TopicResponse, TopicUpdatePayload
-from app.services.debate_engine import run_debate
-from app.services.debate_matching_service import DebateMatchingService
-from app.services.debate_queue_broadcast import publish_queue_event, subscribe_queue
-from app.services.debate_topic_service import DebateTopicService
+from app.services.debate.broadcast import publish_queue_event, subscribe_queue
+from app.services.debate.engine import run_debate
+from app.services.debate.matching_service import DebateMatchingService
+from app.services.debate.topic_service import DebateTopicService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _require_agent_ownership(db: AsyncSession, agent_id: str, user: User) -> None:
+    """에이전트 소유권 검증. 실패 시 HTTP 403."""
+    agent_result = await db.execute(
+        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
 
 
 @router.post("", response_model=TopicResponse, status_code=status.HTTP_201_CREATED)
@@ -108,8 +117,8 @@ async def get_topic(
     topic = await service.get_topic(topic_id)
     if topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
-    queue_count = await service._count_queue(topic.id)
-    match_count = await service._count_matches(topic.id)
+    queue_count = await service.count_queue(topic.id)
+    match_count = await service.count_matches(topic.id)
     return _topic_response(topic, queue_count=queue_count, match_count=match_count)
 
 
@@ -121,54 +130,40 @@ async def _run_debate_safe(match_id: str) -> None:
         logger.exception("토론 엔진 오류 (match_id=%s)", match_id)
 
 
+_background_tasks: set[asyncio.Task] = set()
+
+
 async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> None:
-    """한 명 준비 완료 후 10초 카운트다운, 양쪽이 아직 큐에 있으면 자동 매치 생성."""
-    await asyncio.sleep(10)
+    """한 명 준비 완료 후 카운트다운, 양쪽이 아직 큐에 있으면 자동 매치 생성."""
+    await asyncio.sleep(settings.debate_ready_countdown_seconds)
 
     from app.core.database import async_session
 
     try:
         async with async_session() as db:
-            # 양쪽 큐 엔트리 재확인 (이미 매칭됐으면 스킵)
-            res_a = await db.execute(
+            # 두 엔트리를 단일 쿼리로 함께 잠금 — 분리 잠금 시 ready_up과 경합 방지
+            entries = (await db.execute(
                 select(DebateMatchQueue)
                 .where(
                     DebateMatchQueue.topic_id == topic_id,
-                    DebateMatchQueue.agent_id == agent_a_id,
+                    DebateMatchQueue.agent_id.in_([agent_a_id, agent_b_id]),
                 )
                 .with_for_update()
-            )
-            entry_a = res_a.scalar_one_or_none()
+            )).scalars().all()
 
-            res_b = await db.execute(
-                select(DebateMatchQueue)
-                .where(
-                    DebateMatchQueue.topic_id == topic_id,
-                    DebateMatchQueue.agent_id == agent_b_id,
-                )
-                .with_for_update()
-            )
-            entry_b = res_b.scalar_one_or_none()
-
-            if entry_a is None or entry_b is None:
-                # 이미 매칭됐거나 한쪽이 탈퇴
+            if len(entries) < 2:
+                # 이미 ready_up에서 처리됨
                 return
 
-            ver_a_res = await db.execute(
-                select(DebateAgentVersion)
-                .where(DebateAgentVersion.agent_id == entry_a.agent_id)
-                .order_by(DebateAgentVersion.version_number.desc())
-                .limit(1)
-            )
-            ver_a = ver_a_res.scalar_one_or_none()
+            entry_a = next(e for e in entries if str(e.agent_id) == agent_a_id)
+            entry_b = next(e for e in entries if str(e.agent_id) == agent_b_id)
 
-            ver_b_res = await db.execute(
-                select(DebateAgentVersion)
-                .where(DebateAgentVersion.agent_id == entry_b.agent_id)
-                .order_by(DebateAgentVersion.version_number.desc())
-                .limit(1)
-            )
-            ver_b = ver_b_res.scalar_one_or_none()
+            from app.services.debate.agent_service import get_latest_version
+            from app.services.debate.promotion_service import DebatePromotionService
+            from app.services.debate.season_service import DebateSeasonService
+
+            ver_a = await get_latest_version(db, entry_a.agent_id)
+            ver_b = await get_latest_version(db, entry_b.agent_id)
 
             match = DebateMatch(
                 topic_id=topic_id,
@@ -178,6 +173,20 @@ async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> N
                 agent_b_version_id=ver_b.id if ver_b else None,
                 status="pending",
             )
+
+            # ready_up()과 동일하게 활성 시즌·시리즈 태깅
+            season_svc = DebateSeasonService(db)
+            active_season = await season_svc.get_active_season()
+            if active_season:
+                match.season_id = active_season.id
+
+            promo_svc = DebatePromotionService(db)
+            for aid in [str(entry_a.agent_id), str(entry_b.agent_id)]:
+                series = await promo_svc.get_active_series(aid)
+                if series and match.series_id is None:
+                    match.match_type = series.series_type
+                    match.series_id = series.id
+
             db.add(match)
             await db.delete(entry_a)
             await db.delete(entry_b)
@@ -197,7 +206,10 @@ async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> N
                 "auto_matched": False,
             })
 
-            await _run_debate_safe(str(match.id))
+            # create_task로 토론 실행 — BackgroundTask 컨텍스트 즉시 반환
+            task = asyncio.create_task(_run_debate_safe(str(match.id)))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
     except Exception:
         logger.exception("카운트다운 자동 매치 오류 (topic=%s)", topic_id)
 
@@ -209,12 +221,7 @@ async def random_match(
     db: AsyncSession = Depends(get_db),
 ):
     """랜덤 매칭. 비밀번호 없는 open 토픽 중 대기자 있는 토픽을 우선 선택."""
-    # 에이전트 소유권 검증
-    agent_result = await db.execute(
-        select(DebateAgent).where(DebateAgent.id == data.agent_id, DebateAgent.owner_id == user.id)
-    )
-    if agent_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+    await _require_agent_ownership(db, str(data.agent_id), user)
 
     # 다른 사용자의 대기자가 있는 비밀번호 없는 open 토픽 우선
     queue_subq = (
@@ -251,6 +258,11 @@ async def random_match(
     service = DebateMatchingService(db)
     try:
         result = await service.join_queue(user, str(topic.id), str(data.agent_id))
+    except QueueConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "existing_topic_id": exc.existing_topic_id},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -268,6 +280,11 @@ async def join_topic_queue(
     service = DebateMatchingService(db)
     try:
         result = await service.join_queue(user, topic_id, str(data.agent_id), data.password)
+    except QueueConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "existing_topic_id": exc.existing_topic_id},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return result
@@ -307,12 +324,7 @@ async def queue_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """대기방 SSE 스트림. 매치/타임아웃/취소 이벤트를 수신."""
-    # 에이전트 소유권 검증
-    agent_result = await db.execute(
-        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
-    )
-    if agent_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+    await _require_agent_ownership(db, agent_id, user)
 
     # 큐 등록 여부 확인
     queue_result = await db.execute(
@@ -372,12 +384,7 @@ async def queue_status(
     db: AsyncSession = Depends(get_db),
 ):
     """현재 큐 상태 조회."""
-    # 에이전트 소유권 검증
-    agent_result = await db.execute(
-        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
-    )
-    if agent_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+    await _require_agent_ownership(db, agent_id, user)
 
     # 큐 엔트리 확인
     queue_result = await db.execute(
@@ -428,12 +435,7 @@ async def leave_queue(
     db: AsyncSession = Depends(get_db),
 ):
     """큐 탈퇴. 대기 취소 이벤트 발행."""
-    # 에이전트 소유권 검증
-    agent_result = await db.execute(
-        select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
-    )
-    if agent_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent not owned by user")
+    await _require_agent_ownership(db, agent_id, user)
 
     queue_result = await db.execute(
         select(DebateMatchQueue).where(

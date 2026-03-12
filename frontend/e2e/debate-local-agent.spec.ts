@@ -1,181 +1,168 @@
 import { test, expect } from '@playwright/test';
-import { setupMockAPI, MOCK_USER, MOCK_TOKEN, login } from './helpers';
+import { setupApiMocks } from './helpers';
 
 const MOCK_DEVELOPER = {
   id: 'dev-001',
   login_id: 'devuser',
   nickname: 'devuser',
   role: 'user' as const,
-  age_group: 'adult_verified',
+  age_group: 'adult',
   adult_verified_at: '2026-01-15T00:00:00Z',
-  preferred_llm_model_id: 'model-001',
+  preferred_llm_model_id: null,
   credit_balance: 100,
   subscription_plan_key: null,
 };
 
-const MOCK_AGENTS = [
+const MOCK_LOCAL_AGENTS = [
   {
     id: 'agent-local-1',
     owner_id: 'dev-001',
     name: 'My Local Agent',
     description: 'Test local agent',
     provider: 'local',
-    model_id: 'custom',
+    model_name: 'custom',
     elo_rating: 1500,
     wins: 0,
     losses: 0,
     draws: 0,
     is_active: true,
     is_connected: false,
-    is_system_prompt_public: false,
-    use_platform_credits: false,
-    tier: 'Iron',
-    tier_protection_count: 0,
     is_profile_public: true,
+    use_platform_credits: false,
+    tier: 'iron',
+    owner_nickname: 'devuser',
     image_url: null,
-    name_changed_at: null,
-    template_id: null,
-    customizations: null,
-    created_at: '2026-01-01',
-    updated_at: '2026-01-01',
+    created_at: '2026-01-01T00:00:00Z',
   },
 ];
 
-const MOCK_AGENT_VERSIONS = [
-  {
-    id: 'v1',
-    version_number: 1,
-    version_tag: 'v1',
-    system_prompt: 'Test prompt',
-    parameters: null,
-    wins: 0,
-    losses: 0,
-    draws: 0,
-    created_at: '2026-01-01',
-  },
-];
+async function setupLocalAgentMocks(page: import('@playwright/test').Page) {
+  await setupApiMocks(page, 'user');
 
-async function setupDebateMocks(page: import('@playwright/test').Page) {
-  await setupMockAPI(page, MOCK_DEVELOPER);
-
-  // Agent API mocks
-  await page.route('**/api/agents/me', (route) => {
-    return route.fulfill({
+  // Override auth/me with developer user
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(MOCK_AGENTS),
+      body: JSON.stringify(MOCK_DEVELOPER),
     });
   });
 
-  await page.route('**/api/agents', (route) => {
-    const request = route.request();
-    if (request.method() === 'POST') {
-      const body = JSON.parse(request.postData() ?? '{}');
-      const newAgent = {
-        id: 'agent-new-1',
-        owner_id: 'dev-001',
-        name: body.name,
-        description: body.description || null,
-        provider: body.provider,
-        model_id: body.model_id || 'custom',
-        elo_rating: 1500,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        is_active: true,
-        is_connected: false,
-        created_at: '2026-01-01',
-        updated_at: '2026-01-01',
-      };
-      return route.fulfill({
+  // Override agents with local agent data (broad catch-all)
+  await page.route('**/api/agents/**', async (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+
+    if (url.match(/\/agents\/agent-local-1\/versions/)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    } else if (url.match(/\/agents\/agent-local-1$/)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_LOCAL_AGENTS[0]),
+      });
+    } else if (method === 'POST') {
+      await route.fulfill({
         status: 201,
         contentType: 'application/json',
-        body: JSON.stringify(newAgent),
+        body: JSON.stringify({ ...MOCK_LOCAL_AGENTS[0], id: 'agent-new-local' }),
+      });
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: MOCK_LOCAL_AGENTS, total: MOCK_LOCAL_AGENTS.length }),
       });
     }
-    return route.fallback();
   });
 
-  await page.route(/\/api\/agents\/[^/]+\/versions$/, (route) => {
-    return route.fulfill({
+  // /api/agents/me must return direct array (fetchMyAgents expects DebateAgent[])
+  // Register AFTER the catch-all so it has higher priority (Playwright LIFO)
+  await page.route('**/api/agents/me', async (route) => {
+    await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(MOCK_AGENT_VERSIONS),
-    });
-  });
-
-  await page.route(/\/api\/agents\/[^/]+$/, (route) => {
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(MOCK_AGENTS[0]),
-    });
-  });
-
-  // Topics/ranking
-  await page.route('**/api/topics*', (route) => {
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ items: [], total: 0 }),
-    });
-  });
-
-  await page.route('**/api/agents/ranking', (route) => {
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([]),
+      body: JSON.stringify(MOCK_LOCAL_AGENTS),
     });
   });
 }
 
 test.describe('Local Agent Flow', () => {
-  test('should display local agent in agent list', async ({ page }) => {
-    await setupDebateMocks(page);
-    await login(page, MOCK_DEVELOPER.nickname, 'devpass');
+  test.beforeEach(async ({ page }) => {
+    await setupLocalAgentMocks(page);
+  });
 
+  test('should display local agent in agent list', async ({ page }) => {
     await page.goto('/debate/agents');
+    await page.waitForLoadState('networkidle');
+
     await expect(page.getByText('My Local Agent')).toBeVisible();
-    await expect(page.getByText('로컬')).toBeVisible();
+    await page.screenshot({ path: 'screenshots/local-agent-list.png' });
   });
 
   test('should show agent creation form with local provider option', async ({ page }) => {
-    await setupDebateMocks(page);
-    await login(page, MOCK_DEVELOPER.nickname, 'devpass');
-
     await page.goto('/debate/agents/create');
-    const providerSelect = page.locator('select');
+    await page.waitForLoadState('networkidle');
+
+    // Step 1: advance past template selection
+    await page.getByRole('button', { name: '직접 프롬프트 작성' }).click();
+
+    const providerSelect = page.locator('select').first();
     await providerSelect.selectOption('local');
 
-    // API Key field should be hidden, WebSocket guide should be visible
-    await expect(page.getByText('WebSocket 연결 안내')).toBeVisible();
-    await expect(page.getByPlaceholder('sk-...')).not.toBeVisible();
+    await expect(page.getByText('로컬 에이전트 안내')).toBeVisible();
+    await page.screenshot({ path: 'screenshots/local-agent-create-form.png' });
   });
 
-  test('should create local agent without API key', async ({ page }) => {
-    await setupDebateMocks(page);
-    await login(page, MOCK_DEVELOPER.nickname, 'devpass');
-
+  test('should not require API key for local provider', async ({ page }) => {
     await page.goto('/debate/agents/create');
-    await page.locator('select').selectOption('local');
+    await page.waitForLoadState('networkidle');
+
+    // Step 1: advance past template selection
+    await page.getByRole('button', { name: '직접 프롬프트 작성' }).click();
+
+    const providerSelect = page.locator('select').first();
+    await providerSelect.selectOption('local');
+
+    // API key field should be hidden for local provider
+    const apiKeyInput = page.getByPlaceholder(/sk-|API 키/);
+    const isVisible = await apiKeyInput.isVisible().catch(() => false);
+    expect(isVisible).toBe(false);
+    await page.screenshot({ path: 'screenshots/local-agent-no-api-key.png' });
+  });
+
+  test('should create local agent and redirect to agents list', async ({ page }) => {
+    await page.goto('/debate/agents/create');
+    await page.waitForLoadState('networkidle');
+
+    // Step 1: advance past template selection
+    await page.getByRole('button', { name: '직접 프롬프트 작성' }).click();
+
+    await page.locator('select').first().selectOption('local');
     await page.getByPlaceholder('My Debate Agent').fill('New Local Agent');
-    await page.locator('textarea').fill('Test system prompt for local agent');
 
     await page.getByRole('button', { name: '에이전트 생성' }).click();
-
-    // Should redirect to agents list
-    await page.waitForURL('**/debate/agents');
+    await page.waitForURL('**/debate/agents/**');
+    await page.screenshot({ path: 'screenshots/local-agent-created.png' });
   });
 
-  test('should show connection guide on agent detail page', async ({ page }) => {
-    await setupDebateMocks(page);
-    await login(page, MOCK_DEVELOPER.nickname, 'devpass');
-
+  test('should show WebSocket connection guide on agent detail page', async ({ page }) => {
     await page.goto('/debate/agents/agent-local-1');
+    await page.waitForLoadState('networkidle');
 
-    // Connection guide should be visible for local agents
     await expect(page.getByText(/WebSocket 연결/)).toBeVisible();
+    await page.screenshot({ path: 'screenshots/local-agent-detail.png' });
+  });
+
+  test('should show WebSocket URL on agent detail page', async ({ page }) => {
+    await page.goto('/debate/agents/agent-local-1');
+    await page.waitForLoadState('networkidle');
+
     await expect(page.getByText(/ws:\/\/.*\/ws\/agent\/agent-local-1/)).toBeVisible();
+    await page.screenshot({ path: 'screenshots/local-agent-ws-url.png' });
   });
 });

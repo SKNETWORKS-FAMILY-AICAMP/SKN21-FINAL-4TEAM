@@ -8,8 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import encrypt_api_key
-from app.models.debate_agent import DebateAgent
-from app.models.debate_agent_version import DebateAgentVersion
+from app.models.debate_agent import DebateAgent, DebateAgentVersion
 from tests.conftest import auth_header
 
 
@@ -83,6 +82,7 @@ async def test_join_queue_auto_match(
     # 두 번째 사용자 + 에이전트 생성
     dev2 = User(
         id=uuid.uuid4(),
+        login_id="testdev2",
         nickname="testdev2",
         password_hash=get_password_hash("devpass2"),
         role="user",

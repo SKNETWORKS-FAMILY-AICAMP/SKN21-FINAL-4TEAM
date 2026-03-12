@@ -44,7 +44,7 @@ export class AgentWebSocket {
     this.onStatusChange(this.retryCount === 0 ? 'connecting' : 'reconnecting');
 
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${protocol}://${location.host}/ws/agent/${this.agentId}?token=${this.token}`;
+    const url = `${protocol}://${location.host}/ws/agent/${this.agentId}`;
 
     try {
       this.ws = new WebSocket(url);
@@ -54,6 +54,8 @@ export class AgentWebSocket {
     }
 
     this.ws.onopen = () => {
+      // 연결 후 즉시 인증 토큰 전송 (서버가 10초 내에 first-message로 인증 요구)
+      this.ws?.send(JSON.stringify({ type: 'auth', token: this.token }));
       this.retryCount = 0;
       this.onStatusChange('connected');
       this.startPingLoop();

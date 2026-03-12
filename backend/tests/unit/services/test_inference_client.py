@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.inference_client import InferenceClient
+from app.services.llm.inference_client import InferenceClient
 
 
 def _make_llm_model(provider: str, model_id: str = "test-model") -> MagicMock:
@@ -71,10 +71,16 @@ class TestToGeminiFormat:
 
 
 class TestGenerateRouting:
+    """generate()가 각 provider의 generate()로 올바르게 라우팅되는지 검증.
+
+    리팩터링 후 generate()는 _providers[provider].generate()에 위임하므로
+    provider 인스턴스의 generate를 직접 mock한다.
+    """
+
     @pytest.mark.asyncio
     async def test_routes_to_openai(self, client):
         model = _make_llm_model("openai")
-        with patch.object(client, "_call_openai", new_callable=AsyncMock) as mock:
+        with patch.object(client._providers["openai"], "generate", new_callable=AsyncMock) as mock:
             mock.return_value = {"content": "ok", "input_tokens": 10, "output_tokens": 5}
             result = await client.generate(model, MESSAGES)
             mock.assert_called_once()
@@ -83,15 +89,15 @@ class TestGenerateRouting:
     @pytest.mark.asyncio
     async def test_routes_to_runpod(self, client):
         model = _make_llm_model("runpod")
-        with patch.object(client, "_call_runpod", new_callable=AsyncMock) as mock:
+        with patch.object(client._providers["runpod"], "generate", new_callable=AsyncMock) as mock:
             mock.return_value = {"content": "ok", "input_tokens": 10, "output_tokens": 5}
-            result = await client.generate(model, MESSAGES)
+            await client.generate(model, MESSAGES)
             mock.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_routes_to_anthropic(self, client):
         model = _make_llm_model("anthropic")
-        with patch.object(client, "_call_anthropic", new_callable=AsyncMock) as mock:
+        with patch.object(client._providers["anthropic"], "generate", new_callable=AsyncMock) as mock:
             mock.return_value = {"content": "ok", "input_tokens": 10, "output_tokens": 5}
             await client.generate(model, MESSAGES)
             mock.assert_called_once()
@@ -99,7 +105,7 @@ class TestGenerateRouting:
     @pytest.mark.asyncio
     async def test_routes_to_google(self, client):
         model = _make_llm_model("google")
-        with patch.object(client, "_call_google", new_callable=AsyncMock) as mock:
+        with patch.object(client._providers["google"], "generate", new_callable=AsyncMock) as mock:
             mock.return_value = {"content": "ok", "input_tokens": 10, "output_tokens": 5}
             await client.generate(model, MESSAGES)
             mock.assert_called_once()
@@ -112,6 +118,8 @@ class TestGenerateRouting:
 
 
 class TestStreamRouting:
+    """generate_stream()이 각 provider의 stream()으로 올바르게 라우팅되는지 검증."""
+
     @pytest.mark.asyncio
     async def test_stream_routes_to_openai(self, client):
         model = _make_llm_model("openai")
@@ -120,7 +128,7 @@ class TestStreamRouting:
             yield "chunk1"
             yield "chunk2"
 
-        with patch.object(client, "_stream_openai", side_effect=mock_stream):
+        with patch.object(client._providers["openai"], "stream", side_effect=mock_stream):
             chunks = []
             async for chunk in client.generate_stream(model, MESSAGES):
                 chunks.append(chunk)
@@ -133,7 +141,7 @@ class TestStreamRouting:
         async def mock_stream(*args, **kwargs):
             yield "r1"
 
-        with patch.object(client, "_stream_runpod", side_effect=mock_stream):
+        with patch.object(client._providers["runpod"], "stream", side_effect=mock_stream):
             chunks = []
             async for chunk in client.generate_stream(model, MESSAGES):
                 chunks.append(chunk)
@@ -146,7 +154,7 @@ class TestStreamRouting:
         async def mock_stream(*args, **kwargs):
             yield "a1"
 
-        with patch.object(client, "_stream_anthropic", side_effect=mock_stream):
+        with patch.object(client._providers["anthropic"], "stream", side_effect=mock_stream):
             chunks = []
             async for chunk in client.generate_stream(model, MESSAGES):
                 chunks.append(chunk)
@@ -159,7 +167,7 @@ class TestStreamRouting:
         async def mock_stream(*args, **kwargs):
             yield "g1"
 
-        with patch.object(client, "_stream_google", side_effect=mock_stream):
+        with patch.object(client._providers["google"], "stream", side_effect=mock_stream):
             chunks = []
             async for chunk in client.generate_stream(model, MESSAGES):
                 chunks.append(chunk)

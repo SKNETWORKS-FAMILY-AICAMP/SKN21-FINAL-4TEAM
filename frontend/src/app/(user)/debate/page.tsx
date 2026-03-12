@@ -40,7 +40,7 @@ const defaultForm = {
   description: '',
   mode: 'debate',
   max_turns: 6,
-  turn_token_limit: 500,
+  turn_token_limit: 1500,
   tools_enabled: true,
   scheduled_start_at: null as string | null,
   scheduled_end_at: null as string | null,

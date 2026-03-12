@@ -11,7 +11,7 @@ class TestGenerateStreamByok:
     @pytest.mark.asyncio
     async def test_openai_byok_yields_chunks(self):
         """OpenAI BYOK 스트리밍이 청크를 yield한다."""
-        from app.services.inference_client import InferenceClient
+        from app.services.llm.inference_client import InferenceClient
 
         client = InferenceClient()
 
@@ -40,11 +40,12 @@ class TestGenerateStreamByok:
 
         usage_out: dict = {}
         collected = []
-        with patch("app.services.inference_client.httpx.AsyncClient", return_value=mock_client):
-            async for chunk in client._stream_openai_byok(
-                "gpt-4o", "test-key", [{"role": "user", "content": "hi"}], usage_out=usage_out
-            ):
-                collected.append(chunk)
+        # provider 내부 HTTP 클라이언트를 교체 — 리팩터링 후 OpenAIProvider가 _http를 보유
+        client._providers["openai"]._http = mock_client
+        async for chunk in client._stream_openai_byok(
+            "gpt-4o", "test-key", [{"role": "user", "content": "hi"}], usage_out=usage_out
+        ):
+            collected.append(chunk)
 
         assert collected == ["안", "녕"]
         assert usage_out["input_tokens"] == 10
@@ -52,15 +53,16 @@ class TestGenerateStreamByok:
 
     @pytest.mark.asyncio
     async def test_generate_stream_byok_routes_to_openai(self):
-        """generate_stream_byok가 openai provider를 _stream_openai_byok로 라우팅한다."""
-        from app.services.inference_client import InferenceClient
+        """generate_stream_byok가 openai provider의 stream_byok로 라우팅한다."""
+        from app.services.llm.inference_client import InferenceClient
 
         client = InferenceClient()
 
         async def _fake_openai_stream(*args, **kwargs):
             yield "테스트"
 
-        with patch.object(client, "_stream_openai_byok", side_effect=_fake_openai_stream) as mock_stream:
+        # 리팩터링 후: generate_stream_byok는 _providers["openai"].stream_byok에 위임
+        with patch.object(client._providers["openai"], "stream_byok", side_effect=_fake_openai_stream) as mock_stream:
             result = []
             async for chunk in client.generate_stream_byok(
                 provider="openai",
@@ -76,7 +78,7 @@ class TestGenerateStreamByok:
     @pytest.mark.asyncio
     async def test_generate_stream_byok_unknown_provider_raises(self):
         """지원하지 않는 provider는 ValueError를 발생시킨다."""
-        from app.services.inference_client import InferenceClient
+        from app.services.llm.inference_client import InferenceClient
 
         client = InferenceClient()
         with pytest.raises(ValueError, match="not supported"):
@@ -93,7 +95,9 @@ class TestDebateEngineStreaming:
     @pytest.mark.asyncio
     async def test_byok_turn_publishes_chunk_events(self):
         """BYOK 턴 실행 시 turn_chunk 이벤트가 각 청크마다 발행된다."""
-        from app.services.debate_engine import _execute_turn
+        from decimal import Decimal
+        from app.models.llm_model import LLMModel
+        from app.services.debate.engine import _execute_turn
 
         # 테스트용 mock 객체 구성
         match = MagicMock()
@@ -110,13 +114,25 @@ class TestDebateEngineStreaming:
         agent.provider = "openai"
         agent.model_id = "gpt-4o"
         agent.id = uuid.uuid4()
+        agent.owner_id = uuid.uuid4()
 
         version = MagicMock()
         version.system_prompt = "당신은 토론 참가자입니다."
 
+        # LLMModel mock 설정
+        mock_model = MagicMock(spec=LLMModel)
+        mock_model.id = uuid.uuid4()
+        mock_model.input_cost_per_1m = Decimal("0.003")
+        mock_model.output_cost_per_1m = Decimal("0.006")
+
+        # db.execute() 반환값: coroutine을 반환해야 함
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none = MagicMock(return_value=mock_model)
+
         db = AsyncMock()
         db.add = MagicMock()
         db.flush = AsyncMock()
+        db.execute = AsyncMock(return_value=mock_result)
 
         # 스트리밍 청크: JSON 형식 응답
         raw_json = '{"action":"argue","claim":"AI는 좋은 기술입니다.","evidence":null,"tool_used":null,"tool_result":null}'
@@ -136,11 +152,11 @@ class TestDebateEngineStreaming:
             published_events.append((event_type, data))
 
         with (
-            patch("app.services.debate_engine.InferenceClient") as _,
-            patch("app.services.debate_engine.publish_event", side_effect=_fake_publish),
+            patch("app.services.debate.engine.InferenceClient") as _,
+            patch("app.services.debate.engine.publish_event", side_effect=_fake_publish),
         ):
             # generate_stream_byok를 fake로 주입
-            from app.services import debate_engine as de
+            from app.services.debate import engine as de
 
             fake_client = MagicMock()
             fake_client.generate_stream_byok = _fake_stream

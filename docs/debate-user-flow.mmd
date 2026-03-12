@@ -1,0 +1,58 @@
+sequenceDiagram
+    actor User as "사용자"
+    participant TopicPage as "topics/[id]/page.tsx"
+    participant MatchPage as "matches/[id]/page.tsx"
+    participant Viewer as "DebateViewer.tsx"
+    participant Stream as "useDebateStream.ts"
+    participant Store as "debateStore.ts"
+    participant Proxy as "api/[...path]/route.ts"
+    participant TopicAPI as "debate_topics.py"
+    participant MatchSvc as "debate/matching_service.py"
+    participant Engine as "debate/engine.py"
+    participant Orch as "debate/orchestrator.py"
+    participant Broadcast as "debate/broadcast.py"
+
+    User->>TopicPage: 토픽 선택 및 에이전트 선택
+    User->>TopicPage: 큐 등록 버튼 클릭
+    TopicPage->>Proxy: POST /api/topics/{id}/queue
+    Proxy->>TopicAPI: join_queue()
+    TopicAPI->>MatchSvc: DebateAutoMatcher 감지
+    MatchSvc->>MatchSvc: ready_up() - DebateMatch 생성
+    MatchSvc->>Engine: run_debate() 백그라운드 실행
+
+    User->>MatchPage: 매치 뷰어 페이지 진입
+    MatchPage->>Viewer: mount - match props 전달
+    Viewer->>Stream: useDebateStream(matchId, status) 호출
+    Viewer->>Store: fetchTurns(matchId)
+    Stream->>Proxy: GET /api/matches/{id}/stream
+    Proxy->>Broadcast: subscribe(match_channel)
+
+    loop 턴 루프 (N 라운드)
+        Engine->>Orch: review_turn() - asyncio.gather()
+        Orch->>Broadcast: publish_event(turn_chunk)
+        Broadcast->>Proxy: Redis Pub/Sub 메시지
+        Proxy->>Stream: SSE data: turn_chunk
+        Stream->>Store: appendChunk(turn_number, speaker, chunk)
+        Store->>Viewer: streamingTurn 상태 업데이트
+        Viewer->>User: StreamingTurnBubble - 실시간 청크 표시
+
+        Orch->>Broadcast: publish_event(turn)
+        Broadcast->>Proxy: Redis Pub/Sub 메시지
+        Proxy->>Stream: SSE data: turn
+        Stream->>Store: addTurnFromSSE(turnLog)
+        Store->>Viewer: turns 배열 업데이트
+        Viewer->>User: TurnBubble - 완료 턴 + 검토 결과 표시
+
+        Orch->>Broadcast: publish_event(turn_review)
+        Stream->>Store: addTurnReview(review)
+    end
+
+    Engine->>Broadcast: publish_event(finished)
+    Broadcast->>Proxy: Redis Pub/Sub 메시지
+    Proxy->>Stream: SSE data: finished
+    Stream->>Store: setDebateShowAll(true) + fetchMatch()
+    Store->>Viewer: match 최종 상태 반영
+    Viewer->>User: 결과 표시 - ELO 변동 / 승자
+    User->>Viewer: 리플레이 버튼 클릭
+    Viewer->>Viewer: startReplay() - useDebateReplay tick
+    Viewer->>User: ReplayControls + TurnBubble 순차 재생

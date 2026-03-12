@@ -4,26 +4,52 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 import { SkeletonStat } from '@/components/ui/Skeleton';
-import { Users, MessageSquare, Clapperboard, ShieldAlert, MonitorDot, UserPlus } from 'lucide-react';
+import { Users, UserPlus, Sword, Trophy } from 'lucide-react';
 
-type DashboardStats = {
-  totals: { users: number; sessions: number; messages: number; personas: number };
-  today: { active_sessions: number; messages: number };
-  weekly: { new_users: number };
-  moderation: { pending_personas: number };
+type MonitoringStats = {
+  totals?: { users?: number; agents?: number; matches?: number };
+  weekly?: { new_users?: number };
+};
+
+
+type DashboardData = {
+  users: number | null;
+  newUsersWeekly: number | null;
+  agents: number | null;
+  matches: number | null;
 };
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<DashboardStats>('/admin/monitoring/stats')
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    async function fetchAll() {
+      const result: DashboardData = {
+        users: null,
+        newUsersWeekly: null,
+        agents: null,
+        matches: null,
+      };
+
+      await api
+        .get<MonitoringStats>('/admin/monitoring/stats')
+        .then((stats) => {
+          result.users = stats?.totals?.users ?? null;
+          result.newUsersWeekly = stats?.weekly?.new_users ?? null;
+          result.agents = stats?.totals?.agents ?? null;
+          result.matches = stats?.totals?.matches ?? null;
+        })
+        .catch(() => {});
+
+      setData(result);
+      setLoading(false);
+    }
+
+    fetchAll();
   }, []);
+
+  const fmt = (val: number | null) => (val === null ? '-' : val);
 
   return (
     <div>
@@ -31,7 +57,7 @@ export default function AdminDashboardPage() {
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-          {Array.from({ length: 7 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonStat key={i} />
           ))}
         </div>
@@ -39,40 +65,27 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
           <StatCard
             title="전체 사용자"
-            value={stats?.totals.users ?? '-'}
+            value={fmt(data?.users ?? null)}
             description="등록 사용자 수"
             icon={<Users className="w-5 h-5" />}
           />
           <StatCard
-            title="오늘 활성 세션"
-            value={stats?.today.active_sessions ?? '-'}
-            icon={<MonitorDot className="w-5 h-5" />}
+            title="이번 주 신규 사용자"
+            value={fmt(data?.newUsersWeekly ?? null)}
+            description="최근 7일 가입"
+            icon={<UserPlus className="w-5 h-5" />}
           />
           <StatCard
-            title="전체 세션"
-            value={stats?.totals.sessions ?? '-'}
-            icon={<MonitorDot className="w-5 h-5" />}
+            title="에이전트 수"
+            value={fmt(data?.agents ?? null)}
+            description="등록된 AI 에이전트"
+            icon={<Sword className="w-5 h-5" />}
           />
           <StatCard
-            title="오늘 메시지"
-            value={stats?.today.messages ?? '-'}
-            icon={<MessageSquare className="w-5 h-5" />}
-          />
-          <StatCard
-            title="전체 메시지"
-            value={stats?.totals.messages ?? '-'}
-            icon={<MessageSquare className="w-5 h-5" />}
-          />
-          <StatCard
-            title="페르소나"
-            value={stats?.totals.personas ?? '-'}
-            icon={<Clapperboard className="w-5 h-5" />}
-          />
-          <StatCard
-            title="모더레이션 대기"
-            value={stats?.moderation.pending_personas ?? '-'}
-            description="검수 대기 중인 페르소나"
-            icon={<ShieldAlert className="w-5 h-5" />}
+            title="매치 수"
+            value={fmt(data?.matches ?? null)}
+            description="전체 토론 매치"
+            icon={<Trophy className="w-5 h-5" />}
           />
         </div>
       )}

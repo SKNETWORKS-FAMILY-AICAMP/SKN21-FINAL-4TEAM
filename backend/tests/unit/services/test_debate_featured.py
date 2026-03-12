@@ -12,7 +12,7 @@ async def test_toggle_featured_match_not_found():
     result_mock.scalar_one_or_none.return_value = None
     db.execute = AsyncMock(return_value=result_mock)
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     with pytest.raises(ValueError, match="Match not found"):
@@ -31,7 +31,7 @@ async def test_toggle_featured_not_completed():
     result_mock.scalar_one_or_none.return_value = match_mock
     db.execute = AsyncMock(return_value=result_mock)
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     with pytest.raises(ValueError, match="완료된 매치만"):
@@ -54,7 +54,7 @@ async def test_toggle_featured_success():
     db.execute = AsyncMock(return_value=result_mock)
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     result = await service.toggle_featured("match-id", True)
@@ -77,7 +77,7 @@ async def test_toggle_featured_unset():
     db.execute = AsyncMock(return_value=result_mock)
     db.commit = AsyncMock()
 
-    from app.services.debate_match_service import DebateMatchService
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     result = await service.toggle_featured("match-id", False)
@@ -91,11 +91,17 @@ async def test_list_featured_empty():
     """하이라이트 매치가 없으면 빈 리스트."""
     db = AsyncMock()
 
-    result_mock = MagicMock()
-    result_mock.all.return_value = []
-    db.execute = AsyncMock(return_value=result_mock)
+    # 첫 번째 execute: COUNT 쿼리 → total=0
+    count_mock = MagicMock()
+    count_mock.scalar.return_value = 0
 
-    from app.services.debate_match_service import DebateMatchService
+    # 두 번째 execute: 데이터 쿼리 → 빈 리스트
+    rows_mock = MagicMock()
+    rows_mock.all.return_value = []
+
+    db.execute = AsyncMock(side_effect=[count_mock, rows_mock])
+
+    from app.services.debate.match_service import DebateMatchService
 
     service = DebateMatchService(db)
     items, total = await service.list_featured(limit=5)

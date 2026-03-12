@@ -1,30 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-
-type Tournament = {
-  id: string;
-  title: string;
-  topic_id: string;
-  status: 'registration' | 'in_progress' | 'completed' | 'cancelled';
-  bracket_size: number;
-  current_round: number;
-  winner_agent_id: string | null;
-  created_at: string;
-};
-
-type TournamentEntry = {
-  id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_image_url: string | null;
-  seed: number;
-  eliminated_at: string | null;
-  eliminated_round: number | null;
-};
-
-type TournamentDetail = Tournament & {
-  entries: TournamentEntry[];
-};
+import type { Tournament, TournamentEntry, TournamentDetail } from '@/types/debate';
 
 type State = {
   tournaments: Tournament[];

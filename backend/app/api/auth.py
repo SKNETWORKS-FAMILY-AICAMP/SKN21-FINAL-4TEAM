@@ -1,19 +1,22 @@
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import blacklist_token, clear_user_session, create_access_token, decode_access_token, set_user_session
+from app.core.auth import (
+    blacklist_token,
+    clear_user_session,
+    create_access_token,
+    decode_access_token,
+    set_user_session,
+)
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import PasswordChange, TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate
-from app.services.adult_verify_service import AdultVerifyService
 from app.services.user_service import UserService
 
 # auto_error=False: 쿠키 기반 인증 fallback 허용
@@ -101,8 +104,8 @@ async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(
 @router.post("/logout")
 async def logout(
     response: Response,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    access_token: Optional[str] = Cookie(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    access_token: str | None = Cookie(default=None),
 ):
     """로그아웃. 현재 토큰을 블랙리스트에 추가하고 세션을 삭제한다."""
     token = credentials.credentials if credentials else access_token
@@ -149,8 +152,8 @@ async def update_me(
 async def change_password(
     data: PasswordChange,
     response: Response,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    access_token: Optional[str] = Cookie(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    access_token: str | None = Cookie(default=None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -172,64 +175,3 @@ async def change_password(
     await set_user_session(str(user.id), jti, settings.access_token_expire_minutes * 60)
     _set_auth_cookie(response, new_token)
     return {"message": "Password changed successfully", "access_token": new_token}
-
-
-class AdultVerifyRequest(BaseModel):
-    method: str = "self_declare"
-    # 테스트용 추가 필드 (method에 따라 선택적 사용)
-    birth_year: int | None = None
-    phone_number: str | None = None
-    code: str | None = None
-    card_last4: str | None = None
-
-
-@router.post("/adult-verify")
-async def adult_verify(
-    data: AdultVerifyRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """성인인증 처리."""
-    extra = {
-        k: v
-        for k, v in {
-            "birth_year": data.birth_year,
-            "phone_number": data.phone_number,
-            "code": data.code,
-            "card_last4": data.card_last4,
-        }.items()
-        if v is not None
-    }
-    service = AdultVerifyService(db)
-    result = await service.verify(user, data.method, extra=extra)
-    return result
-
-
-@router.get("/adult-verify/status")
-async def adult_verify_status(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """성인인증 상태 확인."""
-    service = AdultVerifyService(db)
-    return await service.check_status(user)
-
-
-@router.post("/adult-verify/revoke")
-async def adult_verify_revoke(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """성인인증 철회."""
-    service = AdultVerifyService(db)
-    return await service.revoke(user)
-
-
-@router.get("/consent-history")
-async def consent_history(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """내 동의 이력 조회."""
-    service = AdultVerifyService(db)
-    return await service.get_consent_history(user.id)

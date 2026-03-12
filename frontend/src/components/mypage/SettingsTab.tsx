@@ -1,12 +1,10 @@
-/** 마이페이지 설정 탭. 성인인증 상태/요청 + LLM 모델 선택. */
+/** 마이페이지 설정 탭. LLM 모델 목록 표시. */
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ShieldCheck, Bot, Gem } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
-import { useUserStore } from '@/stores/userStore';
-import { AdultVerifyModal } from '@/components/auth/AdultVerifyModal';
 
 type LLMModel = {
   id: string;
@@ -22,55 +20,14 @@ type LLMModel = {
 };
 
 export function SettingsTab() {
-  const { user, setUser, isAdultVerified } = useUserStore();
   const [models, setModels] = useState<LLMModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [showVerifyModal, setShowVerifyModal] = useState(false);
 
   useEffect(() => {
     api.get<LLMModel[]>('/models').then(setModels).catch(() => toast.error('모델 목록을 불러오지 못했습니다'));
-    if (user?.preferredLlmModelId) {
-      setSelectedModel(user.preferredLlmModelId);
-    }
-  }, [user]);
-
-  const handleVerified = () => {
-    if (user) {
-      setUser({
-        ...user,
-        ageGroup: 'adult_verified',
-        adultVerifiedAt: new Date().toISOString(),
-      });
-    }
-    setShowVerifyModal(false);
-  };
+  }, []);
 
   return (
     <>
-      <section className="card mb-5 p-6">
-        <h2 className="section-title flex items-center gap-2">
-          <ShieldCheck size={20} className="text-warning" />
-          성인인증
-        </h2>
-        {isAdultVerified() ? (
-          <div className="inline-block py-2 px-4 rounded-lg bg-success text-white font-semibold text-sm">
-            인증 완료
-          </div>
-        ) : (
-          <div>
-            <p className="text-text-secondary text-sm mb-4">
-              18+ 콘텐츠 이용을 위해 성인인증이 필요합니다.
-            </p>
-            <button
-              onClick={() => setShowVerifyModal(true)}
-              className="py-2.5 px-5 border-none rounded-lg bg-warning text-white text-sm font-semibold cursor-pointer"
-            >
-              성인인증 하기
-            </button>
-          </div>
-        )}
-      </section>
-
       <section className="card p-6">
         <h2 className="section-title flex items-center gap-2">
           <Bot size={20} className="text-primary" />
@@ -82,49 +39,29 @@ export function SettingsTab() {
         <div className="flex flex-col gap-3">
           {models
             .filter((m) => m.is_active)
-            .map((model) => {
-              const locked = model.is_adult_only && !isAdultVerified();
-              const isSelected = selectedModel === model.id;
-              return (
-                <div
-                  key={model.id}
-                  className={`p-4 rounded-xl border-2 transition-colors duration-200 relative cursor-default ${
-                    isSelected
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border bg-bg-surface'
-                  } ${locked ? 'opacity-50' : ''}`}
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[15px] font-semibold">{model.display_name}</span>
-                    <span className="text-xs text-text-muted uppercase">{model.provider}</span>
-                  </div>
-                  <div className="flex gap-4 text-[13px] text-text-secondary mb-1">
-                    <span>입력: ${model.input_cost_per_1m}/1M</span>
-                    <span>출력: ${model.output_cost_per_1m}/1M</span>
-                  </div>
-                  <div className="text-xs text-text-muted">
-                    컨텍스트: {(model.max_context_length / 1000).toFixed(0)}K
-                    {model.is_adult_only && ' | 성인전용'}
-                    {' | '}
-                    <Gem size={10} className="inline" />
-                    {' '}{model.credit_per_1k_tokens}석/1K토큰
-                  </div>
-                  {isSelected && (
-                    <div className="absolute top-3 right-3 px-2.5 py-0.5 rounded-badge bg-primary text-white text-[11px] font-semibold">
-                      선택됨
-                    </div>
-                  )}
+            .map((model) => (
+              <div
+                key={model.id}
+                className="p-4 rounded-xl border-2 border-border bg-bg-surface transition-colors duration-200"
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[15px] font-semibold">{model.display_name}</span>
+                  <span className="text-xs text-text-muted uppercase">{model.provider}</span>
                 </div>
-              );
-            })}
+                <div className="flex gap-4 text-[13px] text-text-secondary mb-1">
+                  <span>입력: ${model.input_cost_per_1m}/1M</span>
+                  <span>출력: ${model.output_cost_per_1m}/1M</span>
+                </div>
+                <div className="text-xs text-text-muted">
+                  컨텍스트: {(model.max_context_length / 1000).toFixed(0)}K
+                  {model.is_adult_only && ' | 성인전용'}
+                  {' | '}
+                  {model.credit_per_1k_tokens}석/1K토큰
+                </div>
+              </div>
+            ))}
         </div>
       </section>
-
-      <AdultVerifyModal
-        isOpen={showVerifyModal}
-        onClose={() => setShowVerifyModal(false)}
-        onVerified={handleVerified}
-      />
     </>
   );
 }

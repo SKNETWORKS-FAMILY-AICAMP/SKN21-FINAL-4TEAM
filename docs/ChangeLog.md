@@ -1,0 +1,404 @@
+## [2026-03-11] services/ 도메인별 서브패키지 재편
+
+### Changed
+- `services/` 하위 파일을 도메인별 서브패키지로 분리
+  - `services/debate/` (신규): `debate_*` 서비스 12개 이동 + `debate_` 접두사 제거
+    - `agent_service.py`, `broadcast.py`, `engine.py`, `match_service.py`, `matching_service.py`, `orchestrator.py`, `promotion_service.py`, `season_service.py`, `tool_executor.py`, `topic_service.py`, `tournament_service.py`, `ws_manager.py`
+  - `services/llm/` (신규): `inference_client.py` + `providers/` 폴더 이동
+- 전체 `.py` 파일 38개 import 경로 일괄 교체 (`app.services.debate_X` → `app.services.debate.X`, `app.services.inference_client` → `app.services.llm.inference_client`, `app.services.providers.` → `app.services.llm.providers.`)
+
+### Notes
+- 기능 변경 없음 — 파일 이동 및 import 경로 변경만
+- 단위 테스트 273개 전부 통과
+
+---
+
+## [2026-03-11] core/ 데드코드 제거 및 정리
+
+### Removed
+- `auth.py`: `blacklist_all_user_tokens()` 제거 — `user_token_revoked:` Redis 키를 읽는 코드가 전체 프로젝트에 없음 (세션 무효화는 `clear_user_session()`이 담당)
+- `deps.py`: `require_adult_verified()` 제거 — 성인인증 기능 제거 후 어떤 라우터에도 Depends 사용처 없음
+- `observability.py`: `record_pipeline_duration()` + `_pipeline_duration` Histogram 제거 — 구 챗봇 NLP 파이프라인(emotion/embedding/reranker) 잔재, 호출처 없음. `get_metrics()` 반환값도 2개로 정리
+
+### Fixed
+- `rate_limit.py`: SSE 스트림 블록에서 `reset_at - int(now)` 중복 계산 → `retry_after` 변수로 캐싱
+
+### Notes
+- 단위 테스트 273개 전부 통과
+
+---
+
+## [2026-03-10] 토큰 제한 초과 전용 감점 도입
+
+### Added
+- `providers/openai_provider.py`: SSE 스트림에서 `finish_reason` 캡처 → `usage_out["finish_reason"]`에 저장
+- `providers/anthropic_provider.py`: `stop_reason="max_tokens"` → `finish_reason="length"` 정규화
+- `providers/google_provider.py`: `finishReason="MAX_TOKENS"` → `finish_reason="length"` 정규화
+- `debate_engine.py`: `PENALTY_TOKEN_LIMIT = 3` 상수 추가
+- `debate_orchestrator.py`: `PENALTY_KO_LABELS`에 `"token_limit": "토큰 제한 초과"` 추가
+
+### Changed
+- `debate_engine.py`: 발언 파싱 실패 시 원인 구분 — `finish_reason == "length"`이면 `token_limit` 감점(-3), 실제 JSON 오류면 `schema_violation` 감점(-5) 부여. `token_limit`은 파싱 성공 여부와 무관하게 응답 절삭 자체에 부여.
+
+### Notes
+- 감점을 낮게(-3) 설정한 이유: 토픽에서 직접 설정한 제한(`turn_token_limit`)이므로 에이전트 의도적 위반보다 경미하게 처리
+- 단위 테스트 273개 전부 통과
+
+---
+
+## [2026-03-10] 코드 리뷰 기반 수정 — Critical 2개 · Major 3개 · Minor 2개
+
+### Fixed (Critical)
+- `debate_orchestrator.py`: `_call_review_llm`, `_judge_with_model`이 `_call_openai_byok` 하드코딩 → `generate_byok(provider, ...)` 교체. `_infer_provider(model_id)` + `_platform_api_key(provider)` 추가로 Anthropic/Google 모델도 review·judge에 사용 가능
+- `debate_orchestrator.py` + `debate_engine.py`: `DebateOrchestrator.__init__`에서 `InferenceClient()` 독립 생성으로 httpx 커넥션 누수 → `client` 파라미터 주입 방식으로 변경, `debate_engine.py`에서 엔진 공유 클라이언트 재사용
+
+### Fixed (Major)
+- `debate_topics.py`: `_auto_match_safe` 카운트다운 매칭 경로에서 `season_id`, `match_type`, `series_id` 태깅 누락 → `ready_up()`과 동일한 시즌·시리즈 태깅 로직 추가. `select(DebateAgentVersion)` 중복 쿼리 → `get_latest_version()` 재사용
+- `debate_match_service.py`, `debate_agent_service.py`: 검색 쿼리 `f"%{search}%"` → LIKE 특수문자(`%`, `_`, `\`) 이스케이프 처리 (3곳)
+- `debate_ws_manager.py`: `asyncio.get_event_loop().time()` → `asyncio.get_running_loop().time()` (Python 3.12 deprecated)
+
+### Fixed (Minor)
+- `debateStore.ts`: `fetchRanking` 응답 타입 `{ items, total } | RankingEntry[]` 유니온 → `{ items, total }` 단일 타입
+
+### Notes
+- 단위 테스트 273개 전부 통과
+
+---
+
+## [2026-03-10] debate_agent_service.py dead code 제거 + 주석 보강
+
+### Fixed (dead code)
+- `update_agent()` — `elif data.name is not None: agent.name = data.name` 제거 (동일값 재할당 no-op)
+- `update_elo()` — `if new_idx > old_idx:` 블록(즉시 승급) 제거: `check_and_trigger()`가 이미 승급전 시리즈를 생성하므로 도달 불가
+- `update_elo()` — 로컬 `tier_order` 하드코딩 → `debate_promotion_service.TIER_ORDER` import로 교체 (중복 제거)
+- `get_gallery()` — `get_tier_from_elo(agent.elo_rating)` 재계산 → `agent.tier` (DB authoritative 값) 사용으로 교체
+
+### Tests
+- `test_debate_agent_service.py` — `TestUpdateAgentDeadCode`, `TestUpdateEloDeadCode` 클래스 추가 (4개 신규 테스트)
+- 단위 테스트 273개 전부 통과
+
+### Notes
+- 서비스 외부 API 변경 없음 — 모두 내부 구현 수정
+- `TIER_ORDER` 단일 출처: `debate_promotion_service.py`
+
+---
+
+## [2026-03-09] 전체 코드 리뷰 기반 성능·재사용성·매직상수 개선
+
+### Fixed (성능)
+- `debate_match_service.py:get_match()` — 에이전트 개별 조회 2회(N+1) → `id.in_()` 단일 배치 쿼리로 교체
+- `debate_season_service.py:close_season()` — 루프 내 User 개별 조회 → 배치 쿼리 후 맵 참조로 O(N) → O(1)
+- `debate_match_service.py:generate_summary_task()` — 매 호출마다 새 SQLAlchemy 엔진 생성 → 앱 수준 공유 `async_session` 재사용
+- `debate_match_service.py:DebateSummaryService` — `InferenceClient()` 직접 생성 → `async with InferenceClient() as client:` 패턴으로 연결 풀 정리 보장
+
+### Fixed (재사용성)
+- `debate_topics.py` — 에이전트 소유권 검증 쿼리 4중 복붙 → `_require_agent_ownership()` 헬퍼로 추출
+- `debate_agents.py` — 에이전트 존재+권한 검증 블록 3중 복붙 → `_require_agent_access()` 헬퍼로 추출, `_ADMIN_ROLES` 상수 선언
+- `debate_matches.py:get_match_summary` — 라우터 직접 DB 쿼리 → `DebateMatchService.get_summary_status()` 메서드로 이동
+- `debate_promotion_service.py` — `create_promotion_series` / `create_demotion_series` 중복 → `_create_series()` private 메서드 추출
+- `debate_match_service.py` — Decimal 토큰 비용 계산식 중복 → `calculate_token_cost()` 헬퍼 추출 (debate_engine.py에서도 재사용)
+- `debate_agent_service.py` — ELO 티어 경계값 하드코딩 if/elif 체인 → `_TIER_THRESHOLDS` 모듈 상수로 선언 + 루프 기반 계산
+
+### Fixed (매직 상수)
+- `config.py` — 8개 설정 추가: `debate_draw_threshold`, `debate_review_max_tokens`, `debate_judge_max_tokens`, `debate_prediction_cutoff_turns`, `debate_ready_countdown_seconds`, `debate_season_reward_top3`, `debate_season_reward_rank4_10`, `agent_name_change_cooldown_days`
+- `debate_orchestrator.py` — `max_tokens=2000/1024`, `diff >= 5` 리터럴 → settings 참조
+- `debate_orchestrator.py` — 파싱 실패 폴백 스코어카드 고정값 → `{k: v // 2 for k, v in SCORING_CRITERIA.items()}` 동적 계산
+- `debate_season_service.py` — `SEASON_REWARDS / RANK_4_10_REWARD` 모듈 상수 → settings 참조로 교체
+- `debate_matching_service.py` + `debate_topics.py` — 카운트다운 `10` 리터럴 두 곳 → `settings.debate_ready_countdown_seconds` 동기화
+- `debate_match_service.py` — `turn_count > 2` 하드코딩 → `settings.debate_prediction_cutoff_turns` 참조
+- `debate_agent_service.py` — 이름 변경 쿨다운 `7` 하드코딩 → `settings.agent_name_change_cooldown_days` 참조
+
+### Notes
+- 단위 테스트 222개 전부 통과
+- 서비스 API 변경 없음 — 모두 내부 구현 변경
+
+---
+
+## [2026-03-09] AI 토론 스트리밍 및 성능 전면 최적화
+
+### Changed
+- `frontend/src/components/debate/DebateViewer.tsx`: React 18 Automatic Batching으로 인한 "한번에 출력" 문제 수정 — setTimeout 20ms 큐(`enqueueChunk`)로 각 청크를 별도 macrotask에서 렌더링해 실시간 타자기 효과 구현
+- `frontend/src/app/api/[...path]/route.ts`: `cache: 'no-store'` 추가 — Next.js 확장 fetch의 SSE body 버퍼링 방지
+- `backend/app/services/debate_broadcast.py`: `get_message(timeout=0.05)` (1.0→0.05) + 하트비트 sleep 2초 — Redis Pub/Sub 청크 전달 지연 95% 감소
+- `backend/app/services/inference_client.py`: `InferenceClient`에 인스턴스 수준 공유 `httpx.AsyncClient` 도입 (`__init__`에서 생성, `aclose()`/`__aenter__`/`__aexit__` 추가) — 매 LLM 호출마다 TCP/TLS 핸드셰이크를 생략해 첫 토큰 도달 시간(TTFT) 단축
+- `backend/app/services/debate_engine.py`: 롤링 병렬 B 리뷰 패턴 구현 — B 실행 직후 `asyncio.create_task`로 B 리뷰를 시작하고 다음 턴 A 실행 동안 숨겨 턴 간 순수 대기 시간 제거 (턴당 ~15→5초). `_run_match_with_client` 추출로 `async with InferenceClient()` 블록에서 예외·조기 반환 시에도 HTTP 연결 풀 정리 보장
+
+### Notes
+- 단위 테스트 222개 통과
+- 스트리밍 체감 성능: 청크가 즉시 한 글자씩 출력 (이전: LLM 완료 후 한번에 출력)
+- 턴 간 지연: ~30초 → ~5초 (B 리뷰가 다음 턴 A 실행과 병렬화됨)
+
+---
+
+## [2026-03-09] 시스템 아키텍처 문서 작성
+
+### Added
+- `docs/modules/system-architecture.md`: 전체 시스템 아키텍처 문서 최초 작성 (인프라 구성, API 엔드포인트, 토론 엔진 흐름, DB 구조, 배포 구성, 성능 목표 포함)
+- `docs/modules/model-architecture.md`: LLM 모델 아키텍처 문서 최초 작성 (모델 역할 분리, 라우팅 구조, 지원 모델 목록, OptimizedOrchestrator 병렬 처리, 벤치마크 결과 포함)
+
+---
+
+## [2026-03-06] debate agents 버그 수정 및 코드 품질 개선
+
+### Fixed
+- `debate_agents.py` + `debate_agent_service.py`: `update_agent` — 소유권 불일치 시 404 대신 403 반환하도록 `PermissionError` 분리
+- `debate_agent_service.py`: `clone_agent` — BYOK(non-local, use_platform_credits=False) 에이전트 복제 시 항상 실패하던 버그 수정. api_key 없이 직접 DB 삽입으로 복제, 복제본은 비공개로 시작
+- `debate_agent_service.py`: `get_gallery` 응답에 `is_system_prompt_public` 필드 추가 (복제 가능 여부 프론트 판단용)
+- `debate_agents.py`: `get_head_to_head` — 잘못된 UUID 입력 시 500 대신 422 반환
+
+### Changed
+- `debate_agent.py`: `DebateAgent.updated_at` 컬럼에 `onupdate=lambda: datetime.now(UTC)` 추가 (수정 시 자동 갱신)
+- `debate_agent_schema.py`: `AgentUpdate.system_prompt` — `min_length=1` 검증 추가 (빈 문자열 업데이트 차단)
+- `debate_agent_schema.py`: `GalleryEntry`에 `is_system_prompt_public` 필드 추가; `AgentRankingListResponse`, `GalleryListResponse`, `HeadToHeadListResponse` 래퍼 스키마 추가
+- `debate_agents.py`: `/ranking`, `/gallery`, `/{id}/head-to-head` 엔드포인트에 `response_model` 연결
+
+### Notes
+- 단위 테스트 224개 통과
+
+---
+
+## [2026-03-06] 서비스 실용성 없는 로직 9개 수정
+
+### Changed
+- `debate_engine.py`: `human_suspicion_score` 데드코드 전면 제거 (PENALTY_HUMAN_SUSPICION, elapsed/length_history 수집, SSE 이벤트 포함)
+- `debate_engine.py`: 멀티에이전트 루프에서 루프 전 에이전트·버전 일괄 로드 → dict 캐시 조회 (매 턴 N번 DB 쿼리 → 1번으로 감소)
+- `debate_match_service.py`: `generate_summary()` — `httpx.AsyncClient` 직접 OpenAI 호출 → `InferenceClient.generate()` 교체 + `TokenUsageLog` INSERT 추가
+- `debate_match_service.py`: `list_featured()` — `return items, len(items)` → 별도 COUNT 쿼리로 실제 전체 건수 반환
+- `debate_agent_service.py`: `get_latest_version` 4곳 중복 구현 → 단독 함수로 통합 (debate_matching_service가 import하여 재사용)
+- `debate_agent_service.py`: `get_my_ranking()` — 에이전트 수만큼 COUNT 반복 (N+1) → 전체 리스트 1회 조회 + rank_map dict 계산
+- `debate_orchestrator.py`: `_build_review_result(skipped: bool = False)` → `skipped: bool | None = None` (기존 default False는 `is not None` 체크를 항상 True로 만들던 버그)
+- `debate_topic_service.py`: `_last_sync_at` 클래스 변수 기반 스로틀링 → Redis `SET NX EX 60` 분산 락으로 교체 (멀티 워커 환경에서 안전)
+- `debate_season_service.py`: `close_season()` — 시즌 보상(`reward > 0`) 계산 후 `User.credit_balance` 실제 차감 (기존: DB에만 기록, 잔액 미반영)
+
+### Notes
+- DB 컬럼 `human_suspicion_score` 는 API 호환성을 위해 스키마/마이그레이션 유지, 서비스 레이어에서만 미사용
+- 단위 테스트 252개 통과 (통합 테스트 연결 오류는 로컬 DB/Redis 미실행 탓 — 코드 이슈 없음)
+
+---
+
+## [2026-03-06] 정규식 탐지 제거 → LLM 검토 항상 실행
+
+### Changed
+- `debate_engine.py`: `_INJECTION_PATTERNS`, `_AD_HOMINEM_PATTERNS`, `detect_prompt_injection()`, `detect_ad_hominem()`, `PENALTY_PROMPT_INJECTION`, `PENALTY_AD_HOMINEM` 전체 제거
+- `debate_orchestrator.py`: `_should_skip_review()` 제거, `review_turn_fast()` 패스트패스 분기 제거 → 모든 발언에 LLM 검토 항상 실행, `PENALTY_KO_LABELS`에서 정규식 벌점 키 제거
+- `config.py`: `debate_review_fast_path` 설정값 제거
+- 벤치마크/단위 테스트에서 관련 테스트 정리
+
+### Notes
+- 기존 정규식은 영어 중심 + 한국어 3단어(바보/멍청/병신)에 불과해 우회 가능성 높음
+- 패스트패스가 LLM 검토 여부를 결정하는 게이트였으나, 게이트 제거 후 gpt-5-nano가 모든 발언 검토
+- 단위 테스트 252개 통과
+
+---
+
+## [2026-03-06] 프론트엔드 비토론 코드 전면 삭제
+
+### Removed
+- **사용자 페이지** (`src/app/(user)/`): `character/`, `character-chats/`, `chat/`, `community/`, `favorites/`, `notifications/`, `pending-posts/`, `personas/`, `relationships/`, `sessions/`
+- **관리자 페이지** (`src/app/admin/`): `content/`, `features/`, `personas/`, `policy/`, `reports/`, `video-gen/`, `world-events/`
+- **컴포넌트 디렉토리**: `src/components/character/`, `src/components/pending/`, `src/components/persona/`, `src/components/credits/`, `src/components/subscription/`, `src/components/chat/`, `src/components/community/`, `src/components/live2d/`
+- **인증 모달**: `src/components/auth/AdultVerifyModal.tsx`, `AdultVerifyModal.test.tsx`, `AgeGateModal.tsx`, `AgeGateModal.test.tsx`
+- **레이아웃**: `src/components/layout/NotificationBell.tsx`
+- **마이페이지 탭**: `src/components/mypage/SubscriptionTab.tsx`, `UserPersonaTab.tsx`, `MemoriesTab.tsx`, `CreatorTab.tsx`
+- **스토어**: `characterChatStore.ts`, `characterPageStore.ts`, `chatStore.ts`, `communityStore.ts`, `creditStore.ts`, `featureFlagStore.ts`, `live2dStore.ts`, `notificationStore.ts`, `pendingPostStore.ts`, `personaStore.ts`, `worldEventStore.ts`
+- **상수**: `src/constants/categories.ts`
+
+### Changed
+- `src/app/(user)/layout.tsx`: `featureFlagStore` import 제거, feature flag 게이팅 로직 제거, chat 전용 분기 제거
+- `src/app/(user)/mypage/page.tsx`: 비토론 탭(subscription, user-persona, memories, creator) 제거 → profile/settings/usage/agents 4개 탭만 유지
+- `src/app/page.tsx`: 테마 선택 단계 제거, 회원가입 후 `/debate`로 바로 리다이렉트, 아이콘 Swords로 변경
+- `src/components/layout/UserSidebar.tsx`: 비토론 메뉴 항목 제거, `featureFlagStore`/`notificationStore`/`CreditBadge` 제거, 홈 링크 `/debate`로 변경
+- `src/components/admin/Sidebar.tsx`: 비토론 메뉴 항목 제거, `pendingReports` 로직 제거, 미사용 import 정리
+- `src/components/mypage/ProfileTab.tsx`: `creditStore` 의존성 제거, 대화석 표시 항목 제거
+- `src/components/mypage/SettingsTab.tsx`: `AdultVerifyModal`, 성인인증 섹션 제거 → LLM 모델 목록만 표시
+
+### Notes
+- TypeScript 타입 오류 없음 (`npx tsc --noEmit` 통과)
+- 프론트엔드 테스트 36개 모두 통과
+
+## [2026-03-06] 테스트 파일 정리 (23개 삭제)
+
+### Removed
+- `integration/api/` 비토론 테스트 14개: board, character_chats/pages, chat, credits, lorebook, lounge, pending_posts, personas, policy, subscriptions, video_gen, webtoons, world_events
+- `unit/pipeline/` 삭제된 서비스 테스트 5개: embedding, emotion, korean_nlp, pii, reranker
+- `unit/prompt/test_compiler.py`: 삭제된 persona 프롬프트 컴파일러 테스트
+- `unit/services/test_debate_engine_rewrite.py`: 완료된 리라이트 계획 잔재
+- `unit/services/test_debate_orchestrator_rewrite.py`: 완료된 리라이트 계획 잔재
+- `unit/services/test_debate_queue_broadcast.py`: debate_broadcast로 병합된 모듈 테스트
+
+### Notes
+- 단위 테스트 352개 → 232개 (비토론 및 중복 테스트 제거)
+
+---
+
+## [2026-03-06] debate 모듈 파일 병합 (Services 5개, Models 7개 제거)
+
+### Changed
+**Services (17개 → 12개):**
+- `debate_broadcast.py` ← `debate_queue_broadcast.py` 흡수 (publish_queue_event, subscribe_queue)
+- `debate_matching_service.py` ← `debate_auto_match.py` 흡수 (DebateAutoMatcher 클래스)
+- `debate_match_service.py` ← `debate_summary_service.py` 흡수 (generate_summary_task)
+- `debate_agent_service.py` ← `debate_template_service.py` 흡수 (DebateTemplateService) + `debate_utils.get_latest_version` 이동
+- `debate_orchestrator.py` ← `debate_utils` 의 detect_prompt_injection, detect_ad_hominem, format_debate_log 이동
+
+**Models (15개 → 8개):**
+- `debate_match.py` ← DebateMatchParticipant, DebateMatchPrediction, DebateMatchQueue 통합
+- `debate_agent.py` ← DebateAgentVersion, DebateAgentSeasonStats 통합
+- `debate_season.py` ← DebateSeasonResult 통합
+- `debate_tournament.py` ← DebateTournamentEntry 통합
+- `models/__init__.py`: 통합 파일에서 import하도록 정리
+
+### Notes
+- 전체 단위 테스트 352개 통과
+- `main.py`의 `DebateAutoMatcher` import 경로 버그 동시 수정 (debate_auto_match → debate_matching_service)
+
+---
+
+## [2026-03-06] 비토론 모듈 파일 실제 삭제
+
+### Removed
+- `api/` 비토론 라우터 22개: board, character_cards/chats/pages, chat, credits, favorites, features, image_gen, lorebook, lounge, memories, notifications, pending_posts, personas, policy, relationships, subscriptions, tts, user_personas, webtoons, world_events
+- `api/admin/` 레거시 플랫 파일 17개: agents, board, content, credits, debate(구 단일파일), features, llm_models, monitoring, personas, policy, reports, subscriptions, system(구 단일파일), usage, users, video_gen, world_events
+- `services/` 비토론 서비스 30개: adult_verify, agent_activity, agent_scheduler, batch_scheduler, board, character_card/chat/page, chat, credit, favorite, feature_flag, human_detection, image_gen, lorebook, moderation, notification, pending_post, persona, policy, quota, rag, relationship, report, review, subscription, tts, user_persona, video_gen, world_event
+- `models/` 비토론 모델 35개: agent_activity_log, board/board_comment/post/reaction, character_chat_message/session, chat_message/session, comment_stat, consent_log, credit_cost/ledger, episode/embedding/emotion, live2d_model, lorebook_entry, notification, pending_post, persona/favorite/lounge_config/relationship/report, review_cache, spoiler_setting, subscription_plan, usage_quota, user_memory/persona/subscription, video_generation, webtoon, world_event
+- `schemas/` 비토론 스키마 20개: board, character_chat/page, chat, credit, favorite, image_gen, lorebook, lounge, notification, pending_post, persona, relationship, report, subscription, tts, user_persona, video_gen, webtoon, world_event
+- `tests/unit/` 비토론 테스트 11개: agent_activity, batch_scheduler, board, chat, credit, human_detection, image_gen, quota, subscription, tts, video_gen
+
+### Changed
+- `models/__init__.py`: debate 전용 18개 모델만 import (User, LLMModel, TokenUsageLog + 15개 debate 모델)
+- `services/debate_engine.py`: 삭제된 CreditLedger, HumanDetectionAnalyzer import 및 관련 로직 제거
+- `services/debate_season_service.py`: 삭제된 CreditLedger import 및 시즌 크레딧 보상 로직 제거
+- `api/auth.py`: 삭제된 성인인증 관련 어드민 엔드포인트 제거
+- `api/usage.py`: 삭제된 quota 엔드포인트 제거
+
+### Notes
+- 전체 단위 테스트 352개 통과 (기존 471개 → 비토론 테스트 제거 후 352개)
+- main.py에 미등록 상태로만 남아있던 파일들을 실제 삭제
+
+---
+
+## [2026-03-06] WebSocket 인증 방식 변경 (H-1)
+
+### Changed
+- backend/app/api/debate_ws.py: JWT를 URL 쿼리 파라미터(`?token=`)에서 first-message 방식(`{"type":"auth","token":"..."}`)으로 변경
+  - 연결 즉시 accept → 10초 timeout으로 첫 메시지 대기 → 인증 실패 시 code=4001 close
+  - 블랙리스트 + 세션 JTI 검증 추가 (`is_token_blacklisted`, `get_user_session_jti`)
+  - Redis 장애 시 fail-open (WS 서비스 완전 차단 방지)
+- frontend/src/lib/agentWebSocket.ts: WS URL에서 `?token=` 제거, `onopen` 시 `{"type":"auth","token":"..."}` 전송
+
+### Notes
+- nginx 로그·브라우저 히스토리·프록시 캐시에 JWT 노출 방지
+- 재연결(지수 백오프) 시에도 onopen에서 자동으로 인증 메시지 재전송됨
+
+---
+
+## [2026-03-06] 프로덕션 기준 코드 리뷰 20개 항목 수정
+
+### Fixed
+**HIGH (보안/데이터 정합성)**
+- H-2: debate_engine.py - use_platform_credits=False + 키 없음 시 ValueError 명시적 raise (플랫폼 키 fallback 제거)
+- H-3: core/encryption.py + config.py - ENCRYPTION_KEY를 SECRET_KEY와 완전 분리 (암호화 키 교체 독립성)
+- H-4: debate_topics.py - _auto_match_safe 이중 잠금 → 단일 `IN (...) FOR UPDATE` 쿼리 (TOCTOU 방지)
+- H-5: debate_ws.py - 블랙리스트·세션 JTI 검증 추가 (H-1과 함께 처리)
+- H-6: debate_broadcast.py - SSE 연결별 신규 Redis 연결 → 공유 ConnectionPool(max_connections=200) 전환
+
+**MEDIUM (가용성/성능)**
+- M-1: health.py - DB SELECT 1 + Redis ping 상태 포함, 실패 시 HTTP 503 반환
+- M-2: rate_limit.py - `/stream` 경로 전용 제한(debate limit의 절반), UUID suffix로 타임스탬프 충돌 방지
+- M-3: debate_engine.py - judge() 호출에 asyncio.wait_for(timeout=90.0) 추가
+- M-4: debate_tournament_service.py - join_tournament에 SELECT ... FOR UPDATE 추가 (bracket_size 초과 방지)
+- M-5: debate_topics.py - _run_debate_safe를 await→asyncio.create_task + _background_tasks set (GC 방지)
+- M-6: debate_engine.py - 에러 턴 claim 내용 내부 예외 메시지 대신 고정 문구로 sanitize
+- M-7: debate_ws_manager.py - _pubsub_loop_with_restart 지수 백오프 재시작 (최대 60초)
+- M-8: debate_engine.py - resolve_predictions/advance_round를 try/except로 감싸 ELO 커밋 후 실패 격리
+
+**LOW (코드 품질)**
+- L-1: inference_client.py - Google API 키를 URL 파라미터→ x-goog-api-key 헤더로 변경
+- L-2: rate_limit.py - zadd member에 UUID suffix 추가 (타임스탬프 충돌 방지)
+- L-3: debate_agent_service.py + debate_agents.py - get_ranking 반환값에 total 포함, API 응답 `{items, total}`
+- L-4: config.py - CHECK_INTERVAL 하드코딩 → debate_auto_match_check_interval 설정값으로 변경
+- L-5: debate_topics.py - _count_queue/_count_matches를 public 메서드로 승격
+- L-6: inference_client.py - _openai_max_tokens_key 적용 (max_completion_tokens 키 통일)
+
+### Added
+- alembic/versions/j0k1l2m3_add_prediction_unique_constraint.py: DebateMatchPrediction(match_id, user_id) UniqueConstraint 추가
+
+### Notes
+- 전체 단위 테스트 471개 모두 통과
+- 프론트엔드 WS 인증 변경(H-1)은 별도 항목으로 기록
+
+---
+
+## [2026-03-06] admin/ 서브패키지 분리 + 모듈 병합
+
+### Changed
+- backend/app/api/admin/ 플랫 구조 → admin/debate/ + admin/system/ 서브패키지로 분리
+  - admin/debate/: agents, matches, seasons, stats, templates, tournaments
+  - admin/system/: llm_models, monitoring, usage, users
+- services/ 21개 → 16개 파일 병합
+  - debate_queue_broadcast.py → debate_broadcast.py 통합
+  - debate_auto_match.py → debate_matching_service.py 통합
+  - debate_summary_service.py → debate_match_service.py 통합
+- models/ 19개 → 13개 파일 병합
+  - debate_match_participant.py + debate_match_prediction.py + debate_match_queue.py → debate_match.py
+  - debate_agent_version.py + debate_agent_season_stats.py → debate_agent.py
+  - debate_season_result.py → debate_season.py
+  - debate_tournament_entry.py → debate_tournament.py
+
+### Notes
+- 각 병합 파일 내 한국어 섹션 구분 주석 추가 (가독성)
+- 전체 단위 테스트 315개 통과
+
+---
+
+## [2026-03-05] 모델 참조 오류 수정
+
+### Fixed
+- app/models/token_usage_log.py: ChatSession relationship 제거 (모델 부재로 인한 mapper 초기화 오류)
+- app/models/user.py: 존재하지 않는 모델들의 relationship 제거 (ConsentLog, SpoilerSetting, ChatSession, UserMemory, UserSubscription, UserPersona, PersonaFavorite, PersonaRelationship, Notification)
+- tests/unit/services/test_debate_streaming.py: db.execute() mock을 AsyncMock으로 수정 (coroutine 반환)
+
+### Notes
+- 전체 단위 테스트 371개 모두 통과
+
+---
+
+## [2026-03-05] Alembic 마이그레이션 squash
+
+### Changed
+- alembic/versions/: 기존 마이그레이션 체인 전체 제거 → 단일 베이스라인(0001_baseline)으로 교체
+
+### Notes
+- 삭제된 모델 34개 참조 정리
+- 새 환경 alembic upgrade head 정상 동작 확인
+- 기존 운영 DB가 있다면 alembic stamp 0001_baseline 실행 필요
+
+---
+
+## [2026-03-05] 프론트엔드 비토론 화면 전체 제거
+
+### Removed
+- Pages: chat, character, character-chats, community, favorites, notifications, pending-posts, personas, relationships, sessions (사용자 페이지 10개)
+- Admin Pages: content, features, personas, policy, reports, video-gen, world-events (관리자 페이지 7개)
+- Components: character, chat, community, live2d, persona, subscription, guide, pending (8개 디렉토리)
+- Stores: personaStore, live2dStore, communityStore, creditStore, chatStore, pendingPostStore, worldEventStore, characterChatStore, characterPageStore, notificationStore (10개)
+- MyPage tabs: subscription, user-persona, memories, creator (비토론 탭 4개)
+
+### Notes
+- AI 토론 전용으로 범위 축소에 따른 프론트엔드 정리
+- layout.tsx 네비게이션 및 admin 메뉴에서 삭제된 항목 제거
+- UserSidebar: 토론/갤러리/토너먼트/마이페이지 항목만 유지
+- Admin Sidebar: 사용자관리/LLM모델/사용량/모니터링/AI토론관리/화면관리만 유지
+
+## [2026-03-05] AI 토론 외 모듈 전체 제거
+
+### Removed
+- API: board, character_cards, character_chats, character_pages, chat, credits, favorites, features, image_gen, lorebook, lounge, memories, notifications, pending_posts, personas, policy, relationships, subscriptions, tts, user_personas, webtoons, world_events (사용자 라우터 22개)
+- API Admin: agents, board, content, credits, features, personas, policy, reports, subscriptions, system, video_gen, world_events (관리자 라우터 12개)
+- Services: adult_verify, agent_activity, agent_scheduler, batch_scheduler, board, character_card, character_chat, character_page, chat, favorite, feature_flag, image_gen, lorebook, moderation, notification, pending_post, persona, policy, quota, rag, relationship, report, review, subscription, tts, user_persona, video_gen, world_event (28개)
+- Models: agent_activity_log, board*, character_chat*, chat*, comment_stat, consent_log, credit_cost, episode*, live2d_model, lorebook_entry, notification, pending_post, persona*, review_cache, spoiler_setting, subscription_plan, usage_quota, user_memory, user_persona, user_subscription, video_generation, webtoon, world_event (34개)
+
+### Notes
+- AI 토론 시스템 전용 프로젝트로 범위 축소
+- main.py 라우터 등록 및 alembic/env.py 모델 import 동시 정리
+- 삭제된 모델에 대한 기존 마이그레이션 파일은 유지 (DB 스키마 이력 보존)

@@ -4,12 +4,25 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MessageSquare, Users, ArrowLeft } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useToastStore } from '@/stores/toastStore';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import type { DebateTopic, DebateMatch } from '@/stores/debateStore';
+
+type ConflictInfo = {
+  existingTopicId: string;
+  existingTopicTitle: string;
+};
+
+type QueueStatusResponse = {
+  status: 'not_in_queue' | 'queued' | 'matched';
+  joined_at?: string;
+  is_ready?: boolean;
+  opponent_agent_id?: string | null;
+  match_id?: string;
+};
 
 export default function TopicDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +35,9 @@ export default function TopicDetailPage() {
   const [selectedAgent, setSelectedAgent] = useState('');
   const [password, setPassword] = useState('');
   const [joining, setJoining] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
+  const [forceJoining, setForceJoining] = useState(false);
+  const [agentQueueStatus, setAgentQueueStatus] = useState<QueueStatusResponse | null>(null);
 
   useEffect(() => {
     api.get<DebateTopic>(`/topics/${id}`).then(setTopic).catch(() => {});
@@ -31,6 +47,36 @@ export default function TopicDetailPage() {
       .catch(() => {});
     fetchMyAgents();
   }, [id, fetchMyAgents]);
+
+  const handleAgentChange = async (agentId: string) => {
+    setSelectedAgent(agentId);
+    setConflictInfo(null);
+    setAgentQueueStatus(null);
+    if (!agentId) return;
+    try {
+      const status = await api.get<QueueStatusResponse>(
+        `/topics/${id}/queue/status?agent_id=${agentId}`,
+      );
+      setAgentQueueStatus(status);
+    } catch {
+      // 상태 조회 실패는 무음 처리 — 참가 시점에 에러 처리
+    }
+  };
+
+  const handleForceJoin = async () => {
+    if (!conflictInfo || !selectedAgent) return;
+    setForceJoining(true);
+    try {
+      const { leaveQueue } = useDebateStore.getState();
+      await leaveQueue(conflictInfo.existingTopicId, selectedAgent);
+      setConflictInfo(null);
+      await handleJoin();
+    } catch {
+      addToast('error', '대기 취소 중 오류가 발생했습니다.');
+    } finally {
+      setForceJoining(false);
+    }
+  };
 
   const handleJoin = async () => {
     if (!selectedAgent) return;
@@ -42,8 +88,21 @@ export default function TopicDetailPage() {
       } else {
         router.push(`/debate/waiting/${id}?agent=${selectedAgent}`);
       }
-    } catch {
-      addToast('error', '참가에 실패했습니다.');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const detail = e.body as { message: string; existing_topic_id: string } | null;
+        const existingTopicId = detail?.existing_topic_id ?? '';
+        let existingTopicTitle = '다른 토픽';
+        if (existingTopicId) {
+          try {
+            const t = await api.get<{ title: string }>(`/topics/${existingTopicId}`);
+            existingTopicTitle = t.title;
+          } catch {}
+        }
+        setConflictInfo({ existingTopicId, existingTopicTitle });
+      } else {
+        addToast('error', e instanceof ApiError ? e.message : '참가에 실패했습니다.');
+      }
       setJoining(false);
     }
   };
@@ -69,7 +128,7 @@ export default function TopicDetailPage() {
         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
           {topic.mode}
         </span>
-        <span>최대 {topic.max_turns}턴</span>
+        <span>최대 {topic.max_turns}라운드 (총 {topic.max_turns * 2}번 발언)</span>
         <span>턴당 {topic.turn_token_limit} 토큰</span>
       </div>
 
@@ -81,7 +140,7 @@ export default function TopicDetailPage() {
             <div className="flex-1 flex flex-col">
               <select
                 value={selectedAgent}
-                onChange={(e) => setSelectedAgent(e.target.value)}
+                onChange={(e) => handleAgentChange(e.target.value)}
                 className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm text-text"
               >
                 <option value="">에이전트 선택...</option>
@@ -91,6 +150,46 @@ export default function TopicDetailPage() {
                   </option>
                 ))}
               </select>
+              {agentQueueStatus?.status === 'queued' && (
+                <p className="text-xs text-yellow-500 mt-1">
+                  이 에이전트는 현재 다른 토픽 대기 중입니다. 참가 시 기존 대기가 취소됩니다.
+                </p>
+              )}
+              {agentQueueStatus?.status === 'matched' && agentQueueStatus.match_id && (
+                <p className="text-xs text-blue-400 mt-1">
+                  진행 중인 매치가 있습니다.{' '}
+                  <button
+                    onClick={() => router.push(`/debate/matches/${agentQueueStatus.match_id}`)}
+                    className="underline"
+                  >
+                    매치 보기
+                  </button>
+                </p>
+              )}
+              {conflictInfo && (
+                <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm">
+                  <p className="text-text mb-2">
+                    이미{' '}
+                    <span className="font-semibold">"{conflictInfo.existingTopicTitle}"</span>에
+                    대기 중입니다. 기존 대기를 취소하고 이 토픽에 참가할까요?
+                  </p>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setConflictInfo(null)}
+                      className="px-3 py-1.5 text-xs text-text-muted border border-border rounded-lg"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleForceJoin}
+                      disabled={forceJoining}
+                      className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50"
+                    >
+                      {forceJoining ? '처리 중...' : '기존 대기 취소 후 참가'}
+                    </button>
+                  </div>
+                </div>
+              )}
               {topic.is_password_protected && (
                 <input
                   type="password"

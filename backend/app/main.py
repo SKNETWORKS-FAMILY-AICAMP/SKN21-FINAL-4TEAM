@@ -1,61 +1,34 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.core.exceptions import AppError
+
 from app.api import (
     auth,
-    board,
-    character_cards,
-    character_chats,
-    character_pages,
-    chat,
-    credits,
-    favorites,
-    features,
     health,
-    image_gen,
-    lorebook,
-    lounge,
-    memories,
     models,
-    notifications,
-    pending_posts,
-    personas,
-    policy,
-    relationships,
-    subscriptions,
-    tts,
     uploads,
     usage,
-    user_personas,
-    webtoons,
-    world_events,
 )
-from app.api.admin import agents as admin_agents
-from app.api.admin import board as admin_board
-from app.api.admin import content as admin_content
-from app.api.admin import credits as admin_credits
-from app.api.admin import debate as admin_debate
-from app.api.admin import features as admin_features
-from app.api.admin import llm_models as admin_llm_models
-from app.api.admin import monitoring as admin_monitoring
-from app.api.admin import personas as admin_personas
-from app.api.admin import policy as admin_policy
-from app.api.admin import reports as admin_reports
-from app.api.admin import subscriptions as admin_subscriptions
-from app.api.admin import system as admin_system
-from app.api.admin import usage as admin_usage
-from app.api.admin import users as admin_users
-from app.api.admin import video_gen as admin_video_gen
-from app.api.admin import world_events as admin_world_events
+from app.api.admin.debate import agents as admin_debate_agents
+from app.api.admin.debate import matches as admin_debate_matches
+from app.api.admin.debate import seasons as admin_debate_seasons
+from app.api.admin.debate import topics as admin_debate_topics
+from app.api.admin.debate import templates as admin_debate_templates
+from app.api.admin.debate import tournaments as admin_debate_tournaments
+from app.api.admin.system import llm_models as admin_llm_models
+from app.api.admin.system import monitoring as admin_monitoring
+from app.api.admin.system import usage as admin_usage
+from app.api.admin.system import users as admin_users
 from app.core.config import settings
 from app.core.database import engine
-from app.core.deps import get_current_user
 from app.core.observability import flush_langfuse, init_sentry, setup_prometheus
 from app.core.rate_limit import RateLimitMiddleware
 
@@ -65,30 +38,34 @@ logger = logging.getLogger(__name__)
 init_sentry()
 
 
+async def _runpod_warmer() -> None:
+    """RunPod Serverless 콜드스타트 방지 — 5분마다 최소 토큰 요청으로 워커 warm 유지."""
+    import httpx
+
+    if not settings.runpod_api_key or not settings.runpod_endpoint_id:
+        return
+
+    base_url = f"https://api.runpod.ai/v2/{settings.runpod_endpoint_id}/runsync"
+    headers = {"Authorization": f"Bearer {settings.runpod_api_key}", "Content-Type": "application/json"}
+    # 워머는 연결 유지가 목적이므로 최소 페이로드 사용
+    body = {"input": {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}}
+
+    while True:
+        await asyncio.sleep(300)  # 5분 대기
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(base_url, headers=headers, json=body)
+                logger.debug("RunPod warmer ping: status=%s", resp.status_code)
+        except Exception as exc:
+            logger.debug("RunPod warmer ping failed (non-critical): %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 파이프라인 모델 사전 로드 (pipeline_lazy_load=False일 때)
-    if not settings.pipeline_lazy_load:
-        from app.pipeline import preload_pipelines
-
-        preload_pipelines()
-
-    # 배치 스케줄러 워커 시작
-    from app.services.batch_scheduler import BatchScheduler
-
-    scheduler = BatchScheduler.get_instance()
-    scheduler.start()
-
-    # 에이전트 스케줄러 시작 (라운지 자동 활동)
-    from app.services.agent_scheduler import AgentScheduler
-
-    agent_scheduler = AgentScheduler.get_instance()
-    agent_scheduler.start()
-
     # 토론 자동 매칭 태스크 + WS pub/sub 리스너 시작
     if settings.debate_enabled:
-        from app.services.debate_auto_match import DebateAutoMatcher
-        from app.services.debate_ws_manager import WSConnectionManager
+        from app.services.debate.matching_service import DebateAutoMatcher
+        from app.services.debate.ws_manager import WSConnectionManager
 
         auto_matcher = DebateAutoMatcher.get_instance()
         auto_matcher.start()
@@ -96,30 +73,34 @@ async def lifespan(app: FastAPI):
         ws_manager = WSConnectionManager.get_instance()
         await ws_manager.start_pubsub_listener()
 
+    # RunPod 콜드스타트 방지 워머 (runpod_api_key·endpoint_id 미설정 시 내부에서 즉시 반환)
+    asyncio.create_task(_runpod_warmer())
+
     yield
 
     # 토론 자동 매칭 태스크 + WS pub/sub 리스너 중지
     if settings.debate_enabled:
         auto_matcher.stop()
         await ws_manager.stop_pubsub_listener()
-    # 에이전트 스케줄러 중지
-    agent_scheduler.stop()
-    # 배치 스케줄러 워커 중지
-    scheduler.stop()
     # Langfuse 버퍼 플러시 후 종료
     flush_langfuse()
     await engine.dispose()
 
 
 app = FastAPI(
-    title="Webtoon Review Chatbot API",
-    version="0.1.0",
+    title="AI 에이전트 토론 플랫폼 API",
+    version="1.0.0",
     lifespan=lifespan,
     redirect_slashes=False,
 )
 
 # Prometheus 계측 (/metrics 엔드포인트 노출)
 setup_prometheus(app)
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
 @app.exception_handler(NotImplementedError)
@@ -148,32 +129,10 @@ app.add_middleware(RateLimitMiddleware)
 
 # User-facing routes
 app.include_router(health.router, tags=["health"])
-app.include_router(features.router, prefix="/api/features", tags=["features"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
-app.include_router(personas.router, prefix="/api/personas", tags=["personas"])
-app.include_router(lorebook.router, prefix="/api/lorebook", tags=["lorebook"])
-app.include_router(webtoons.router, prefix="/api/webtoons", tags=["webtoons"])
-app.include_router(policy.router, prefix="/api/policy", tags=["policy"])
 app.include_router(models.router, prefix="/api/models", tags=["models"])
 app.include_router(usage.router, prefix="/api/usage", tags=["usage"])
-app.include_router(credits.router, prefix="/api/credits", tags=["credits"])
-app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
-app.include_router(board.router, prefix="/api/board", tags=["board"])
-app.include_router(lounge.router, prefix="/api/lounge", tags=["lounge"])
-app.include_router(user_personas.router, prefix="/api/user-personas", tags=["user-personas"])
-app.include_router(favorites.router, prefix="/api/favorites", tags=["favorites"])
-app.include_router(relationships.router, prefix="/api/relationships", tags=["relationships"])
-app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
-app.include_router(character_cards.router, prefix="/api/character-cards", tags=["character-cards"])
-app.include_router(memories.router, prefix="/api/memories", tags=["memories"])
-app.include_router(tts.router, prefix="/api/tts", tags=["tts"])
-app.include_router(image_gen.router, prefix="/api/image-gen", tags=["image-gen"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
-app.include_router(character_pages.router, prefix="/api/character-pages", tags=["character-pages"])
-app.include_router(character_chats.router, prefix="/api/character-chats", tags=["character-chats"])
-app.include_router(pending_posts.router, prefix="/api/pending-posts", tags=["pending-posts"])
-app.include_router(world_events.router, prefix="/api/world-events", tags=["world-events"])
 
 # Debate routes (feature flag)
 if settings.debate_enabled:
@@ -187,23 +146,18 @@ if settings.debate_enabled:
 
 # Admin routes
 app.include_router(admin_users.router, prefix="/api/admin/users", tags=["admin-users"])
-app.include_router(admin_personas.router, prefix="/api/admin/personas", tags=["admin-personas"])
-app.include_router(admin_content.router, prefix="/api/admin/content", tags=["admin-content"])
-app.include_router(admin_policy.router, prefix="/api/admin/policy", tags=["admin-policy"])
 app.include_router(admin_llm_models.router, prefix="/api/admin/models", tags=["admin-models"])
 app.include_router(admin_usage.router, prefix="/api/admin/usage", tags=["admin-usage"])
 app.include_router(admin_monitoring.router, prefix="/api/admin/monitoring", tags=["admin-monitoring"])
-app.include_router(admin_system.router, prefix="/api/admin/system", tags=["admin-system"])
-app.include_router(admin_credits.router, prefix="/api/admin/credits", tags=["admin-credits"])
-app.include_router(admin_subscriptions.router, prefix="/api/admin/subscriptions", tags=["admin-subscriptions"])
-app.include_router(admin_board.router, prefix="/api/admin/board", tags=["admin-board"])
-app.include_router(admin_reports.router, prefix="/api/admin/reports", tags=["admin-reports"])
-app.include_router(admin_agents.router, prefix="/api/admin/agents", tags=["admin-agents"])
-app.include_router(admin_video_gen.router, prefix="/api/admin/video-gen", tags=["admin-video-gen"])
-app.include_router(admin_world_events.router, prefix="/api/admin/world-events", tags=["admin-world-events"])
-app.include_router(admin_features.router, prefix="/api/admin/features", tags=["admin-features"])
 if settings.debate_enabled:
-    app.include_router(admin_debate.router, prefix="/api/admin/debate", tags=["admin-debate"])
+    _debate_prefix = "/api/admin/debate"
+    _debate_tags = ["admin-debate"]
+    app.include_router(admin_debate_topics.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_matches.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_agents.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_seasons.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_tournaments.router, prefix=_debate_prefix, tags=_debate_tags)
+    app.include_router(admin_debate_templates.router, prefix=_debate_prefix, tags=_debate_tags)
 
 # 업로드 파일 디렉토리 생성
 os.makedirs(settings.upload_dir, exist_ok=True)
