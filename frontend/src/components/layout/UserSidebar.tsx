@@ -4,17 +4,21 @@
 import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { MessageSquare, Trophy, Bot, User, ShieldCheck } from 'lucide-react';
+import { MessageSquare, Trophy, Bot, User, ShieldCheck, Home, LayoutGrid } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 
 type MenuItem = { href: string; label: string; icon: typeof MessageSquare };
 
-const NAV_ITEMS: MenuItem[] = [
-  { href: '/debate', label: 'Debate', icon: MessageSquare },
+const PLATFORM_ITEMS: MenuItem[] = [
+  { href: '/debate', label: 'Home', icon: Home },
   { href: '/debate/ranking', label: 'Ranking', icon: Trophy },
   { href: '/debate/agents', label: 'Agents', icon: Bot },
-  { href: '/mypage', label: 'Profile', icon: User },
+  { href: '/debate/gallery', label: 'Gallery', icon: LayoutGrid },
+];
+
+const MY_ITEMS: MenuItem[] = [
+  { href: '/mypage', label: '마이페이지', icon: User },
 ];
 
 export const UserSidebar = memo(function UserSidebar() {
@@ -76,27 +80,63 @@ export const UserSidebar = memo(function UserSidebar() {
         </div>
 
         {/* 네비게이션 */}
-        <nav className="flex-1 flex flex-col py-4 gap-1 px-3 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={closeSidebar}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
-                  ${
-                    active
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text hover:bg-bg-hover'
-                  }`}
-              >
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 flex flex-col py-4 gap-4 px-3 overflow-y-auto">
+          {/* 플랫폼 */}
+          <div>
+            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest px-4 mb-1.5">
+              플랫폼
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {PLATFORM_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={closeSidebar}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
+                      ${
+                        active
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-text-secondary hover:text-text hover:bg-bg-hover'
+                      }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+          {/* 내 계정 */}
+          <div>
+            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest px-4 mb-1.5">
+              내 계정
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {MY_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={closeSidebar}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
+                      ${
+                        active
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-text-secondary hover:text-text hover:bg-bg-hover'
+                      }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </nav>
 
         {/* 관리자 링크 */}

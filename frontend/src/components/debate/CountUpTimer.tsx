@@ -35,7 +35,7 @@ export function CountUpTimer({ startedAt, maxSeconds = 120 }: Props) {
   return (
     <div className="flex flex-col items-center gap-2 w-full max-w-[200px]">
       <span className={`text-3xl font-mono font-bold tabular-nums ${textColor}`}>{timeStr}</span>
-      <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-bg-hover rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-1000 ${barColor}`}
           style={{ width: `${progress}%` }}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Plus, X, ChevronDown, Shuffle, Bot, MessageSquare, Users, Clock } from 'lucide-react';
+import { Swords, Plus, X, ChevronDown, Shuffle, Bot, MessageSquare, Users, Clock, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
@@ -490,7 +490,7 @@ export default function DebateTopicsPage() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-4 bg-gray-800/50 rounded-lg p-1">
+      <div className="flex gap-1 mb-4 bg-bg-hover rounded-lg p-1">
         {(['topics', 'popular', 'ranking'] as const).map((tab) => (
           <button
             key={tab}
@@ -554,11 +554,11 @@ export default function DebateTopicsPage() {
           )}
 
           {/* 토픽 목록 */}
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {topicsLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
+              Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
             ) : topics.length === 0 ? (
-              <div className="text-center py-12 text-text-muted text-sm">
+              <div className="col-span-2 text-center py-12 text-text-muted text-sm">
                 등록된 토론 주제가 없습니다.
               </div>
             ) : (
@@ -596,30 +596,70 @@ export default function DebateTopicsPage() {
               </button>
             </div>
           )}
+
+          {/* 하단 네비 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+            <Link
+              href="/debate/agents"
+              className="bg-bg-surface border border-border rounded-2xl p-6 hover:border-primary/40 hover:shadow-md transition-all no-underline group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                  <Bot size={24} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text mb-1 group-hover:text-primary transition-colors m-0">Agents</h3>
+                  <p className="text-xs text-text-muted m-0">내 AI 에이전트를 관리하고 새 에이전트를 만드세요</p>
+                  <p className="text-xs text-text-secondary mt-2 leading-relaxed m-0">
+                    커스텀 AI 에이전트를 설계하고 ELO 랭킹 시스템으로 경쟁하세요.
+                  </p>
+                </div>
+              </div>
+            </Link>
+            <Link
+              href="/debate/ranking"
+              className="bg-bg-surface border border-border rounded-2xl p-6 hover:border-primary/40 hover:shadow-md transition-all no-underline group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                  <Trophy size={24} className="text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text mb-1 group-hover:text-primary transition-colors m-0">Ranking</h3>
+                  <p className="text-xs text-text-muted m-0">AI 에이전트 전체 랭킹을 확인하세요</p>
+                  <p className="text-xs text-text-secondary mt-2 leading-relaxed m-0">
+                    다른 사용자들이 만든 수많은 AI 에이전트들의 순위와 전적을 확인해보세요.
+                  </p>
+                </div>
+              </div>
+            </Link>
+          </div>
         </div>
       )}
 
       {/* 인기 탭 */}
       {activeTab === 'popular' && (
-        <div className="flex flex-col gap-3">
+        <div>
           <HighlightBanner />
-          {topicsLoading ? (
-            Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-          ) : popularTopics.length === 0 ? (
-            <div className="text-center py-12 text-text-muted text-sm">
-              이번 주 인기 주제가 없습니다.
-            </div>
-          ) : (
-            popularTopics.map((topic) => (
-              <TopicCard
-                key={topic.id}
-                topic={topic}
-                currentUserId={currentUserId}
-                onEdit={openEditModal}
-                onDelete={handleDelete}
-              />
-            ))
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+            {topicsLoading ? (
+              Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+            ) : popularTopics.length === 0 ? (
+              <div className="col-span-2 text-center py-12 text-text-muted text-sm">
+                이번 주 인기 주제가 없습니다.
+              </div>
+            ) : (
+              popularTopics.map((topic) => (
+                <TopicCard
+                  key={topic.id}
+                  topic={topic}
+                  currentUserId={currentUserId}
+                  onEdit={openEditModal}
+                  onDelete={handleDelete}
+                />
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -889,7 +929,7 @@ export default function DebateTopicsPage() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, scheduled_start_at: e.target.value || null }))
                       }
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                      className="w-full bg-bg border border-border rounded px-3 py-2 text-sm text-text"
                     />
                   </div>
                   <div>
@@ -900,7 +940,7 @@ export default function DebateTopicsPage() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, scheduled_end_at: e.target.value || null }))
                       }
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                      className="w-full bg-bg border border-border rounded px-3 py-2 text-sm text-text"
                     />
                   </div>
                 </div>
@@ -1121,7 +1161,7 @@ export default function DebateTopicsPage() {
                       onChange={(e) =>
                         setEditForm((f) => ({ ...f, scheduled_start_at: e.target.value || null }))
                       }
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                      className="w-full bg-bg border border-border rounded px-3 py-2 text-sm text-text"
                     />
                   </div>
                   <div>
@@ -1132,7 +1172,7 @@ export default function DebateTopicsPage() {
                       onChange={(e) =>
                         setEditForm((f) => ({ ...f, scheduled_end_at: e.target.value || null }))
                       }
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                      className="w-full bg-bg border border-border rounded px-3 py-2 text-sm text-text"
                     />
                   </div>
                 </div>
