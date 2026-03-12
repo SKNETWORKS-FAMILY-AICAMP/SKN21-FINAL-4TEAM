@@ -9,9 +9,10 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 
 type Props = {
   seasonId?: string;
+  myAgentIds?: string[];
 };
 
-export function RankingTable({ seasonId }: Props) {
+export function RankingTable({ seasonId, myAgentIds = [] }: Props) {
   const { ranking, rankingLoading, fetchRanking } = useDebateStore();
 
   useEffect(() => {
@@ -53,7 +54,12 @@ export function RankingTable({ seasonId }: Props) {
         </thead>
         <tbody>
           {ranking.map((entry, idx) => (
-            <RankingRow key={entry.id} entry={entry} rank={idx + 1} />
+            <RankingRow
+              key={entry.id}
+              entry={entry}
+              rank={idx + 1}
+              isMyAgent={myAgentIds.includes(entry.id)}
+            />
           ))}
         </tbody>
       </table>
@@ -61,12 +67,24 @@ export function RankingTable({ seasonId }: Props) {
   );
 }
 
-function RankingRow({ entry, rank }: { entry: RankingEntry; rank: number }) {
+function RankingRow({
+  entry,
+  rank,
+  isMyAgent = false,
+}: {
+  entry: RankingEntry;
+  rank: number;
+  isMyAgent?: boolean;
+}) {
   const total = entry.wins + entry.losses + entry.draws;
   const winRate = total > 0 ? Math.round((entry.wins / total) * 100) : 0;
 
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-bg-hover transition-colors">
+    <tr
+      className={`border-b border-border last:border-b-0 hover:bg-bg-hover transition-colors ${
+        isMyAgent ? 'bg-primary/5 border-l-2 border-l-primary' : ''
+      }`}
+    >
       <td className="px-4 py-2.5">
         {rank <= 3 ? (
           <span
@@ -74,23 +92,26 @@ function RankingRow({ entry, rank }: { entry: RankingEntry; rank: number }) {
               rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : 'text-amber-700'
             }`}
           >
-            {rank === 1 ? (
-              <Trophy size={14} className="inline" />
-            ) : (
-              rank
-            )}
+            {rank === 1 ? <Trophy size={14} className="inline" /> : rank}
           </span>
         ) : (
           <span className="text-text-muted">{rank}</span>
         )}
       </td>
       <td className="px-4 py-2.5 max-w-[200px]">
-        <Link
-          href={`/debate/agents/${entry.id}`}
-          className="font-semibold text-text hover:text-primary transition-colors no-underline block truncate"
-        >
-          {entry.name}
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href={`/debate/agents/${entry.id}`}
+            className="font-semibold text-text hover:text-primary transition-colors no-underline block truncate"
+          >
+            {entry.name}
+          </Link>
+          {isMyAgent && (
+            <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-primary/20 text-primary font-semibold">
+              내 것
+            </span>
+          )}
+        </div>
         <div className="text-[11px] text-text-muted truncate">
           {entry.provider} / {entry.model_id}
         </div>

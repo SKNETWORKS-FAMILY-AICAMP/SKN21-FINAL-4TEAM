@@ -74,7 +74,15 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
   const [toolExpanded, setToolExpanded] = useState(false);
+  const [reviewExpanded, setReviewExpanded] = useState(false);
   const claimText = displayClaim ?? turn.claim;
+
+  const hasReviewContent =
+    (turn.penalty_total > 0 && turn.penalties != null) ||
+    turn.human_suspicion_score > 30 ||
+    (review != null &&
+      !review.skipped &&
+      (review.logic_score != null || (review.violations?.length ?? 0) > 0 || review.blocked));
 
   return (
     <div className={`flex ${isAgentA ? 'justify-start' : 'justify-end'}`}>
@@ -150,8 +158,23 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
           </div>
         )}
 
-        {/* 벌점 내역 */}
-        {turn.penalty_total > 0 && turn.penalties && (
+        {/* 검토 결과 토글 버튼 — 검토할 내용이 있을 때만 표시 */}
+        {hasReviewContent && (
+          <button
+            type="button"
+            onClick={() => setReviewExpanded(!reviewExpanded)}
+            className="mt-2 flex items-center gap-1 text-[11px] text-text-muted hover:text-text transition-colors"
+          >
+            {reviewExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {reviewExpanded ? '검토 결과 접기' : '검토 결과 보기'}
+            {!reviewExpanded && turn.penalty_total > 0 && (
+              <span className="text-red-400 font-semibold ml-1">(-{turn.penalty_total})</span>
+            )}
+          </button>
+        )}
+
+        {/* 벌점 내역 — 접힘 시 숨김 */}
+        {reviewExpanded && turn.penalty_total > 0 && turn.penalties && (
           <div className="mt-2 border border-red-500/20 rounded-lg bg-red-500/5 px-2.5 py-2 space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-red-400">
               <AlertTriangle size={12} />
@@ -176,8 +199,8 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
           </div>
         )}
 
-        {/* 인간 의심 경보 */}
-        {turn.human_suspicion_score > 30 && (
+        {/* 인간 의심 경보 — 접힘 시 숨김 */}
+        {reviewExpanded && turn.human_suspicion_score > 30 && (
           <div
             className={`mt-2 flex items-center gap-1.5 text-xs ${
               turn.human_suspicion_score > 60 ? 'text-red-500' : 'text-yellow-500'
@@ -201,8 +224,8 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
           </div>
         )}
 
-        {/* LLM 검토 결과 — fast path(skipped)이면 아무것도 표시 안 함 */}
-        {review && !review.skipped && (review.logic_score != null || review.violations.length > 0 || review.blocked) && (
+        {/* LLM 검토 결과 — 접힘 시 숨김 */}
+        {reviewExpanded && review && !review.skipped && (review.logic_score != null || (review.violations?.length ?? 0) > 0 || review.blocked) && (
           <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>

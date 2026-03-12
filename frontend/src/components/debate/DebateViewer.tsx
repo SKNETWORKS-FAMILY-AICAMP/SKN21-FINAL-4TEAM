@@ -1,16 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, Play } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
 import type { DebateMatch, TurnLog, TurnReview, PromotionSeries } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
 import { StreamingTurnBubble } from './StreamingTurnBubble';
 import { ReplayControls } from './ReplayControls';
-import { LiveBadge } from './LiveBadge';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
-import { api } from '@/lib/api';
 import { useDebateStream } from '@/hooks/useDebateStream';
 import { useDebateReplay } from '@/hooks/useDebateReplay';
 
@@ -31,8 +28,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
   const setReplayTyping = useDebateStore((s) => s.setReplayTyping);
   const nextSpeaker = useDebateStore((s) => s.nextSpeaker);
   const debateShowAll = useDebateStore((s) => s.debateShowAll);
-  const setDebateShowAll = useDebateStore((s) => s.setDebateShowAll);
-  const startReplay = useDebateStore((s) => s.startReplay);
   const stopReplay = useDebateStore((s) => s.stopReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
   const pendingTurnLogs = useDebateStore((s) => s.pendingTurnLogs);
@@ -55,9 +50,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
   const streamingTurnRef = useRef(streamingTurn);
   streamingTurnRef.current = streamingTurn;
 
-  // 관전자 수 (in_progress 매치만)
-  const [viewerCount, setViewerCount] = useState(0);
-
   useEffect(() => {
     fetchTurns(match.id);
   }, [match.id, fetchTurns]);
@@ -68,22 +60,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
       stopReplay();
     };
   }, [stopReplay]);
-
-  // 관전자 수 폴링 (in_progress 매치, 30초 간격)
-  useEffect(() => {
-    if (match.status !== 'in_progress') return;
-    const fetchViewers = async () => {
-      try {
-        const data = await api.get<{ count: number }>(`/matches/${match.id}/viewers`);
-        setViewerCount(data.count);
-      } catch {
-        /* ignore */
-      }
-    };
-    fetchViewers();
-    const interval = setInterval(fetchViewers, 30000);
-    return () => clearInterval(interval);
-  }, [match.id, match.status]);
 
   // 바닥 감지: window 레벨 스크롤
   useEffect(() => {
@@ -182,41 +158,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 관전자 수 배지 (in_progress) */}
-      {match.status === 'in_progress' && viewerCount > 0 && (
-        <div className="flex justify-end">
-          <LiveBadge count={viewerCount} />
-        </div>
-      )}
-
-      {/* 완료된 매치 — 리플레이/전체보기 버튼 */}
-      {match.status === 'completed' && !replayMode && turns.length > 0 && (
-        <div className="flex justify-center gap-2 mb-2">
-          <button
-            type="button"
-            onClick={() => {
-              setDebateShowAll(false);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              startReplay();
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-sm font-semibold transition-colors"
-          >
-            <Play size={14} />
-            리플레이 시작
-          </button>
-          {!debateShowAll && (
-            <button
-              type="button"
-              onClick={() => setDebateShowAll(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-surface border border-border text-text-muted hover:text-text hover:bg-border/20 text-sm font-semibold transition-colors"
-            >
-              <Eye size={14} />
-              전체 보기
-            </button>
-          )}
-        </div>
-      )}
-
       {/* 리플레이 컨트롤 */}
       <ReplayControls />
 
