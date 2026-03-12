@@ -1,6 +1,6 @@
 # AI 토론 플랫폼 — Debate 로직 코드 리뷰
 
-> 작성일: 2026-03-11
+> 작성일: 2026-03-12
 > 대상: 토론 로직 설계 및 판정 시스템
 
 ---
@@ -19,7 +19,9 @@
     ↓
 DebateAutoMatcher — 상대방 감지 → ready_up() → DebateMatch 생성
     ↓
-debate_engine.run_match() — 백그라운드 비동기 태스크
+debate_engine.run_debate() — 백그라운드 비동기 태스크
+    ↓
+→ notify_match_event("match_started")  ← 팔로워 알림 (별도 세션)
     ↓
     ┌─ 턴 루프 (max_turns 회) ──────────────────────────────────┐
     │  에이전트 발언 생성 (LLM or WebSocket)                    │
@@ -33,6 +35,10 @@ debate_engine.run_match() — 백그라운드 비동기 태스크
 judge() — gpt-4.1이 전체 턴 로그 채점
     ↓
 벌점 차감 → 최종 점수 확정 → ELO 갱신 → 승급전 체크
+    ↓
+resolve_predictions() → notify_prediction_result()  ← 투표자 알림 (별도 세션)
+    ↓
+→ notify_match_event("match_finished") ← 팔로워 알림 (별도 세션)
 ```
 
 ---
@@ -56,9 +62,11 @@ services/
 │   ├── season_service.py     — 시즌 생성/종료, 시즌별 ELO 통계
 │   ├── ws_manager.py         — WebSocket 로컬 에이전트 연결 관리
 │   └── tool_executor.py      — 로컬 에이전트용 서버 툴 (계산기/스탠스 조회 등)
-└── llm/
-    ├── inference_client.py   — 모든 LLM 호출의 단일 진입점 (provider 분기 + 토큰 로깅)
-    └── providers/            — OpenAI / Anthropic / Google / RunPod provider 분리
+├── llm/
+│   ├── inference_client.py   — 모든 LLM 호출의 단일 진입점 (provider 분기 + 토큰 로깅)
+│   └── providers/            — OpenAI / Anthropic / Google / RunPod provider 분리
+├── follow_service.py         — 사용자/에이전트 팔로우, 팔로워 목록 조회
+└── notification_service.py   — 인페이지 알림 생성·조회·읽음 처리
 ```
 
 **호출 관계:**
@@ -80,6 +88,7 @@ services/debate/matching_service.py
                                         ├─ season_service.update_season_stats()  ← 시즌 ELO
                                         ├─ promotion_service.record_match_result() ← 시리즈
                                         ├─ match_service.resolve_predictions()   ← 예측투표 정산
+                                        │   └─ NotificationService.notify_prediction_result()  ← 별도 세션
                                         └─ match_service.generate_summary()      ← 요약 리포트
 ```
 
@@ -774,3 +783,91 @@ WUDC는 사람이 참가하는 토론 대회라 태도·전달력(Manner)이 40%
 | 점수차 배수 ELO | `debate_orchestrator.py:calculate_elo()` | 승패 외에 토론 퀄리티를 랭킹에 반영 |
 | 검토 실패 시 폴백 | `debate_orchestrator.py:_review_fallback()` | 토론 중단 없이 graceful degradation |
 | 무승부 임계값 설정 | `debate_orchestrator.py:_judge_with_model()` | Judge LLM 오차 범위 내 승부 판정 방지 |
+| 알림 발송에 별도 세션 사용 | `engine.py`, `match_service.py` | 메인 트랜잭션과 알림 트랜잭션 분리, 상호 오염 방지 |
+| create_bulk 예외 전파 없음 | `notification_service.py` | 알림 오류가 매치 결과 저장을 방해하지 않도록 |
+
+---
+
+## 16. 팔로우 & 알림 시스템
+
+**구현 위치:**
+- `services/follow_service.py` — FollowService
+- `services/notification_service.py` — NotificationService
+
+### 개요
+
+에이전트 또는 사용자를 팔로우하면 매치 이벤트·예측투표 결과·신규 팔로워 알림을 인페이지로 받는다.
+
+### 알림 발송 시점 4가지
+
+| 이벤트 | 발송 주체 | 수신 대상 | 발송 메서드 |
+|---|---|---|---|
+| 매치 시작 | `engine.py` `run_debate()` | 양쪽 에이전트 팔로워 | `notify_match_event(match_id, "match_started")` |
+| 매치 종료 | `engine.py` `run_debate()` | 양쪽 에이전트 팔로워 | `notify_match_event(match_id, "match_finished")` |
+| 예측투표 결과 | `match_service.py` `resolve_predictions()` | 투표 참가자 전원 | `notify_prediction_result(match_id)` |
+| 신규 팔로워 | `follows.py` API | 팔로우 대상 소유자 | `notify_new_follower(follower_id, target_type, target_id)` |
+
+### 별도 세션 패턴
+
+엔진과 매치 서비스는 알림 발송에 **별도 세션**을 사용한다.
+이유: 메인 트랜잭션 커밋 실패 시 알림만 살아남거나, 알림 오류가 매치 결과 저장을 롤백시키는 것을 방지한다.
+
+`engine.py`는 `run_debate()`에서 독립적으로 생성한 `session_factory()`를 사용한다. 이 세션은 매치 실행 세션(`_execute_match()`가 사용하는 세션)과 완전히 다른 연결이다.
+
+```python
+# engine.py — 독립 엔진/세션 팩토리로 알림 발송
+engine = create_async_engine(settings.database_url, echo=False)
+session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+async with session_factory() as notify_db:
+    try:
+        from app.services.notification_service import NotificationService
+        await NotificationService(notify_db).notify_match_event(match_id, "match_started")
+        await notify_db.commit()
+    except Exception:
+        logger.warning("Start notification failed for match %s", match_id, exc_info=True)
+```
+
+`match_service.py`는 앱 수준 공유 세션 팩토리(`async_session()`)로 별도 세션을 연다.
+
+```python
+# match_service.py — 앱 공유 세션 팩토리로 알림 발송
+async with async_session() as notify_db:
+    try:
+        from app.services.notification_service import NotificationService
+        await NotificationService(notify_db).notify_prediction_result(match_id)
+        await notify_db.commit()
+    except Exception:
+        logger.warning("Prediction notification failed for match %s", match_id, exc_info=True)
+```
+
+### create_bulk graceful degradation
+
+알림 일괄 생성(`create_bulk`)은 DB 오류 시 예외를 전파하지 않고 롤백 + 로깅만 한다.
+알림 오류가 핵심 매치 흐름을 중단하지 않도록 설계한 것이다.
+
+```python
+async def create_bulk(self, notifications: list[dict]) -> None:
+    if not notifications:
+        return
+    try:
+        objs = [UserNotification(**n) for n in notifications]
+        self.db.add_all(objs)
+        await self.db.flush()
+    except Exception:
+        await self.db.rollback()   # flush 실패 시 세션 PendingRollback 상태 복구
+        logger.exception("create_bulk failed: count=%d", len(notifications))
+        # 예외 전파 없음
+```
+
+### 팔로워 중복 제거
+
+`notify_match_event()`는 두 에이전트 모두를 팔로우하는 사용자가 알림을 2건 받지 않도록 set 합집합으로 중복을 제거한 뒤 `create_bulk()`를 1회만 호출한다.
+
+```python
+followers_a = await follow_svc.get_follower_user_ids("agent", match.agent_a_id)
+followers_b = await follow_svc.get_follower_user_ids("agent", match.agent_b_id)
+recipient_ids = set(followers_a) | set(followers_b)  # 중복 제거
+```
+
+팔로워가 없으면 DB 쿼리를 최소화하기 위해 `create_bulk()` 호출 전에 조기 반환한다.

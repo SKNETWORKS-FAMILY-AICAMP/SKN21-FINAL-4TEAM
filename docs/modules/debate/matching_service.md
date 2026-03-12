@@ -1,122 +1,202 @@
-# matching_service.py 모듈 명세
+# matching_service
+
+> 큐 등록·준비 완료 처리·자동 매칭을 담당하는 매칭 서비스 모듈
 
 **파일 경로:** `backend/app/services/debate/matching_service.py`
-**최종 수정:** 2026-03-11
+**최종 수정일:** 2026-03-12
 
 ---
 
 ## 모듈 목적
 
-큐 등록, 준비 완료 처리, 자동 매칭을 담당한다. `DebateMatchingService`(큐/ready_up)와 `DebateAutoMatcher`(백그라운드 자동 매칭 루프) 두 클래스로 구성된다.
+이 파일에는 두 개의 클래스가 함께 존재한다.
+
+- **`DebateMatchingService`** — 사용자 요청 기반 큐 등록(`join_queue`)과 준비 완료 처리(`ready_up`). 양쪽 에이전트가 모두 준비되면 `DebateMatch`를 생성하고 토론 엔진을 시작한다.
+- **`DebateAutoMatcher`** — 싱글톤 백그라운드 루프. 만료된 큐 항목 정리, 장시간 대기 항목의 플랫폼 에이전트 자동 매칭, 비정상 pending 매치 복구를 주기적으로 수행한다.
 
 ---
 
-## DebateMatchingService
+## 주요 상수
 
-생성자: `__init__(self, db: AsyncSession)`
-
-| 메서드 | 시그니처 | 설명 |
-|---|---|---|
-| `join_queue` | `(user: User, topic_id: str, agent_id: str, password: str \| None) -> dict` | 큐 등록. 토픽·에이전트·크레딧 검증 후 `DebateMatchQueue` INSERT. 상대가 이미 있으면 양방향 `opponent_joined` 이벤트 발행 |
-| `ready_up` | `(user: User, topic_id: str, agent_id: str) -> dict` | 준비 완료 처리. ABBA 데드락 방지를 위해 PK 오름차순으로 큐 항목 일괄 잠금. 양쪽 모두 준비되면 `DebateMatch` 생성 |
-| `_purge_expired_entries` | `() -> None` | 만료된 큐 항목 일괄 삭제 (내부용) |
-
-### `join_queue` 검증 순서
-
-1. 토픽 존재 + `status == "open"` 확인
-2. 비밀번호 보호 토픽이면 password 검증
-3. 에이전트 소유권 확인 (admin/superadmin은 모든 에이전트 사용 가능)
-4. API 키 검증: `local` / BYOK / `use_platform_credits` 중 하나 충족 필요
-5. 크레딧 잔액 사전 확인 (`debate_credit_cost > 0 && credit_system_enabled`)
-6. 만료된 큐 항목 정리 (`_purge_expired_entries`)
-7. 유저당 1개 큐 제한 (admin 제외) → `QueueConflictError`
-8. 에이전트당 1개 큐 제한 → `QueueConflictError` 또는 `ValueError`
-9. `DebateMatchQueue` INSERT (UniqueConstraint race condition 처리)
-10. 상대 존재 시 양방향 `opponent_joined` 이벤트 발행
-
-### `ready_up` 매치 생성 흐름
-
-```
-토픽 전체 큐 항목 PK 오름차순 WITH FOR UPDATE 잠금
-→ 내 항목 찾기 (없으면 ValueError)
-→ 이미 ready이면 멱등 처리 반환
-→ my_entry.is_ready = True
-→ 상대 미존재: waiting_for_opponent 반환
-→ 상대 미준비: countdown_started 이벤트 양방향 발행
-→ 양쪽 모두 준비: DebateMatch 생성
-    → DebateSeasonService.get_active_season() → season_id 태깅
-    → DebatePromotionService.get_active_series() × 2 → series_id/match_type 태깅
-    → 큐 항목 삭제 → matched 이벤트 발행
-    → run_debate(match_id) 백그라운드 태스크 실행
-```
+없음
 
 ---
 
-## DebateAutoMatcher
+## 클래스: DebateMatchingService
 
-싱글톤 백그라운드 자동 매칭 태스크.
+### 생성자
 
-생성자: `__init__(self)` (싱글톤 — `get_instance()` 사용)
+```python
+def __init__(self, db: AsyncSession)
+```
 
-| 메서드 | 시그니처 | 설명 |
+| 파라미터 | 타입 | 설명 |
 |---|---|---|
-| `get_instance` | `() -> DebateAutoMatcher` | 싱글톤 인스턴스 반환 |
-| `start` | `() -> None` | lifespan에서 호출. 백그라운드 루프 태스크 시작 |
-| `stop` | `() -> None` | 앱 종료 시 루프 태스크 취소 |
-| `_loop` | `() -> None` | 주기적 점검 루프 (`debate_auto_match_check_interval`초마다 실행) |
-| `_purge_expired_queue_entries` | `() -> None` | 만료된 큐 항목 삭제 + `timeout` SSE 이벤트 발행 |
-| `_check_stale_entries` | `() -> None` | 장시간 대기 큐 항목 탐지 → `_auto_match_with_platform_agent()` 호출 |
-| `_check_stuck_matches` | `() -> None` | `pending`/`waiting_agent` 상태로 오래 멈춘 매치 → `error` 상태로 전환 |
-| `_auto_match_with_platform_agent` | `(db, entry: DebateMatchQueue) -> None` | `is_platform=True` 에이전트 중 random() 선택 → `DebateMatch` 생성 → `run_debate` 시작 |
+| `db` | `AsyncSession` | SQLAlchemy 비동기 세션. FastAPI `Depends(get_db)`로 주입 |
+
+### 메서드
+
+| 메서드 | 시그니처 | 역할 |
+|---|---|---|
+| `join_queue` | `(user: User, topic_id: str, agent_id: str, password: str \| None = None) -> dict` | 큐 등록. 토픽·에이전트·크레딧 10단계 순차 검증 후 `DebateMatchQueue` INSERT. 상대가 이미 대기 중이면 양방향 `opponent_joined` 이벤트 발행 |
+| `ready_up` | `(user: User, topic_id: str, agent_id: str) -> dict` | 준비 완료 처리. PK 오름차순 일괄 잠금으로 ABBA 데드락 방지. 양쪽 모두 준비 시 `DebateMatch` 생성 및 토론 엔진 시작 |
+| `_purge_expired_entries` | `() -> None` | 만료된 큐 항목 일괄 삭제. `join_queue` 진입 시 호출되는 내부 메서드 |
+
+---
+
+## 클래스: DebateAutoMatcher
+
+### 생성자
+
+```python
+def __init__(self)
+```
+
+싱글톤 패턴이므로 직접 인스턴스화하지 않고 `get_instance()`를 사용한다.
+
+| 클래스 변수 | 타입 | 설명 |
+|---|---|---|
+| `_instance` | `DebateAutoMatcher \| None` | 싱글톤 인스턴스 |
+
+### 메서드
+
+| 메서드 | 시그니처 | 역할 |
+|---|---|---|
+| `get_instance` | `() -> DebateAutoMatcher` | 싱글톤 인스턴스를 반환. 없으면 생성 |
+| `start` | `() -> None` | `lifespan`에서 호출. `_running = True`로 설정 후 `_loop()` 백그라운드 태스크 시작 |
+| `stop` | `() -> None` | 앱 종료 시 호출. `_running = False` + 태스크 취소 |
+| `_loop` | `() -> None` | 서버 시작 직후 즉시 정리 1회 실행 후, `debate_auto_match_check_interval`초마다 3개 점검 메서드를 반복 호출 |
+| `_check_stuck_matches` | `() -> None` | `pending`/`waiting_agent` 상태로 `debate_pending_timeout_seconds`(기본 600초)를 초과한 매치를 `error` 상태로 일괄 전환 |
+| `_purge_expired_queue_entries` | `() -> None` | 만료된 큐 항목 삭제 + 해당 에이전트에 `timeout` SSE 이벤트 발행. `SKIP LOCKED`로 동시 실행 충돌 방지 |
+| `_check_stale_entries` | `() -> None` | `debate_queue_timeout_seconds`를 초과한 큐 항목을 탐지하여 `_auto_match_with_platform_agent()` 호출 |
+| `_auto_match_with_platform_agent` | `(db: AsyncSession, entry: DebateMatchQueue) -> None` | `is_platform=True` 활성 에이전트 중 entry 소유자가 아닌 것을 `random()` 으로 선택해 `DebateMatch` 생성 후 `run_debate` 시작. 플랫폼 에이전트 없으면 `timeout` 이벤트 발행 후 종료 |
 
 ---
 
 ## 의존 모듈
 
-| 모듈 | 용도 |
-|---|---|
-| `app.core.auth` | `verify_password` — 토픽 비밀번호 검증 |
-| `app.core.config` | `settings` — 큐 타임아웃, 준비 카운트다운, 자동 매칭 주기 등 |
-| `app.core.database` | `async_session` — 자동 매칭 독립 세션 |
-| `app.core.exceptions` | `QueueConflictError` |
-| `app.models.debate_agent` | `DebateAgent` |
-| `app.models.debate_match` | `DebateMatch`, `DebateMatchQueue` |
-| `app.models.debate_topic` | `DebateTopic` |
-| `app.services.debate.agent_service` | `get_latest_version` — 버전 스냅샷 연결 |
-| `app.services.debate.broadcast` | `publish_queue_event` — 큐 SSE 이벤트 발행 |
-| `app.services.debate.engine` | `run_debate` — 토론 엔진 시작 |
-| `app.services.debate.promotion_service` | `DebatePromotionService` — 시리즈 태깅 |
-| `app.services.debate.season_service` | `DebateSeasonService` — 시즌 태깅 |
+| 모듈 | 경로 | 용도 |
+|---|---|---|
+| `verify_password` | `app.core.auth` | 토픽 비밀번호 검증 |
+| `settings` | `app.core.config` | 큐 타임아웃, 카운트다운, 자동 매칭 주기 등 설정값 |
+| `async_session` | `app.core.database` | `DebateAutoMatcher` 내부 독립 세션 생성 |
+| `QueueConflictError` | `app.core.exceptions` | 유저/에이전트 큐 중복 시 409 응답용 |
+| `DebateAgent` | `app.models.debate_agent` | 에이전트 소유권·활성 상태·플랫폼 여부 확인 |
+| `DebateMatch`, `DebateMatchQueue` | `app.models.debate_match` | 매치·큐 ORM 모델 |
+| `DebateTopic` | `app.models.debate_topic` | 토픽 존재·상태 확인 |
+| `User` | `app.models.user` | 크레딧 잔액 조회 |
+| `get_latest_version` | `app.services.debate.agent_service` | 매치 생성 시 에이전트 버전 스냅샷 연결 |
+| `publish_queue_event` | `app.services.debate.broadcast` | 큐 상태 변경 SSE 이벤트 발행 |
+| `run_debate` | `app.services.debate.engine` | 토론 엔진 백그라운드 태스크 시작 |
+| `DebatePromotionService` | `app.services.debate.promotion_service` | 활성 시리즈 조회 → `match_type`/`series_id` 태깅 |
+| `DebateSeasonService` | `app.services.debate.season_service` | 활성 시즌 조회 → `season_id` 태깅 |
 
 ---
 
-## 관련 설정값
+## 호출 흐름
 
-| 설정 키 | 설명 |
-|---|---|
-| `debate_queue_timeout_seconds` | 큐 항목 만료 시간 (기본 120초) |
-| `debate_ready_countdown_seconds` | ready_up 후 카운트다운 초 |
-| `debate_auto_match_check_interval` | 자동 매칭 루프 점검 주기 (초) |
-| `debate_pending_timeout_seconds` | pending 매치 타임아웃 (기본 600초) |
-| `debate_credit_cost` | 매치당 크레딧 비용 |
-| `credit_system_enabled` | 크레딧 시스템 활성화 여부 |
+### join_queue 검증 순서
+
+```
+API 라우터 (POST /topics/{id}/queue)
+  → DebateMatchingService.join_queue(user, topic_id, agent_id, password)
+      1. DebateTopic 조회 → 미존재 시 ValueError, status != "open" 시 ValueError
+      2. is_password_protected 이면 verify_password() → 불일치 시 ValueError
+      3. 에이전트 소유권 조회 (admin/superadmin은 소유권 체크 우회)
+         → 미존재/비소유 시 ValueError, is_active=False 시 ValueError
+      4. API 키 검증: provider != "local" && !encrypted_api_key && !use_platform_credits
+         → 플랫폼 fallback 키도 없으면 ValueError
+      5. credit_system_enabled && debate_credit_cost > 0 && !encrypted_api_key
+         → User.credit_balance < debate_credit_cost 이면 ValueError
+      6. _purge_expired_entries() — 만료 항목 일괄 삭제
+      7. 유저당 1개 큐 제한 (admin/superadmin 제외)
+         → 기존 항목 있으면 QueueConflictError
+      8. 에이전트 어느 토픽이든 이미 대기 중인지 확인
+         → 같은 토픽: ValueError / 다른 토픽: QueueConflictError
+      9. DebateMatchQueue INSERT + flush
+         → IntegrityError(race condition) 시 rollback → ValueError
+      10. 상대 존재 시 양방향 opponent_joined 이벤트 발행
+      → 반환: {"status": "queued", "position": 1, "opponent_agent_id": ...}
+```
+
+### ready_up 매치 생성 흐름
+
+```
+API 라우터 (POST /topics/{id}/ready)
+  → DebateMatchingService.ready_up(user, topic_id, agent_id)
+      → 토픽 내 전체 큐 항목 PK 오름차순 WITH FOR UPDATE 일괄 잠금
+        (ABBA 데드락 방지: 두 concurrent 트랜잭션이 동일 잠금 순서 보장)
+      → my_entry 탐색 → 없으면 ValueError("Not in queue")
+      → my_entry.is_ready = True 이미 True면 멱등 반환
+      → opponent_entry 탐색
+          ├─ [상대 미존재] commit → {"status": "ready", "waiting_for_opponent": True}
+          ├─ [상대 미준비] commit
+          │       → countdown_started 이벤트 양방향 발행
+          │       → {"status": "ready", "countdown_started": True, ...}
+          └─ [양쪽 모두 준비]
+              → get_latest_version(my_agent), get_latest_version(opponent_agent)
+              → DebateMatch(status="pending") INSERT
+              → DebateSeasonService.get_active_season() → season_id 태깅
+              → DebatePromotionService.get_active_series() × 2 → match_type/series_id 태깅
+                (두 에이전트 모두 시리즈 중이면 첫 번째만 연결)
+              → my_entry, opponent_entry 삭제 → commit
+              → matched 이벤트 양방향 발행
+              → asyncio.create_task(run_debate(match_id))
+              → {"status": "matched", "match_id": ...}
+```
+
+### DebateAutoMatcher 백그라운드 루프
+
+```
+app.main.py lifespan
+  → DebateAutoMatcher.get_instance().start()
+      → asyncio.create_task(_loop())
+          → [즉시 1회] _purge_expired_queue_entries()
+                        _check_stale_entries()
+                        _check_stuck_matches()
+          → while _running:
+              → 동일 3개 메서드 반복
+              → asyncio.sleep(debate_auto_match_check_interval)
+
+_check_stale_entries()
+  → cutoff = now - debate_queue_timeout_seconds
+  → SELECT debate_match_queues WHERE joined_at < cutoff SKIP LOCKED
+  → for entry in stale:
+      → _auto_match_with_platform_agent(db, entry)
+          → 엔트리 재확인 (이미 처리됐으면 return)
+          → SELECT debate_agents WHERE is_platform=True ORDER BY random() LIMIT 1
+          → [없음] publish_queue_event(..., "timeout", {...})
+          → [있음] DebateMatch INSERT → entry 삭제 → commit
+                   → publish_queue_event(..., "matched", {...})
+                   → asyncio.create_task(run_debate(match_id))
+```
 
 ---
 
 ## 에러 처리
 
-| 상황 | 예외 | 설명 |
+| 상황 | 예외 | HTTP 변환 |
 |---|---|---|
-| 토픽 미존재/비개방 | `ValueError` | HTTP 400/404 |
-| 비밀번호 불일치 | `ValueError("비밀번호가 올바르지 않습니다")` | HTTP 400 |
-| 에이전트 미존재/비소유 | `ValueError("Agent not found or not owned by user")` | HTTP 404 |
-| 유저 큐 중복 | `QueueConflictError` | HTTP 409 |
-| 에이전트 큐 중복 | `QueueConflictError` 또는 `ValueError` | HTTP 409/400 |
-| 크레딧 부족 | `ValueError("크레딧이 부족합니다...")` | HTTP 400 |
-| ready_up 시 큐 미존재 | `ValueError("Not in queue")` | HTTP 400 |
+| 토픽 미존재 | `ValueError("Topic not found")` | 404 |
+| 토픽 미개방 (`status != "open"`) | `ValueError("Topic is not open for matches")` | 400 |
+| 토픽 비밀번호 불일치 | `ValueError("비밀번호가 올바르지 않습니다")` | 400 |
+| 에이전트 미존재/비소유 | `ValueError("Agent not found or not owned by user")` | 404 |
+| 에이전트 비활성 | `ValueError("Agent is not active")` | 400 |
+| API 키 미설정 + 플랫폼 키 없음 | `ValueError("에이전트에 API 키가 설정되지 않았습니다...")` | 400 |
+| 크레딧 부족 | `ValueError("크레딧이 부족합니다. 필요: N석, 현재: M석")` | 400 |
+| 유저 큐 중복 (다른 에이전트로 대기 중) | `QueueConflictError` | 409 |
+| 에이전트 큐 중복 (같은 토픽) | `ValueError("Agent already in queue for this topic")` | 400 |
+| 에이전트 큐 중복 (다른 토픽) | `QueueConflictError` | 409 |
+| INSERT race condition (`uq_debate_queue_topic_agent`) | `ValueError("Agent already in queue for this topic")` | 400 |
+| ready_up 시 큐 미존재 | `ValueError("Not in queue")` | 400 |
+
+예외 → HTTP 상태코드 변환은 `api/debate_topics.py` 라우터가 담당한다.
+
+---
 
 ## 변경 이력
 
-| 날짜 | 버전 | 변경 내용 | 작성자 |
-|---|---|---|---|
-| 2026-03-11 | v2.0 | 실제 코드 기반으로 전면 재작성 | Claude |
+| 날짜 | 변경 내용 |
+|---|---|
+| 2026-03-12 | 레퍼런스 형식에 맞춰 전면 재작성. 클래스 2개 분리 표기, join_queue 10단계 검증 흐름 상세화, DebateAutoMatcher 백그라운드 루프 흐름 추가, 에러 처리 표 확장 |
+| 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |
