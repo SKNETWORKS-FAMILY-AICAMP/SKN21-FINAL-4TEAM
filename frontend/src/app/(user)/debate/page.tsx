@@ -690,7 +690,7 @@ export default function DebateTopicsPage() {
                     idx === 0
                       ? 'text-yellow-400'
                       : idx === 1
-                        ? 'text-gray-300'
+                        ? 'text-text'
                         : idx === 2
                           ? 'text-orange-400'
                           : 'text-text-muted'
@@ -761,7 +761,7 @@ export default function DebateTopicsPage() {
                         idx === 0
                           ? 'text-yellow-400'
                           : idx === 1
-                            ? 'text-gray-300'
+                            ? 'text-text'
                             : idx === 2
                               ? 'text-orange-400'
                               : 'text-text-muted'

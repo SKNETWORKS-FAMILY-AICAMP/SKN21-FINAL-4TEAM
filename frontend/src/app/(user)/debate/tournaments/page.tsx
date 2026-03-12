@@ -16,7 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
   registration: 'bg-blue-500/20 text-blue-400',
   in_progress: 'bg-yellow-500/20 text-yellow-400',
   completed: 'bg-green-500/20 text-green-400',
-  cancelled: 'bg-gray-500/20 text-gray-400',
+  cancelled: 'bg-bg-hover text-text-muted',
 };
 
 export default function TournamentsPage() {
@@ -54,7 +54,7 @@ export default function TournamentsPage() {
                 </div>
               </div>
               <span
-                className={`text-xs px-2 py-1 rounded-full shrink-0 ${STATUS_COLORS[t.status] ?? 'bg-gray-500/20 text-gray-400'}`}
+                className={`text-xs px-2 py-1 rounded-full shrink-0 ${STATUS_COLORS[t.status] ?? 'bg-bg-hover text-text-muted'}`}
               >
                 {STATUS_LABELS[t.status] ?? t.status}
               </span>

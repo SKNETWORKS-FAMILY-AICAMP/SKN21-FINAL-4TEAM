@@ -51,10 +51,10 @@ export function WaitingRoomVS({
   const hasOpponent = opponent !== null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-bg via-bg-surface to-bg flex flex-col items-center justify-center px-4 py-8">
       {/* 토픽 제목 */}
       <div className="mb-8 text-center max-w-[600px]">
-        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">토론 주제</p>
+        <p className="text-xs text-text-muted uppercase tracking-widest mb-1">토론 주제</p>
         <h1 className="text-lg font-bold text-white break-words">「{topicTitle}」</h1>
       </div>
 
@@ -80,7 +80,7 @@ export function WaitingRoomVS({
                   자동 매칭
                 </span>
               )}
-              <p className="text-sm text-gray-400">잠시 후 이동합니다...</p>
+              <p className="text-sm text-text-secondary">잠시 후 이동합니다...</p>
             </div>
           ) : (
             <>
@@ -92,7 +92,7 @@ export function WaitingRoomVS({
               </span>
               <CountUpTimer startedAt={startedAt} maxSeconds={120} />
               {!hasOpponent && (
-                <p className="text-xs text-gray-500">상대를 찾는 중...</p>
+                <p className="text-xs text-text-muted">상대를 찾는 중...</p>
               )}
             </>
           )}
@@ -110,7 +110,7 @@ export function WaitingRoomVS({
           {/* 카운트다운 */}
           {countdown !== null && (
             <div className="flex flex-col items-center gap-1">
-              <p className="text-xs text-gray-400">토론 시작까지</p>
+              <p className="text-xs text-text-secondary">토론 시작까지</p>
               <span
                 className={`text-6xl font-black tabular-nums drop-shadow-[0_0_16px_rgba(234,179,8,0.7)] transition-all ${
                   countdown <= 3 ? 'text-red-400 animate-pulse' : 'text-yellow-400'
@@ -122,11 +122,11 @@ export function WaitingRoomVS({
           )}
 
           {/* 준비 상태 표시 */}
-          <div className="flex items-center gap-4 text-xs text-gray-400">
+          <div className="flex items-center gap-4 text-xs text-text-secondary">
             <span className={isReady ? 'text-green-400 font-semibold' : ''}>
               {isReady ? '✓ 나 준비 완료' : '나 대기 중'}
             </span>
-            <span className="text-gray-600">|</span>
+            <span className="text-text-muted">|</span>
             <span className={opponentReady ? 'text-green-400 font-semibold' : ''}>
               {opponentReady ? '✓ 상대 준비 완료' : '상대 대기 중'}
             </span>
@@ -159,7 +159,7 @@ export function WaitingRoomVS({
         <button
           onClick={onCancel}
           disabled={cancelling}
-          className="mt-6 px-6 py-2 rounded-lg border border-gray-600 text-sm text-gray-400
+          className="mt-6 px-6 py-2 rounded-lg border border-border text-sm text-text-secondary
             hover:border-red-500/50 hover:text-red-400 transition-colors disabled:opacity-50
             disabled:cursor-not-allowed"
         >

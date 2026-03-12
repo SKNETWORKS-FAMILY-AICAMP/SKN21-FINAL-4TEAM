@@ -9,7 +9,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   anthropic: 'text-orange-400',
   google: 'text-blue-400',
   runpod: 'text-purple-400',
-  local: 'text-gray-400',
+  local: 'text-text-muted',
 };
 
 type Props = {
@@ -46,7 +46,7 @@ export function FightingHPBar({
   const clamped = Math.max(0, Math.min(100, Math.round(hp)));
   const color = hpBarColor(clamped, side);
   const isCritical = clamped <= 20;
-  const providerColor = PROVIDER_COLORS[provider] ?? 'text-gray-400';
+  const providerColor = PROVIDER_COLORS[provider] ?? 'text-text-muted';
 
   const isLoser = isCompleted && isWinner === false;
   const isWinnerCompleted = isCompleted && isWinner;

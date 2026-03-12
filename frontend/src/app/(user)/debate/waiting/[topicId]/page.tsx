@@ -276,12 +276,12 @@ export default function WaitingRoomPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center gap-4 px-4">
+      <div className="min-h-screen bg-bg flex flex-col items-center justify-center gap-4 px-4">
         <p className="text-red-400 text-sm text-center">{error}</p>
         <button
           onClick={() => router.push(`/debate/topics/${topicId}`)}
-          className="px-4 py-2 rounded-lg border border-gray-600 text-sm text-gray-400
-            hover:border-gray-400 transition-colors"
+          className="px-4 py-2 rounded-lg border border-border text-sm text-text-secondary
+            hover:border-border transition-colors"
         >
           토픽으로 돌아가기
         </button>
