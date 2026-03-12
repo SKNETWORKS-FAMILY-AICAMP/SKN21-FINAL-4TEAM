@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.debate_agent import DebateAgent
 from app.models.debate_promotion_series import DebatePromotionSeries
 
@@ -86,10 +87,10 @@ class DebatePromotionService:
     async def record_match_result(self, series_id: str, result: str) -> dict:
         """시리즈에 매치 결과를 기록하고 시리즈 종료 여부를 반환.
 
-        result: 'win' | 'loss'  (무승부는 호출 전에 처리)
+        result: 'win' | 'loss' | 'draw'
 
         반환 dict:
-          series_type, status, current_wins, current_losses,
+          series_type, status, current_wins, current_losses, draw_count,
           required_wins, tier_changed, new_tier (optional)
         """
         res = await self.db.execute(
@@ -100,19 +101,54 @@ class DebatePromotionService:
         if series is None or series.status != "active":
             return {"status": "not_found"}
 
-        # 승/패 카운터 증가 (무승부는 호출 전에 처리되어 이 코드에 도달하지 않음)
         if result == "win":
             series.current_wins += 1
-        else:
+        elif result == "loss":
             series.current_losses += 1
+        else:  # draw
+            series.draw_count += 1
+            if series.draw_count >= settings.debate_series_max_draws:
+                series.status = "expired"
+                series.completed_at = datetime.now(UTC)
+                await self.db.execute(
+                    update(DebateAgent)
+                    .where(DebateAgent.id == str(series.agent_id))
+                    .values(active_series_id=None)
+                )
+                return {
+                    "series_id": str(series.id),
+                    "series_type": series.series_type,
+                    "status": "expired",
+                    "current_wins": series.current_wins,
+                    "current_losses": series.current_losses,
+                    "draw_count": series.draw_count,
+                    "required_wins": series.required_wins,
+                    "from_tier": series.from_tier,
+                    "to_tier": series.to_tier,
+                    "tier_changed": False,
+                    "new_tier": None,
+                }
+            # max_draws 미만: 시리즈 계속 진행
+            return {
+                "series_id": str(series.id),
+                "series_type": series.series_type,
+                "status": series.status,
+                "current_wins": series.current_wins,
+                "current_losses": series.current_losses,
+                "draw_count": series.draw_count,
+                "required_wins": series.required_wins,
+                "from_tier": series.from_tier,
+                "to_tier": series.to_tier,
+                "tier_changed": False,
+                "new_tier": None,
+            }
 
         # 시리즈 종료 조건 판정
         series_done = False
         series_won = False
-        # max_losses 계산 근거: 총 3판 체계에서 required_wins를 제한 후 남은 패 허용 횟수
-        #   승급전(required_wins=2): 3 - 2 = 1패 허용 (2선승)
-        #   강등전(required_wins=1): 3 - 1 = 0패 (무조건 1승 이내에 실패하면 강등)
-        max_losses = 3 - series.required_wins
+        # 강등전: 1판 필승 — 1패 즉시 강등 (max_losses=0)
+        # 승급전: 3판 2선승 — 1패까지 허용 (max_losses=1)
+        max_losses = 0 if series.series_type == "demotion" else 3 - series.required_wins
 
         # 필요 승수에 도달하면 시리즈 승리 확정
         if series.current_wins >= series.required_wins:
@@ -182,6 +218,7 @@ class DebatePromotionService:
             "status": series.status,
             "current_wins": series.current_wins,
             "current_losses": series.current_losses,
+            "draw_count": series.draw_count,
             "required_wins": series.required_wins,
             "from_tier": series.from_tier,
             "to_tier": series.to_tier,
@@ -245,6 +282,12 @@ class DebatePromotionService:
                 return None
             # 보호 횟수가 남아있으면 보호를 먼저 소진 — 시리즈 없이 이번 강등을 막음
             if protection_count > 0:
+                # 보호 횟수 소진은 여기서 직접 처리 — 호출자가 별도로 차감할 필요 없음
+                await self.db.execute(
+                    update(DebateAgent)
+                    .where(DebateAgent.id == agent_id)
+                    .values(tier_protection_count=DebateAgent.tier_protection_count - 1)
+                )
                 return None
             prev_tier = TIER_ORDER[old_idx - 1]
             return await self.create_demotion_series(agent_id, old_tier, prev_tier)

@@ -23,6 +23,7 @@ class DebatePromotionSeries(Base):
     required_wins: Mapped[int] = mapped_column(Integer, nullable=False)
     current_wins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     current_losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    draw_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
@@ -38,7 +39,7 @@ class DebatePromotionSeries(Base):
             name="ck_promotion_series_type",
         ),
         CheckConstraint(
-            "status IN ('active', 'won', 'lost', 'cancelled')",
+            "status IN ('active', 'won', 'lost', 'cancelled', 'expired')",
             name="ck_promotion_series_status",
         ),
     )

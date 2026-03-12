@@ -97,6 +97,9 @@ class DebateSeasonService:
         """시즌 ELO/전적 갱신 + tier 재계산.
 
         result_type: 'win' | 'loss' | 'draw'
+
+        시즌 ELO는 승급전/강등전 트리거와 무관하다.
+        승급전/강등전은 누적 ELO(DebateAgent.elo_rating) 변화 기준으로만 트리거된다.
         """
         stats = await self.get_or_create_season_stats(agent_id, season_id)
         stats.elo_rating = new_elo
@@ -163,6 +166,8 @@ class DebateSeasonService:
             owners_res = await self.db.execute(select(User).where(User.id.in_(owner_ids)))
             owners_map = {str(u.id): u for u in owners_res.scalars()}
 
+        # 시즌 참가 에이전트만 soft reset 적용 — 미참가 에이전트는 의도적으로 건드리지 않음
+        # (시즌 참가 인센티브 설계: 시즌 참가자끼리의 ELO 격차를 다음 시즌 시작 전에 압축)
         for rank, (stats, agent) in enumerate(season_stats_rows, start=1):
             reward = top3_rewards[rank - 1] if rank <= len(top3_rewards) else (rank4_10_reward if rank <= 10 else 0)
             result = DebateSeasonResult(

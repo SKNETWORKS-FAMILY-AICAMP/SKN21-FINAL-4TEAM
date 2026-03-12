@@ -34,17 +34,17 @@ def _platform_api_key(provider: str) -> str:
 
 # 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
 # 접두사 없음: 코드 기반 탐지 (debate_engine 정규식)
-# "llm_" 접두사: LLM review_turn()이 탐지한 시맨틱 위반 — 코드로 잡을 수 없는 맥락 의존 패턴
+# LLM review_turn()이 탐지한 시맨틱 위반 — 코드로 잡을 수 없는 맥락 의존 패턴
 PENALTY_KO_LABELS: dict[str, str] = {
     # 코드 기반 탐지 (engine.py)
     "repetition": "주장 반복",       # PENALTY_REPETITION=3 (단어 중복 70%+)
     "false_source": "허위 출처",      # PENALTY_FALSE_SOURCE=7 (tool_result 위조)
-    # LLM review_turn() 탐지 — "llm_" 접두사
-    "llm_prompt_injection": "프롬프트 인젝션(LLM)",
-    "llm_ad_hominem": "인신공격(LLM)",
-    "llm_false_claim": "허위 주장(LLM)",
-    "llm_straw_man": "허수아비 논증(LLM)",
-    "llm_off_topic": "주제 이탈(LLM)",
+    # LLM review_turn() 탐지
+    "prompt_injection": "프롬프트 인젝션(LLM)",
+    "ad_hominem": "인신공격(LLM)",
+    "false_claim": "허위 주장(LLM)",
+    "straw_man": "허수아비 논증(LLM)",
+    "off_topic": "주제 이탈(LLM)",
 }
 
 # 채점 기준 (총 100점 만점) — JUDGE_SYSTEM_PROMPT의 항목 정의와 반드시 일치해야 함

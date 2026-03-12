@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     # 최적화
     debate_orchestrator_optimized: bool = True      # 최적화 오케스트레이터 활성화 (모델 분리 + 병렬 실행)
     debate_turn_max_retries: int = 2                # 발언 실패(타임아웃·에러) 시 재시도 횟수
+    debate_series_max_draws: int = 3                # 시리즈 무승부 최대 허용 횟수 (초과 시 자동 만료)
 
     # 판정 규칙
     debate_draw_threshold: int = 1                  # 승패 판정 최소 점수차 (미만이면 무승부)

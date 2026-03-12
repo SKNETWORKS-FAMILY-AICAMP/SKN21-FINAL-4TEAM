@@ -435,16 +435,14 @@ class DebateAgentService:
             )
 
             if new_series is None:
-                # 시리즈 미생성(Iron 최하위 강등 방어·보호 소진 중): 보호 카운터만 감소
-                old_tier = agent.tier
                 new_tier = get_tier_from_elo(new_elo)
-                old_idx = TIER_ORDER.index(old_tier) if old_tier in TIER_ORDER else 0
+                old_idx = TIER_ORDER.index(agent.tier) if agent.tier in TIER_ORDER else 0
                 new_idx = TIER_ORDER.index(new_tier) if new_tier in TIER_ORDER else 0
 
-                if new_idx < old_idx:
-                    if agent.tier_protection_count > 0:
-                        # 보호 횟수가 남아 있으면 1회 차감 후 강등 유예
-                        updates["tier_protection_count"] = DebateAgent.tier_protection_count - 1
+                if new_idx != old_idx and new_idx >= old_idx:
+                    # 승급 방향(시리즈 없음, Master 최상위 등): tier 즉시 갱신
+                    updates["tier"] = new_tier
+                # 강등 방향 보호 차감은 check_and_trigger()에서 이미 처리됨
         # else: 시리즈 진행 중 — ELO만 업데이트, 티어 변경 없음
 
         await self.db.execute(

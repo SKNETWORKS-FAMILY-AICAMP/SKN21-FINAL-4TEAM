@@ -566,20 +566,10 @@ async def _finalize_match(
         series_updates: list[dict] = []
         # 양쪽 에이전트 각각 활성 승급전/강등전 시리즈 확인 후 결과 기록
         for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
-            if res == "draw":
-                # 승급전: 무승부 카운트 제외 (재도전), 강등전: 승리로 처리
-                active = await promo_svc.get_active_series(str(agent_obj.id))
-                # 강등전 무승부는 승리로 간주 — 1판 필승 규칙의 예외 처리
-                if active and active.series_type == "demotion":
-                    series_result = await promo_svc.record_match_result(str(active.id), "win")
-                    series_updates.append(series_result)
-                # 승급전 무승부는 기록하지 않음 — 재도전 기회 부여
-            else:
-                active = await promo_svc.get_active_series(str(agent_obj.id))
-                # 활성 시리즈가 있는 경우에만 결과 기록 (일반 매치는 시리즈 없음)
-                if active:
-                    series_result = await promo_svc.record_match_result(str(active.id), res)
-                    series_updates.append(series_result)
+            active = await promo_svc.get_active_series(str(agent_obj.id))
+            if active:
+                series_result = await promo_svc.record_match_result(str(active.id), res)
+                series_updates.append(series_result)
 
         for su in series_updates:
             await publish_event(str(match.id), "series_update", su)
@@ -1506,6 +1496,8 @@ async def _execute_multi_and_finalize(
     claims_b: list[str] = []
     total_penalty_a = 0
     total_penalty_b = 0
+    model_cache: dict = {}
+    usage_batch: list[TokenUsageLog] = []
 
     for turn_num in range(1, topic.max_turns + 1):
         for i in range(max_slots):
@@ -1531,7 +1523,27 @@ async def _execute_multi_and_finalize(
                 my_accumulated_penalty=total_penalty_a,
             )
             total_penalty_a += turn_a.penalty_total
-            claims_a.append(turn_a.claim)
+
+            if settings.debate_turn_review_enabled:
+                review = await orchestrator.review_turn(
+                    topic=topic.title,
+                    speaker=f"agent_a_slot{i}",
+                    turn_number=turn_num,
+                    claim=turn_a.claim,
+                    evidence=turn_a.evidence,
+                    action=turn_a.action,
+                    opponent_last_claim=claims_b[-1] if claims_b else None,
+                    recent_history=claims_a[-2:] if claims_a else None,
+                )
+                total_penalty_a = _apply_review_to_turn(turn_a, review, claims_a, total_penalty_a, update_last_claim=False)
+                await _log_orchestrator_usage(
+                    db, multi_agent_a.owner_id, review.get("model_id", ""),
+                    review["input_tokens"], review["output_tokens"],
+                    model_cache=model_cache, usage_batch=usage_batch,
+                )
+                await _publish_review_event(str(match.id), turn_num, f"agent_a_slot{i}", review)
+            else:
+                claims_a.append(turn_a.claim)
 
             await publish_event(str(match.id), "turn", {
                 "turn_number": turn_num,
@@ -1549,7 +1561,27 @@ async def _execute_multi_and_finalize(
                 my_accumulated_penalty=total_penalty_b,
             )
             total_penalty_b += turn_b.penalty_total
-            claims_b.append(turn_b.claim)
+
+            if settings.debate_turn_review_enabled:
+                review = await orchestrator.review_turn(
+                    topic=topic.title,
+                    speaker=f"agent_b_slot{i}",
+                    turn_number=turn_num,
+                    claim=turn_b.claim,
+                    evidence=turn_b.evidence,
+                    action=turn_b.action,
+                    opponent_last_claim=claims_a[-1] if claims_a else None,
+                    recent_history=claims_b[-2:] if claims_b else None,
+                )
+                total_penalty_b = _apply_review_to_turn(turn_b, review, claims_b, total_penalty_b, update_last_claim=False)
+                await _log_orchestrator_usage(
+                    db, multi_agent_b.owner_id, review.get("model_id", ""),
+                    review["input_tokens"], review["output_tokens"],
+                    model_cache=model_cache, usage_batch=usage_batch,
+                )
+                await _publish_review_event(str(match.id), turn_num, f"agent_b_slot{i}", review)
+            else:
+                claims_b.append(turn_b.claim)
 
             await publish_event(str(match.id), "turn", {
                 "turn_number": turn_num,
@@ -1563,6 +1595,8 @@ async def _execute_multi_and_finalize(
 
     match.penalty_a = total_penalty_a
     match.penalty_b = total_penalty_b
+    if usage_batch:
+        db.add_all(usage_batch)
     await db.commit()
     logger.info("Multi-agent match %s turns completed", match.id)
 
