@@ -6,9 +6,9 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#f97316',
+          DEFAULT: 'var(--color-primary)',
           light: 'rgba(249,115,22,0.15)',
-          dark: '#ea6c0a',
+          dark: 'var(--color-primary-dark)',
         },
         secondary: '#9c27b0',
         dark: {
@@ -23,22 +23,22 @@ const config: Config = {
           cost: '#ff7043',
         },
         text: {
-          DEFAULT: '#e0e0e0',
-          secondary: '#9e9e9e',
-          muted: '#616161',
-          label: '#bdbdbd',
+          DEFAULT: 'var(--color-text)',
+          secondary: 'var(--color-text-secondary)',
+          muted: 'var(--color-text-muted)',
+          label: 'var(--color-text-secondary)',
         },
         bg: {
-          DEFAULT: '#1a1a1a',
-          surface: '#262626',
-          hover: '#333333',
-          tag: '#333333',
-          input: '#1e1e1e',
-          muted: '#3a3a3a',
+          DEFAULT: 'var(--color-bg)',
+          surface: 'var(--color-bg-surface)',
+          hover: 'var(--color-bg-hover)',
+          tag: 'var(--color-bg-hover)',
+          input: 'var(--color-bg-input)',
+          muted: 'var(--color-bg-hover)',
         },
         border: {
-          DEFAULT: '#333333',
-          input: '#444444',
+          DEFAULT: 'var(--color-border)',
+          input: 'var(--color-border-input)',
           delete: '#5c2020',
         },
       },
