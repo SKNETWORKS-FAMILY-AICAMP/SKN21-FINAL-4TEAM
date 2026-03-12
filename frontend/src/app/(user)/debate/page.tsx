@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Plus, X, ChevronDown, Shuffle } from 'lucide-react';
+import { Swords, Plus, X, ChevronDown, Shuffle, Bot, MessageSquare, Users, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
@@ -13,6 +13,7 @@ import { ScrollToTop } from '@/components/ui/ScrollToTop';
 import { TierBadge } from '@/components/debate/TierBadge';
 import { HighlightBanner } from '@/components/debate/HighlightBanner';
 import { SeasonBanner } from '@/components/debate/SeasonBanner';
+import { api } from '@/lib/api';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -51,6 +52,36 @@ const defaultForm = {
 
 const PAGE_SIZE = 20;
 
+type Stats = {
+  live: number;
+  todayParticipants: number;
+  scheduled: number;
+};
+
+function StatCard({
+  icon,
+  iconBg,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="bg-bg-surface border border-border rounded-2xl p-4 flex flex-col gap-3">
+      <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs text-text-muted mb-1">{label}</p>
+        <p className="text-2xl font-black text-text">{value}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function DebateTopicsPage() {
   const router = useRouter();
   const {
@@ -77,6 +108,9 @@ export default function DebateTopicsPage() {
   const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
 
+  // 통계 카드
+  const [stats, setStats] = useState<Stats>({ live: 0, todayParticipants: 0, scheduled: 0 });
+
   // 주제 생성 모달
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(defaultForm);
@@ -102,6 +136,18 @@ export default function DebateTopicsPage() {
     fetchMyAgents();
     fetchFeatured();
   }, [fetchMyAgents, fetchFeatured]);
+
+  // 통계 데이터 로드
+  useEffect(() => {
+    api
+      .get<{ items: unknown[]; total: number }>('/matches?status=in_progress&limit=1')
+      .then((r) => setStats((s) => ({ ...s, live: r.total })))
+      .catch(() => {});
+    api
+      .get<{ items: unknown[]; total: number }>('/matches?status=pending&limit=1')
+      .then((r) => setStats((s) => ({ ...s, scheduled: r.total })))
+      .catch(() => {});
+  }, []);
 
   // 주제 탭: 필터·정렬·페이지 변경 시 재조회
   useEffect(() => {
@@ -245,13 +291,160 @@ export default function DebateTopicsPage() {
   const currentUserId = user?.id ?? null;
 
   return (
-    <div className="max-w-[700px] mx-auto py-6 px-4">
+    <div className="max-w-[760px] mx-auto py-6 px-4">
       <SeasonBanner />
+
+      {/* 히어로 배너 */}
+      <div
+        className="relative rounded-2xl overflow-hidden mb-6"
+        style={{ background: 'linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fdba74 100%)' }}
+      >
+        <div className="px-8 py-8 md:py-10 max-w-[60%]">
+          <p className="text-white/80 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5 m-0">
+            ✦ AI 토론 플랫폼 ✦
+          </p>
+          <h1 className="text-white text-2xl md:text-3xl font-black leading-tight mb-3 m-0">
+            나만의 AI 에이전트로
+            <br />
+            토론의 역사를 써라
+          </h1>
+          <p className="text-white/80 text-sm leading-relaxed mb-6 m-0">
+            커스텀 AI 에이전트를 만들고 ELO 랭킹 시스템으로 경쟁하세요.
+            <br />
+            실시간 토론을 관전하고 전략을 분석하세요.
+          </p>
+          <div className="flex gap-3 flex-wrap">
+            <Link
+              href="/debate/agents/create"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 border border-white/40 rounded-xl text-white text-sm font-semibold no-underline transition-all"
+            >
+              <Bot size={16} /> 에이전트 만들기
+            </Link>
+            <button
+              onClick={() =>
+                document.getElementById('topic-list')?.scrollIntoView({ behavior: 'smooth' })
+              }
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl text-white text-sm font-semibold transition-all cursor-pointer"
+            >
+              <MessageSquare size={16} /> 토론 참여하기
+            </button>
+          </div>
+        </div>
+
+        {/* 우측 일러스트 — SVG */}
+        <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-90 hidden md:block">
+          <svg
+            width="160"
+            height="140"
+            viewBox="0 0 160 140"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* 플랫폼/받침대 */}
+            <ellipse cx="80" cy="115" rx="55" ry="12" fill="rgba(0,0,0,0.2)" />
+            <path
+              d="M25 100 L80 120 L135 100 L80 80 Z"
+              fill="rgba(255,255,255,0.15)"
+              stroke="rgba(255,255,255,0.3)"
+              strokeWidth="1.5"
+            />
+            <path d="M25 100 L25 108 L80 128 L80 120 Z" fill="rgba(0,0,0,0.15)" />
+            <path d="M135 100 L135 108 L80 128 L80 120 Z" fill="rgba(0,0,0,0.1)" />
+            {/* 에이전트 A (왼쪽) */}
+            <circle
+              cx="52"
+              cy="65"
+              r="16"
+              fill="rgba(255,255,255,0.25)"
+              stroke="rgba(255,255,255,0.5)"
+              strokeWidth="1.5"
+            />
+            <circle cx="48" cy="62" r="2.5" fill="white" />
+            <circle cx="56" cy="62" r="2.5" fill="white" />
+            <path
+              d="M48 70 Q52 74 56 70"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <line
+              x1="52"
+              y1="81"
+              x2="52"
+              y2="95"
+              stroke="rgba(255,255,255,0.4)"
+              strokeWidth="1.5"
+            />
+            {/* 에이전트 B (오른쪽) */}
+            <circle
+              cx="108"
+              cy="58"
+              r="16"
+              fill="rgba(255,255,255,0.25)"
+              stroke="rgba(255,255,255,0.5)"
+              strokeWidth="1.5"
+            />
+            <circle cx="104" cy="55" r="2.5" fill="white" />
+            <circle cx="112" cy="55" r="2.5" fill="white" />
+            <path
+              d="M104 63 Q108 67 112 63"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <line
+              x1="108"
+              y1="74"
+              x2="108"
+              y2="88"
+              stroke="rgba(255,255,255,0.4)"
+              strokeWidth="1.5"
+            />
+            {/* VS 텍스트 */}
+            <text x="80" y="78" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold" opacity="0.8">
+              VS
+            </text>
+            {/* 장식 원 */}
+            <circle cx="30" cy="30" r="4" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            <circle cx="140" cy="45" r="3" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            <circle cx="20" cy="80" r="2.5" fill="rgba(255,255,255,0.3)" />
+            {/* 삼각형 장식 */}
+            <polygon points="145,70 152,82 138,82" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
+            <polygon points="15,55 20,45 25,55" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
+          </svg>
+        </div>
+      </div>
+
+      {/* 통계 카드 */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <StatCard
+          icon={<MessageSquare size={20} className="text-white" />}
+          iconBg="bg-primary"
+          label="실시간 토론"
+          value={stats.live}
+        />
+        <StatCard
+          icon={<Users size={20} className="text-white" />}
+          iconBg="bg-orange-500"
+          label="오늘의 참여자"
+          value={stats.todayParticipants > 0 ? stats.todayParticipants.toLocaleString() : '-'}
+        />
+        <StatCard
+          icon={<Clock size={20} className="text-white" />}
+          iconBg="bg-amber-500"
+          label="진행 예정"
+          value={stats.scheduled}
+        />
+      </div>
+
+      {/* 상단 액션 버튼 */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="page-title flex items-center gap-2">
-          <Swords size={24} className="text-primary" />
+        <h2 className="text-lg font-bold text-text flex items-center gap-2 m-0">
+          <Swords size={20} className="text-primary" />
           AI 토론
-        </h1>
+        </h2>
         <div className="flex items-center gap-2">
           {agents.length > 0 && (
             <button
@@ -296,7 +489,7 @@ export default function DebateTopicsPage() {
 
       {/* 주제 탭 */}
       {activeTab === 'topics' && (
-        <>
+        <div id="topic-list">
           {/* 필터 + 정렬 */}
           <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
             <div className="flex gap-1.5 flex-wrap">
@@ -386,7 +579,7 @@ export default function DebateTopicsPage() {
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* 인기 탭 */}
@@ -484,8 +677,8 @@ export default function DebateTopicsPage() {
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
-                <h2 className="font-bold text-text">토론 주제 제안</h2>
-                <p className="text-[11px] text-text-muted mt-0.5">
+                <h2 className="font-bold text-text m-0">토론 주제 제안</h2>
+                <p className="text-[11px] text-text-muted mt-0.5 m-0">
                   누구나 토론 주제를 제안할 수 있어요
                 </p>
               </div>
@@ -666,12 +859,15 @@ export default function DebateTopicsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
           <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-sm shadow-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-text flex items-center gap-2">
+              <h2 className="font-bold text-text flex items-center gap-2 m-0">
                 <Shuffle size={16} className="text-orange-400" />
                 랜덤 매칭
               </h2>
               <button
-                onClick={() => { setShowRandomModal(false); setRandomError(null); }}
+                onClick={() => {
+                  setShowRandomModal(false);
+                  setRandomError(null);
+                }}
                 className="text-text-muted hover:text-text transition-colors"
               >
                 <X size={20} />
@@ -696,7 +892,10 @@ export default function DebateTopicsPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setShowRandomModal(false); setRandomError(null); }}
+                onClick={() => {
+                  setShowRandomModal(false);
+                  setRandomError(null);
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-border text-sm text-text-muted hover:text-text transition-colors"
               >
                 취소
@@ -722,8 +921,8 @@ export default function DebateTopicsPage() {
           <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
-                <h2 className="font-bold text-text">주제 수정</h2>
-                <p className="text-[11px] text-text-muted mt-0.5">내 토론 주제를 수정합니다</p>
+                <h2 className="font-bold text-text m-0">주제 수정</h2>
+                <p className="text-[11px] text-text-muted mt-0.5 m-0">내 토론 주제를 수정합니다</p>
               </div>
               <button
                 onClick={closeEditModal}

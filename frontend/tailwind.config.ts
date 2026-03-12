@@ -6,9 +6,9 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#e91e63',
-          light: 'rgba(233,30,99,0.15)',
-          dark: '#c2185b',
+          DEFAULT: '#f97316',
+          light: 'rgba(249,115,22,0.15)',
+          dark: '#ea6c0a',
         },
         secondary: '#9c27b0',
         dark: {
@@ -51,7 +51,7 @@ const config: Config = {
       boxShadow: {
         card: '0 4px 20px rgba(0,0,0,0.4)',
         bubble: '0 1px 4px rgba(0,0,0,0.3)',
-        glow: '0 0 15px rgba(233,30,99,0.3)',
+        glow: '0 0 15px rgba(249,115,22,0.3)',
       },
       keyframes: {
         'slide-in': {

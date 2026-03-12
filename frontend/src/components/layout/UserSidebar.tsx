@@ -4,62 +4,18 @@
 import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  UserCircle,
-  User,
-  Swords,
-  Images,
-  Trophy,
-  ShieldCheck,
-} from 'lucide-react';
+import { MessageSquare, Trophy, Bot, User, ShieldCheck } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 
-type MenuItem = { href: string; label: string; icon: typeof Swords };
+type MenuItem = { href: string; label: string; icon: typeof MessageSquare };
 
-const PLATFORM_ITEMS: MenuItem[] = [
-  { href: '/debate', label: 'AI 토론', icon: Swords },
-  { href: '/debate/gallery', label: '에이전트 갤러리', icon: Images },
-  { href: '/debate/tournaments', label: '토너먼트', icon: Trophy },
+const NAV_ITEMS: MenuItem[] = [
+  { href: '/debate', label: 'Debate', icon: MessageSquare },
+  { href: '/debate/ranking', label: 'Ranking', icon: Trophy },
+  { href: '/debate/agents', label: 'Agents', icon: Bot },
+  { href: '/mypage', label: 'Profile', icon: User },
 ];
-
-const ACCOUNT_ITEMS: MenuItem[] = [
-  { href: '/mypage', label: '마이페이지', icon: UserCircle },
-];
-
-function GroupLabel({ label }: { label: string }) {
-  return (
-    <span className="text-[11px] text-text-muted uppercase font-semibold px-5 pt-4 pb-1 block">
-      {label}
-    </span>
-  );
-}
-
-function NavItem({
-  item,
-  active,
-  onClick,
-}: {
-  item: MenuItem;
-  active: boolean;
-  onClick?: () => void;
-}) {
-  const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      onClick={onClick}
-      className={`flex items-center gap-2.5 px-5 py-2.5 no-underline text-sm transition-colors duration-200 ${
-        active
-          ? 'text-primary bg-primary/10 border-r-[3px] border-primary font-semibold'
-          : 'text-text-secondary hover:text-text hover:bg-bg-hover'
-      }`}
-    >
-      <Icon size={20} />
-      <span className="flex-1">{item.label}</span>
-    </Link>
-  );
-}
 
 export const UserSidebar = memo(function UserSidebar() {
   const pathname = usePathname();
@@ -78,12 +34,12 @@ export const UserSidebar = memo(function UserSidebar() {
   };
 
   const isActive = (href: string) => {
-    if (href === '/mypage') return pathname.startsWith('/mypage');
-    // /debate는 갤러리·토너먼트 전용 메뉴가 있으므로 해당 하위 경로에선 비활성
     if (href === '/debate') {
       return (
         pathname === '/debate' ||
         (pathname.startsWith('/debate/') &&
+          !pathname.startsWith('/debate/ranking') &&
+          !pathname.startsWith('/debate/agents') &&
           !pathname.startsWith('/debate/gallery') &&
           !pathname.startsWith('/debate/tournaments'))
       );
@@ -91,17 +47,11 @@ export const UserSidebar = memo(function UserSidebar() {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
-  const visiblePlatformItems = PLATFORM_ITEMS;
-  const visibleAccountItems = ACCOUNT_ITEMS;
-
   return (
     <>
       {/* 모바일 백드롭 */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[79] md:hidden"
-          onClick={closeSidebar}
-        />
+        <div className="fixed inset-0 bg-black/50 z-[79] md:hidden" onClick={closeSidebar} />
       )}
 
       <aside
@@ -110,57 +60,72 @@ export const UserSidebar = memo(function UserSidebar() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           md:relative md:translate-x-0 md:z-auto md:min-h-screen`}
       >
+        {/* 로고 */}
         <div className="px-5 py-5 border-b border-border">
-          <Link href="/debate" className="text-text no-underline text-base font-bold block">
-            AI 토론 플랫폼
-          </Link>
-          <span className="text-[11px] text-primary font-semibold uppercase tracking-wide">
-            AI Debate
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+              <MessageSquare size={18} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text leading-tight m-0">AI Arena</p>
+              <p className="text-[10px] text-primary font-semibold uppercase tracking-wider m-0">
+                Season 3
+              </p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 flex flex-col py-1 overflow-y-auto">
-          <GroupLabel label="플랫폼" />
-          {visiblePlatformItems.map((item) => (
-            <NavItem key={item.href} item={item} active={isActive(item.href)} onClick={closeSidebar} />
-          ))}
-
-          <GroupLabel label="내 계정" />
-          {visibleAccountItems.map((item) => (
-            <NavItem
-              key={item.href}
-              item={item}
-              active={isActive(item.href)}
-              onClick={closeSidebar}
-            />
-          ))}
+        {/* 네비게이션 */}
+        <nav className="flex-1 flex flex-col py-4 gap-1 px-3 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeSidebar}
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
+                  ${
+                    active
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-secondary hover:text-text hover:bg-bg-hover'
+                  }`}
+              >
+                <Icon size={18} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
+        {/* 관리자 링크 */}
         {isAdmin() && (
           <div className="px-3 py-2 border-t border-border">
             <Link
               href="/admin"
               onClick={closeSidebar}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors no-underline font-medium"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-amber-400 hover:bg-amber-500/10 transition-colors no-underline font-medium"
             >
               <ShieldCheck size={16} />
-              <span>관리자 페이지</span>
+              <span>관리자</span>
             </Link>
           </div>
         )}
 
-        <div className="px-5 py-4 border-t border-border">
+        {/* 유저 정보 */}
+        <div className="px-4 py-4 border-t border-border">
           {user && (
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                  <User size={16} />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold flex-shrink-0">
+                  {user.nickname[0]?.toUpperCase()}
                 </div>
                 <span className="text-sm text-text truncate">{user.nickname}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="text-xs text-text-muted hover:text-danger bg-transparent border-none cursor-pointer"
+                className="text-xs text-text-muted hover:text-danger bg-transparent border-none cursor-pointer shrink-0"
               >
                 로그아웃
               </button>

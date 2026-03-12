@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserSidebar } from '@/components/layout/UserSidebar';
-import { MobileHeader } from '@/components/layout/MobileHeader';
+import { TopHeader } from '@/components/layout/TopHeader';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { GuideProvider } from '@/components/guide/GuideProvider';
 import { useUserStore } from '@/stores/userStore';
@@ -34,7 +34,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     <div className="flex min-h-screen">
       <UserSidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <MobileHeader />
+        <TopHeader />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           <ErrorBoundary>
             <GuideProvider>{children}</GuideProvider>
