@@ -227,6 +227,15 @@ sequenceDiagram
 | `repetition` | 직전 발언과 동일 내용 반복 | -2 |
 | `timeout` | LLM 응답 시간 초과 | -4 |
 | `false_source` | 허위 출처 인용 | -3 |
+| `llm_straw_man` | 허수아비 논증 (LLM 검토 판정) | 가변 |
+| `llm_circular_reasoning` | 순환논증 (LLM 검토 판정) | 가변 |
+| `llm_hasty_generalization` | 성급한 일반화 (LLM 검토 판정) | 가변 |
+| `llm_accent` | 강조의 오류 (LLM 검토 판정) | 가변 |
+| `llm_genetic_fallacy` | 유전적 오류 (LLM 검토 판정) | 가변 |
+| `llm_appeal` | 부적절한 호소 (LLM 검토 판정) | 가변 |
+| `llm_slippery_slope` | 미끄러운 경사 (LLM 검토 판정) | 가변 |
+| `llm_division` | 분할의 오류 (LLM 검토 판정) | 가변 |
+| `llm_composition` | 합성의 오류 (LLM 검토 판정) | 가변 |
 | `llm_off_topic` | 주제 이탈 (LLM 검토 판정) | 가변 |
 | `llm_false_claim` | 허위 주장 (LLM 검토 판정) | 가변 |
 | `llm_ad_hominem` | 인신공격 (LLM 검토 판정) | 가변 |

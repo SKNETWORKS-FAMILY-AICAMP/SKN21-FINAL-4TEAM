@@ -1,3 +1,28 @@
+## [2026-03-12] Debate LLM 위반 유형 확장
+
+### Changed
+- `backend/app/services/debate/orchestrator.py`
+  - `LLM_VIOLATION_PENALTIES`에 신규 위반 7종 추가:
+    - `hasty_generalization`, `accent`, `genetic_fallacy`, `appeal`, `slippery_slope`, `division`, `composition`
+  - `PENALTY_KO_LABELS`에 대응 `llm_*` 레이블 추가
+  - `REVIEW_SYSTEM_PROMPT`의 허용 위반 유형 목록에 신규 7종 정의 추가
+- `frontend/src/components/debate/TurnBubble.tsx`
+  - 신규 `llm_*` 위반 레이블/설명 추가
+- `frontend/src/components/debate/DebateDebugModal.tsx`
+  - `review_result.violations`와 `turn.penalties` 표시를 위한 기본/`llm_*` 레이블 확장
+- 문서 동기화:
+  - `docs/debate-code-review.md`
+  - `docs/modules/debate/orchestrator.md`
+  - `docs/architecture/02-debate-engine.md`
+  - `docs/architecture/05-module-flow.md`
+  - `scripts/make_docx.py` (문서 생성 문자열)
+
+### Added
+- `backend/tests/unit/services/test_debate_orchestrator.py`
+  - 신규 논리 오류 7종의 벌점 매핑 검증 테스트 추가
+
+---
+
 ## [2026-03-12] 메인화면 리뉴얼 및 테마 시스템 구축
 
 ### Added

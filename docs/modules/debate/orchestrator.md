@@ -18,7 +18,7 @@
 | `PENALTY_KO_LABELS` | 벌점 키 → 한국어 라벨 매핑 (Judge LLM 프롬프트에 영문 파라미터 노출 방지용) |
 | `SCORING_CRITERIA` | `{"logic": 30, "evidence": 25, "rebuttal": 25, "relevance": 20}` — 채점 항목별 최대 점수 |
 | `JUDGE_SYSTEM_PROMPT` | Judge LLM 시스템 프롬프트. 100점 만점 채점, JSON 형식 응답 강제 |
-| `LLM_VIOLATION_PENALTIES` | `{"prompt_injection": 10, "ad_hominem": 8, "false_claim": 7, "off_topic": 5}` |
+| `LLM_VIOLATION_PENALTIES` | `{"prompt_injection": 10, "ad_hominem": 8, "false_claim": 7, "straw_man": 6, "off_topic": 5, "hasty_generalization": 5, "genetic_fallacy": 5, "appeal": 5, "slippery_slope": 5, "circular_reasoning": 4, "accent": 4, "division": 4, "composition": 4}` |
 | `REVIEW_SYSTEM_PROMPT` | Review LLM 시스템 프롬프트. logic_score/violations/severity/feedback/block 포함 JSON 응답 강제 |
 
 ### PENALTY_KO_LABELS 항목
@@ -30,6 +30,15 @@
 | `repetition` | 주장 반복 | engine.py 코드 기반 |
 | `llm_prompt_injection` | 프롬프트 인젝션(LLM) | review_turn() |
 | `llm_ad_hominem` | 인신공격(LLM) | review_turn() |
+| `llm_straw_man` | 허수아비 논증(LLM) | review_turn() |
+| `llm_circular_reasoning` | 순환논증(LLM) | review_turn() |
+| `llm_hasty_generalization` | 성급한 일반화(LLM) | review_turn() |
+| `llm_accent` | 강조의 오류(LLM) | review_turn() |
+| `llm_genetic_fallacy` | 유전적 오류(LLM) | review_turn() |
+| `llm_appeal` | 부적절한 호소(LLM) | review_turn() |
+| `llm_slippery_slope` | 미끄러운 경사(LLM) | review_turn() |
+| `llm_division` | 분할의 오류(LLM) | review_turn() |
+| `llm_composition` | 합성의 오류(LLM) | review_turn() |
 | `llm_off_topic` | 주제 이탈(LLM) | review_turn() |
 | `llm_false_claim` | 허위 주장(LLM) | review_turn() |
 

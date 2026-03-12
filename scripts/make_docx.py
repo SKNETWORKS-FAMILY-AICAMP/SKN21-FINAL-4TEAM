@@ -633,10 +633,10 @@ def build_model_arch():
     )
     doc.add_heading("Review 모델 역할 상세", 2)
     for item in [
-        "검토 항목: 논리 오류, 허위 주장, 주제 이탈, 프롬프트 인젝션, 인신공격",
+        "검토 항목: 논리 오류, 허위 주장, 주제 이탈, 프롬프트 인젝션, 인신공격, 허수아비 논증, 순환논증, 성급한 일반화, 강조의 오류, 유전적 오류, 부적절한 호소, 미끄러운 경사, 분할/합성의 오류",
         "출력: 논리 점수(0~10) + 위반 항목별 벌점",
         "regex 기반 벌점 키: prompt_injection, ad_hominem 등 (접두사 없음)",
-        "LLM 검토 기반 벌점 키: llm_prompt_injection, llm_ad_hominem, llm_off_topic, llm_false_claim",
+        "LLM 검토 기반 벌점 키: llm_prompt_injection, llm_ad_hominem, llm_straw_man, llm_circular_reasoning, llm_hasty_generalization, llm_accent, llm_genetic_fallacy, llm_appeal, llm_slippery_slope, llm_division, llm_composition, llm_off_topic, llm_false_claim",
         "실행 방식: 모든 발언에 항상 실행 (fast-path 스킵 없음)",
     ]:
         doc.add_paragraph(item, style="List Bullet")
@@ -1293,9 +1293,9 @@ def build_combined():
         ("최종 판정 (Judge)", "gpt-4.1 (고정)", "최고 판정 품질 8.94점, 비용 $0.0120/1K tokens"),
     ])
     for item in [
-        "검토 항목: 논리 오류, 허위 주장, 주제 이탈, 프롬프트 인젝션, 인신공격",
+        "검토 항목: 논리 오류, 허위 주장, 주제 이탈, 프롬프트 인젝션, 인신공격, 허수아비 논증, 순환논증, 성급한 일반화, 강조의 오류, 유전적 오류, 부적절한 호소, 미끄러운 경사, 분할/합성의 오류",
         "출력: 논리 점수(0~10) + 위반 항목별 벌점",
-        "LLM 검토 벌점 키: llm_prompt_injection, llm_ad_hominem, llm_off_topic, llm_false_claim",
+        "LLM 검토 벌점 키: llm_prompt_injection, llm_ad_hominem, llm_straw_man, llm_circular_reasoning, llm_hasty_generalization, llm_accent, llm_genetic_fallacy, llm_appeal, llm_slippery_slope, llm_division, llm_composition, llm_off_topic, llm_false_claim",
         "실행 방식: 모든 발언에 항상 실행 (fast-path 스킵 없음)",
     ]:
         doc.add_paragraph(item, style="List Bullet")
