@@ -111,6 +111,28 @@ run_migrations() {
   log "마이그레이션 완료"
 }
 
+verify_service_running() {
+  local service="$1"
+  local max_wait="${2:-30}"
+  local elapsed=0
+
+  log "$service 시작 확인 중 (최대 ${max_wait}초)..."
+  while [ "$elapsed" -lt "$max_wait" ]; do
+    local state
+    state=$(docker inspect --format '{{.State.Status}}' "${PROJECT_NAME}-${service}" 2>/dev/null || echo "missing")
+    if [ "$state" = "running" ]; then
+      log "$service 정상 기동 확인"
+      return 0
+    fi
+    if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+      err "$service 컨테이너가 종료됨 (state=$state). 로그 확인: docker logs ${PROJECT_NAME}-${service}"
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  err "$service 시작 타임아웃 (${max_wait}초 초과). 수동 확인 필요."
+}
+
 cleanup_containers() {
   # 1) 종료된 컨테이너 제거
   local stopped
@@ -176,6 +198,8 @@ if [ "$MODE" = "update" ]; then
   DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
   log "서비스 재시작 중..."
   $COMPOSE_CMD up -d --no-deps backend frontend nginx
+  verify_service_running "backend" 30
+  verify_service_running "frontend" 30
   # backend/frontend 재시작 후 컨테이너 IP가 바뀔 수 있으므로 nginx도 강제 재시작
   $COMPOSE_CMD restart nginx
   run_migrations
