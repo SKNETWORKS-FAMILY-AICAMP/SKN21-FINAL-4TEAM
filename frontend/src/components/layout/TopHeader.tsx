@@ -1,12 +1,12 @@
 'use client';
 
-import { Search, Bell } from 'lucide-react';
+import { Search, Bell, Sun, Moon } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 
 export function TopHeader() {
   const { user } = useUserStore();
-  const { toggleSidebar } = useUIStore();
+  const { toggleSidebar, theme, toggleTheme } = useUIStore();
 
   const initial = user?.nickname?.[0]?.toUpperCase() ?? 'U';
 
@@ -34,6 +34,15 @@ export function TopHeader() {
       </div>
 
       <div className="flex items-center gap-2 ml-auto">
+        {/* 테마 토글 */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-full bg-bg border border-border text-text-muted hover:text-text transition-colors cursor-pointer"
+          aria-label="테마 변경"
+        >
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+
         {/* 알림 */}
         <button className="p-2 rounded-full bg-bg border border-border text-text-muted hover:text-text transition-colors cursor-pointer">
           <Bell size={16} />

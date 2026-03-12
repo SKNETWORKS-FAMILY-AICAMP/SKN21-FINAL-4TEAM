@@ -141,10 +141,10 @@ export default function DebateTopicsPage() {
   useEffect(() => {
     api
       .get<{ items: unknown[]; total: number }>('/matches?status=in_progress&limit=1')
-      .then((r) => setStats((s) => ({ ...s, live: r.total })))
+      .then((r) => setStats((s) => ({ ...s, live: r.total, todayParticipants: r.total * 2 })))
       .catch(() => {});
     api
-      .get<{ items: unknown[]; total: number }>('/matches?status=pending&limit=1')
+      .get<{ items: unknown[]; total: number }>('/topics?status=scheduled&limit=1')
       .then((r) => setStats((s) => ({ ...s, scheduled: r.total })))
       .catch(() => {});
   }, []);
@@ -321,9 +321,13 @@ export default function DebateTopicsPage() {
               <Bot size={16} /> 에이전트 만들기
             </Link>
             <button
-              onClick={() =>
-                document.getElementById('topic-list')?.scrollIntoView({ behavior: 'smooth' })
-              }
+              onClick={() => {
+                if (agents.length > 0) {
+                  setShowRandomModal(true);
+                } else {
+                  router.push('/debate/agents/create');
+                }
+              }}
               className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl text-white text-sm font-semibold transition-all cursor-pointer"
             >
               <MessageSquare size={16} /> 토론 참여하기
