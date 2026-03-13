@@ -67,7 +67,7 @@ class TestExecuteTurnWithRetry:
         expected_turn = _make_turn_log()
 
         with patch(
-            "app.services.debate.engine._execute_turn",
+            "app.services.debate.turn_executor.TurnExecutor.execute",
             new_callable=AsyncMock,
             return_value=expected_turn,
         ):
@@ -100,7 +100,7 @@ class TestExecuteTurnWithRetry:
                 raise TimeoutError("첫 번째 시도 실패")
             return expected_turn
 
-        with patch("app.services.debate.engine._execute_turn", side_effect=side_effect):
+        with patch("app.services.debate.turn_executor.TurnExecutor.execute", side_effect=side_effect):
             result = await _execute_turn_with_retry(
                 db=AsyncMock(),
                 client=AsyncMock(),
@@ -123,11 +123,11 @@ class TestExecuteTurnWithRetry:
         """debate_turn_max_retries 횟수만큼 재시도 후 모두 실패하면 None을 반환한다."""
         with (
             patch(
-                "app.services.debate.engine._execute_turn",
+                "app.services.debate.turn_executor.TurnExecutor.execute",
                 new_callable=AsyncMock,
                 side_effect=TimeoutError("LLM 응답 없음"),
             ),
-            patch("app.services.debate.engine.settings") as mock_settings,
+            patch("app.services.debate.turn_executor.settings") as mock_settings,
         ):
             mock_settings.debate_turn_max_retries = 2
 
@@ -158,8 +158,8 @@ class TestExecuteTurnWithRetry:
             raise RuntimeError("항상 실패")
 
         with (
-            patch("app.services.debate.engine._execute_turn", side_effect=count_calls),
-            patch("app.services.debate.engine.settings") as mock_settings,
+            patch("app.services.debate.turn_executor.TurnExecutor.execute", side_effect=count_calls),
+            patch("app.services.debate.turn_executor.settings") as mock_settings,
         ):
             mock_settings.debate_turn_max_retries = 2
 

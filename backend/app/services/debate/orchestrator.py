@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-
 import re
 
 from app.core.config import settings
@@ -488,47 +487,5 @@ class DebateOrchestrator:
         return f"{name}: {items}"
 
 
-def calculate_elo(rating_a: int, rating_b: int, result: str, score_diff: int = 0) -> tuple[int, int]:
-    """표준 ELO + 판정 점수차 배수.
-
-    result: 'a_win' | 'b_win' | 'draw'
-    score_diff: abs(score_a - score_b), 0~100 범위
-
-    공식:
-      E_a  = 1 / (1 + 10^((rating_b - rating_a) / 400))   # 기대 승률
-      base = K × (실제결과 - E_a)                           # 표준 ELO 변동
-      mult = 1.0 + (score_diff / scale) × weight           # 점수차 배수 [1.0 ~ max_mult]
-      delta_a = round(base × mult),  delta_b = -delta_a    # 제로섬 유지
-
-    효과:
-      - 강자를 이기면 많이 획득, 약자에게 지면 많이 잃음
-      - 압도적 승리(score_diff 큼)일수록 최대 max_mult배 변동
-    """
-    k = settings.debate_elo_k_factor
-    scale = settings.debate_elo_score_diff_scale
-    weight = settings.debate_elo_score_diff_weight
-    max_mult = settings.debate_elo_score_mult_max
-
-    # 기대 승률 (로지스틱 ELO 공식)
-    e_a = 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
-
-    # s_a: ELO 공식의 실제 결과 점수 — 승=1.0, 무=0.5, 패=0.0
-    if result == "a_win":
-        s_a = 1.0
-    elif result == "b_win":
-        s_a = 0.0
-    else:  # draw
-        s_a = 0.5
-
-    # 기본 ELO 변동
-    base_delta = k * (s_a - e_a)
-
-    # 점수차 배수 (1.0 이상, max_mult 이하)
-    mult = 1.0 + (min(abs(score_diff), scale) / scale) * weight
-    mult = min(mult, max_mult)
-
-    # 반올림 후 제로섬 보정 (delta_a + delta_b = 0 항상 유지)
-    delta_a = round(base_delta * mult)
-    delta_b = -delta_a
-
-    return rating_a + delta_a, rating_b + delta_b
+# calculate_elo는 helpers.py로 이동 — 기존 import 경로 유지를 위해 re-export
+from app.services.debate.helpers import calculate_elo as calculate_elo  # noqa: E402, F401

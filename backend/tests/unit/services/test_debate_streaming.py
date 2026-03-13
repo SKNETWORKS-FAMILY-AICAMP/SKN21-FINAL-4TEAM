@@ -97,7 +97,7 @@ class TestDebateEngineStreaming:
         """BYOK 턴 실행 시 turn_chunk 이벤트가 각 청크마다 발행된다."""
         from decimal import Decimal
         from app.models.llm_model import LLMModel
-        from app.services.debate.engine import _execute_turn
+        from app.services.debate.turn_executor import TurnExecutor
 
         # 테스트용 mock 객체 구성
         match = MagicMock()
@@ -152,18 +152,14 @@ class TestDebateEngineStreaming:
             published_events.append((event_type, data))
 
         with (
-            patch("app.services.debate.engine.InferenceClient") as _,
-            patch("app.services.debate.engine.publish_event", side_effect=_fake_publish),
+            patch("app.services.debate.turn_executor.publish_event", side_effect=_fake_publish),
+            patch("app.services.debate.engine._log_orchestrator_usage", new_callable=AsyncMock),
         ):
-            # generate_stream_byok를 fake로 주입
-            from app.services.debate import engine as de
-
             fake_client = MagicMock()
             fake_client.generate_stream_byok = _fake_stream
 
-            turn = await _execute_turn(
-                db=db,
-                client=fake_client,
+            executor = TurnExecutor(client=fake_client, db=db)
+            turn = await executor.execute(
                 match=match,
                 topic=topic,
                 turn_number=1,

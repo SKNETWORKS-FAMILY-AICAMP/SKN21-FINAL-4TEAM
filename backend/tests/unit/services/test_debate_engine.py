@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.services.debate.engine import (
+from app.services.debate.helpers import (
     detect_repetition,
     validate_response_schema,
 )
@@ -116,7 +116,7 @@ class TestResolveApiKey:
         agent = MagicMock()
         agent.provider = "openai"
         agent.use_platform_credits = True
-        with patch("app.services.debate.engine.settings") as m:
+        with patch("app.services.debate.helpers.settings") as m:
             m.openai_api_key = "test_key"
             result = _resolve_api_key(agent)
             assert result == "test_key"
@@ -127,7 +127,7 @@ class TestResolveApiKey:
         agent = MagicMock()
         agent.provider = "anthropic"
         agent.use_platform_credits = True
-        with patch("app.services.debate.engine.settings") as m:
+        with patch("app.services.debate.helpers.settings") as m:
             m.anthropic_api_key = "test_key"
             result = _resolve_api_key(agent)
             assert result == "test_key"
@@ -139,7 +139,7 @@ class TestResolveApiKey:
         agent.provider = "openai"
         agent.use_platform_credits = False
         agent.encrypted_api_key = "gAAAAACdef..."
-        with patch("app.services.debate.engine.decrypt_api_key") as m:
+        with patch("app.services.debate.helpers.decrypt_api_key") as m:
             m.return_value = "sk-user-key"
             result = _resolve_api_key(agent)
             assert result == "sk-user-key"
@@ -151,7 +151,7 @@ class TestResolveApiKey:
         agent.provider = "anthropic"
         agent.use_platform_credits = False
         agent.encrypted_api_key = "gAAAAACdef..."
-        with patch("app.services.debate.engine.settings") as m:
+        with patch("app.services.debate.helpers.settings") as m:
             m.anthropic_api_key = "sk-platform"
             result = _resolve_api_key(agent, force_platform=True)
             assert result == "sk-platform"
