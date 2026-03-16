@@ -1,3 +1,5 @@
+"""매치 조회, 하이라이트, 예측투표 정산, 요약 리포트 생성 서비스."""
+
 import json
 import logging
 import uuid
@@ -10,6 +12,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
@@ -21,11 +24,21 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_token_cost(tokens: int, cost_per_1m: Decimal) -> Decimal:
-    """토큰 수와 백만 토큰당 비용으로 실제 비용을 계산."""
+    """토큰 수와 백만 토큰당 비용으로 실제 비용을 계산한다.
+
+    Args:
+        tokens: 사용된 토큰 수.
+        cost_per_1m: 백만 토큰당 비용 (Decimal).
+
+    Returns:
+        실제 비용 (Decimal).
+    """
     return Decimal(str(tokens)) * cost_per_1m / Decimal("1000000")
 
 
 class DebateMatchService:
+    """매치 조회, 예측투표 생성·정산, 하이라이트, 요약 상태 관리 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -79,6 +92,14 @@ class DebateMatchService:
         }
 
     async def get_match_turns(self, match_id: str) -> list[DebateTurnLog]:
+        """매치의 모든 턴 로그를 턴 번호·발언자 순으로 반환.
+
+        Args:
+            match_id: 매치 UUID 문자열.
+
+        Returns:
+            DebateTurnLog 목록.
+        """
         result = await self.db.execute(
             select(DebateTurnLog)
             .where(DebateTurnLog.match_id == match_id)
@@ -87,6 +108,15 @@ class DebateMatchService:
         return list(result.scalars().all())
 
     async def get_scorecard(self, match_id: str) -> dict | None:
+        """매치 스코어카드 조회.
+
+        Args:
+            match_id: 매치 UUID 문자열.
+
+        Returns:
+            scorecard 데이터에 winner_id, result 필드를 추가한 dict.
+            매치가 없거나 scorecard가 없으면 None.
+        """
         result = await self.db.execute(
             select(DebateMatch).where(DebateMatch.id == match_id)
         )
@@ -210,7 +240,18 @@ class DebateMatchService:
         return items, total
 
     def _agent_from_map(self, agents_map: dict, agent_id) -> dict:
-        """배치 조회된 agents_map에서 에이전트 요약 반환."""
+        """배치 조회된 agents_map에서 에이전트 요약 dict를 반환.
+
+        삭제된 에이전트(ID는 있지만 맵에 없음)와 NULL 에이전트(ID 자체가 없음)를
+        각각 다른 플레이스홀더 이름으로 구분한다.
+
+        Args:
+            agents_map: str(agent_id) → DebateAgent 매핑 dict.
+            agent_id: 조회할 에이전트 UUID (None 가능).
+
+        Returns:
+            id, name, provider, model_id, elo_rating, image_url 키를 포함한 dict.
+        """
         if agent_id is None:
             return {"id": None, "name": "[없음]", "provider": "", "model_id": "", "elo_rating": 0, "image_url": None}
         a = agents_map.get(str(agent_id))
@@ -421,23 +462,35 @@ class DebateMatchService:
 
 # --- DebateSummaryService ---
 
-SUMMARY_SYSTEM_PROMPT = """당신은 AI 토론 분석 전문가입니다. 토론 로그를 분석하여 JSON 형식으로 요약을 생성하세요.
-
-각 턴에는 논증품질 점수(1-10)와 위반 내용이 포함되어 있습니다.
-rule_violations에는 위반이 발생한 각 턴을 "[에이전트명] 턴N: 위반유형(심각도) - 세부내용" 형식으로 구체적으로 나열하세요.
-위반이 없으면 빈 배열을 반환하세요.
+SUMMARY_SYSTEM_PROMPT = """당신은 AI 토론 분석 전문가입니다. 토론 로그와 판정 결과를 분석하여 JSON 형식으로 요약을 생성하세요.
 
 반드시 다음 JSON 형식으로만 응답하세요:
 {
-  "key_arguments": ["핵심 논거 1", "핵심 논거 2", "핵심 논거 3"],
-  "winning_points": ["승부 포인트 1", "승부 포인트 2"],
-  "rule_violations": ["[에이전트명] 턴N: 위반유형(심각도) - 세부내용"],
-  "overall_summary": "전체 토론 요약 (3-4문장)"
-}"""
+  "agent_a_arguments": ["에이전트A의 핵심 논거 1", "핵심 논거 2"],
+  "agent_b_arguments": ["에이전트B의 핵심 논거 1", "핵심 논거 2"],
+  "turning_points": ["승부를 가른 결정적 순간 또는 논거 대립 1", "순간 2"],
+  "overall_summary": "판정 결과를 포함한 전체 토론 총평 (3-4문장)"
+}
+
+작성 기준:
+- agent_a_arguments / agent_b_arguments: 각 에이전트가 실제로 제시한 고유한 논거만 포함. 반복 주장은 하나로 합친다.
+- turning_points: 실질적인 승패 갈림 지점이 없으면 빈 배열을 반환한다.
+- overall_summary: 어떤 논거가 왜 더 설득력이 있었는지, 판정 결과를 자연스럽게 포함한다."""
 
 
 def _format_summary_log(turns: list, agent_a_name: str, agent_b_name: str) -> str:
-    """턴 로그를 텍스트로 포맷. 논증품질 점수와 위반 내용을 포함하여 요약 LLM에 전달한다."""
+    """턴 로그를 텍스트로 포맷하여 요약 LLM에 전달한다.
+
+    발언 내용(action, claim, evidence)만 포함하고 점수·메타데이터는 제외한다.
+
+    Args:
+        turns: DebateTurnLog 목록.
+        agent_a_name: 에이전트 A 이름.
+        agent_b_name: 에이전트 B 이름.
+
+    Returns:
+        LLM 입력용 포맷된 문자열.
+    """
     name_map = {"agent_a": agent_a_name, "agent_b": agent_b_name}
     lines = []
     for t in turns:
@@ -445,33 +498,48 @@ def _format_summary_log(turns: list, agent_a_name: str, agent_b_name: str) -> st
         lines.append(f"[{speaker_name} 턴 {t.turn_number}] {t.action}: {t.claim}")
         if t.evidence:
             lines.append(f"  근거: {t.evidence}")
-        rr = t.review_result or {}
-        if rr:
-            logic_score = rr.get("logic_score", "?")
-            lines.append(f"  논증품질: {logic_score}/10")
-            violations = rr.get("violations", [])
-            if violations:
-                v_strs = [
-                    f"{v.get('type', '')}({v.get('severity', '')}): {v.get('detail', '')}"
-                    for v in violations
-                ]
-                lines.append(f"  규칙위반: {'; '.join(v_strs)}")
-            feedback = rr.get("feedback", "")
-            if feedback:
-                lines.append(f"  검토: {feedback}")
-        elif t.penalty_total > 0:
-            lines.append(f"  벌점: {t.penalty_total}")
     return "\n".join(lines)
 
 
+def _build_rule_violations(turns: list, agent_a_name: str, agent_b_name: str) -> list[str]:
+    """review_result의 violations 데이터를 사람이 읽을 수 있는 문자열 목록으로 변환.
+
+    Args:
+        turns: DebateTurnLog 목록.
+        agent_a_name: 에이전트 A 이름.
+        agent_b_name: 에이전트 B 이름.
+
+    Returns:
+        '[에이전트명] 턴N: 위반유형(severity) — 설명' 형식의 문자열 목록.
+    """
+    name_map = {"agent_a": agent_a_name, "agent_b": agent_b_name}
+    violations = []
+    for t in turns:
+        rr = t.review_result or {}
+        for v in rr.get("violations", []):
+            v_type = v.get("type", "")
+            severity = v.get("severity", "")
+            detail = v.get("detail", "")
+            speaker_name = name_map.get(t.speaker, t.speaker)
+            violations.append(f"[{speaker_name}] 턴{t.turn_number}: {v_type}({severity}) — {detail}")
+    return violations
+
+
 class DebateSummaryService:
+    """매치 완료 후 LLM 기반 요약 리포트를 생성하는 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def generate_summary(self, match_id: str) -> None:
-        """매치 완료 후 비동기 호출. 이미 summary_report가 있으면 스킵."""
-        from app.core.config import settings
+        """매치 완료 후 비동기 호출. 이미 summary_report가 있으면 스킵.
 
+        LLM을 호출해 에이전트 논거, 전환점, 전체 총평을 JSON으로 생성하고
+        DebateMatch.summary_report에 저장한다.
+
+        Args:
+            match_id: 요약을 생성할 매치 UUID 문자열.
+        """
         res = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
         match = res.scalar_one_or_none()
         if match is None or match.status != "completed":
@@ -498,6 +566,15 @@ class DebateSummaryService:
             return
 
         log_text = _format_summary_log(turns, agent_a_name, agent_b_name)
+        rule_violations = _build_rule_violations(turns, agent_a_name, agent_b_name)
+
+        # 판정 결과 요약 — 승자 이름을 resolving하여 컨텍스트에 포함
+        if match.winner_id is None:
+            result_summary = "판정: 무승부"
+        elif str(match.winner_id) == str(match.agent_a_id):
+            result_summary = f"판정: {agent_a_name} 승리 (점수: {match.score_a} vs {match.score_b})"
+        else:
+            result_summary = f"판정: {agent_b_name} 승리 (점수: {match.score_b} vs {match.score_a})"
 
         try:
             from app.services.llm.inference_client import InferenceClient
@@ -520,8 +597,9 @@ class DebateSummaryService:
                 {
                     "role": "user",
                     "content": (
-                        f"참가자: {agent_a_name} vs {agent_b_name}\n\n"
-                        f"다음 토론 로그를 분석하세요:\n\n{log_text[:4000]}"
+                        f"참가자: {agent_a_name}(찬성) vs {agent_b_name}(반대)\n"
+                        f"{result_summary}\n\n"
+                        f"토론 로그:\n\n{log_text[:4000]}"
                     ),
                 },
             ]
@@ -553,9 +631,10 @@ class DebateSummaryService:
                 ))
 
             summary_report = {
-                "key_arguments": parsed.get("key_arguments", []),
-                "winning_points": parsed.get("winning_points", []),
-                "rule_violations": parsed.get("rule_violations", []),
+                "agent_a_arguments": parsed.get("agent_a_arguments", []),
+                "agent_b_arguments": parsed.get("agent_b_arguments", []),
+                "turning_points": parsed.get("turning_points", []),
+                "rule_violations": rule_violations,  # LLM 재해석 없이 review_result 데이터 직접 활용
                 "overall_summary": parsed.get("overall_summary", ""),
                 "generated_at": datetime.now(UTC).isoformat(),
                 "model_used": settings.debate_summary_model,
@@ -571,12 +650,21 @@ class DebateSummaryService:
             await self.db.commit()
             logger.info("Summary generated for match %s", match_id)
 
+        except json.JSONDecodeError as exc:
+            logger.warning("Summary JSON parse failed for match %s: %s", match_id, exc)
         except Exception as exc:
             logger.warning("Summary generation failed for match %s: %s", match_id, exc)
 
 
 async def generate_summary_task(match_id: str) -> None:
-    """백그라운드 태스크용 — 앱 수준 공유 엔진/세션 재사용."""
+    """백그라운드 태스크용 요약 생성 진입점 — 앱 수준 세션 재사용.
+
+    MatchFinalizer에서 asyncio.create_task()로 호출된다.
+    DB 세션을 독립적으로 생성해 엔진 세션과 격리한다.
+
+    Args:
+        match_id: 요약을 생성할 매치 UUID 문자열.
+    """
     from app.core.database import async_session
 
     async with async_session() as db:

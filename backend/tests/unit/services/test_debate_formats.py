@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate.formats import TurnLoopResult, run_turns_1v1
+from app.services.debate.debate_formats import TurnLoopResult, run_turns_1v1
 from app.services.debate.forfeit import ForfeitError
 
 
@@ -102,10 +102,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock.review_turn = AsyncMock(return_value=review)
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats.settings") as mock_settings,
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -120,8 +120,8 @@ class TestRunTurns1v1Sequential:
                 agent_b=agent_b,
                 version_a=None,
                 version_b=None,
-                key_a="key-a",
-                key_b="key-b",
+                api_key_a="key-a",
+                api_key_b="key-b",
                 model_cache={},
                 usage_batch=[],
                 parallel=False,
@@ -158,10 +158,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock.review_turn = AsyncMock(return_value=review_with_penalty)
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats.settings") as mock_settings,
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0
@@ -176,8 +176,8 @@ class TestRunTurns1v1Sequential:
                 agent_b=agent_b,
                 version_a=None,
                 version_b=None,
-                key_a="key-a",
-                key_b="key-b",
+                api_key_a="key-a",
+                api_key_b="key-b",
                 model_cache={},
                 usage_batch=[],
                 parallel=False,
@@ -204,10 +204,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock = MagicMock()
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats.settings") as mock_settings,
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -223,8 +223,8 @@ class TestRunTurns1v1Sequential:
                     agent_b=agent_b,
                     version_a=None,
                     version_b=None,
-                    key_a="key-a",
-                    key_b="key-b",
+                    api_key_a="key-a",
+                    api_key_b="key-b",
                     model_cache={},
                     usage_batch=[],
                     parallel=False,
@@ -260,10 +260,10 @@ class TestRunTurns1v1Parallel:
         orchestrator_mock._review_fallback = MagicMock(return_value=_make_review_result())
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats.settings") as mock_settings,
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -278,8 +278,8 @@ class TestRunTurns1v1Parallel:
                 agent_b=agent_b,
                 version_a=None,
                 version_b=None,
-                key_a="key-a",
-                key_b="key-b",
+                api_key_a="key-a",
+                api_key_b="key-b",
                 model_cache={},
                 usage_batch=[],
                 parallel=True,
@@ -336,17 +336,17 @@ class TestRunTurns1v1Parallel:
             agent_b=agent_b,
             version_a=None,
             version_b=None,
-            key_a="key-a",
-            key_b="key-b",
+            api_key_a="key-a",
+            api_key_b="key-b",
             model_cache={},
             usage_batch=[],
         )
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.formats.settings") as mock_settings,
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0

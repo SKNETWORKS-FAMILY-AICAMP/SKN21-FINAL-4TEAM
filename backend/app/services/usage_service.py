@@ -10,6 +10,12 @@ from app.models.token_usage_log import TokenUsageLog
 
 
 class UsageService:
+    """토큰 사용량 기록 및 집계 서비스.
+
+    LLM 호출 토큰 수와 비용을 token_usage_logs 테이블에 기록하고,
+    사용자별·관리자용 사용량 통계를 조회한다.
+    """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -21,7 +27,21 @@ class UsageService:
         input_tokens: int,
         output_tokens: int,
     ) -> TokenUsageLog:
-        """토큰 사용량 기록 + 비용 산출."""
+        """LLM 호출 토큰 사용량을 기록하고 비용을 산출하여 저장한다.
+
+        llm_models 테이블에서 단가를 조회하여 입력/출력 토큰 비용을 계산한다.
+        모델을 찾지 못하면 비용 0으로 기록한다.
+
+        Args:
+            user_id: 사용자 UUID.
+            session_id: 토론 세션 UUID (선택). None이면 세션 외 호출.
+            llm_model_id: llm_models 테이블의 모델 UUID.
+            input_tokens: 입력 토큰 수.
+            output_tokens: 출력 토큰 수.
+
+        Returns:
+            DB에 저장된 TokenUsageLog 인스턴스.
+        """
         # 모델 비용 조회
         result = await self.db.execute(select(LLMModel).where(LLMModel.id == llm_model_id))
         model = result.scalar_one_or_none()
@@ -47,7 +67,14 @@ class UsageService:
         return log
 
     async def get_user_summary(self, user_id: uuid.UUID) -> dict:
-        """사용자 사용량 요약 (일/월/총계 + 모델별 분류)."""
+        """사용자 사용량 요약을 반환한다 (일/월/총계 + 모델별 분류).
+
+        Args:
+            user_id: 조회할 사용자 UUID.
+
+        Returns:
+            total_input_tokens, total_output_tokens, total_cost, daily_*, monthly_*, by_model 키를 포함하는 dict.
+        """
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -166,7 +193,15 @@ class UsageService:
         }
 
     async def get_user_history(self, user_id: uuid.UUID, days: int = 30) -> dict:
-        """일별 사용량 히스토리 + 모델별 일별 분류."""
+        """사용자의 일별 사용량 히스토리와 모델별 일별 분류를 반환한다.
+
+        Args:
+            user_id: 조회할 사용자 UUID.
+            days: 조회 기간 (일 수). 기본값 30일.
+
+        Returns:
+            daily(일별 합산 목록), by_model_daily(모델별 일별 분류 목록) 키를 포함하는 dict.
+        """
         since = datetime.now(UTC) - timedelta(days=days)
 
         # 일별 합산
@@ -230,7 +265,12 @@ class UsageService:
         }
 
     async def get_admin_summary(self) -> dict:
-        """전체 사용량 통계 (관리자용)."""
+        """전체 사용자 사용량 통계를 반환한다 (관리자 전용).
+
+        Returns:
+            total, daily, monthly(각 input_tokens/output_tokens/cost/unique_users),
+            by_model(모델별 비용 내림차순) 키를 포함하는 dict.
+        """
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -294,7 +334,14 @@ class UsageService:
         }
 
     async def get_user_usage_admin(self, user_id: uuid.UUID) -> dict:
-        """관리자가 특정 사용자의 사용량을 조회."""
+        """관리자가 특정 사용자의 사용량 요약 및 30일 히스토리를 조회한다.
+
+        Args:
+            user_id: 조회할 사용자 UUID.
+
+        Returns:
+            summary(get_user_summary 결과), history(get_user_history 결과) 키를 포함하는 dict.
+        """
         summary = await self.get_user_summary(user_id)
         history = await self.get_user_history(user_id, days=30)
         return {"summary": summary, "history": history}

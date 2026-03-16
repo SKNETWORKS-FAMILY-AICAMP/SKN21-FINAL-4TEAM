@@ -92,7 +92,22 @@ export function useDebateStream(
                   s.addTurnReview(event.data as TurnReview);
                 } else if (event.event === 'series_update') {
                   onSeriesUpdateRef.current?.(event.data as PromotionSeries);
-                } else if (event.event === 'finished' || event.event === 'error') {
+                } else if (event.event === 'waiting_agent') {
+                  s.setWaitingAgent(true);
+                } else if (event.event === 'credit_insufficient') {
+                  s.setCreditInsufficient(true);
+                } else if (event.event === 'match_void') {
+                  const reason = (event.data as { reason?: string }).reason ?? '알 수 없는 사유';
+                  s.setMatchVoidReason(reason);
+                  finished = true;
+                  s.clearStreamingTurn();
+                  s.setDebateShowAll(true);
+                  s.fetchMatch(matchId);
+                } else if (
+                  event.event === 'finished' ||
+                  event.event === 'error' ||
+                  event.event === 'forfeit'
+                ) {
                   finished = true;
                   s.clearStreamingTurn();
                   // 결과창 즉시 표시 — fetchMatch 후에도 debateShowAll이 리셋되지 않도록 먼저 설정

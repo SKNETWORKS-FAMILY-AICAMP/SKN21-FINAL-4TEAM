@@ -16,12 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 class DebateTournamentService:
+    """토너먼트 생성, 참가, 라운드 진행, 조회 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def create_tournament(
         self, title: str, topic_id: str, bracket_size: int, created_by: uuid.UUID
     ) -> DebateTournament:
+        """토너먼트를 생성한다 (status='registration').
+
+        Args:
+            title: 토너먼트 제목.
+            topic_id: 사용할 토픽 UUID 문자열.
+            bracket_size: 참가 정원 (2의 제곱수 권장).
+            created_by: 생성자 User UUID.
+
+        Returns:
+            생성된 DebateTournament 객체.
+        """
         t = DebateTournament(
             title=title,
             topic_id=uuid.UUID(topic_id),
@@ -36,6 +49,21 @@ class DebateTournamentService:
     async def join_tournament(
         self, tournament_id: str, agent_id: str, user: User
     ) -> DebateTournamentEntry:
+        """토너먼트에 에이전트를 참가 등록한다.
+
+        FOR UPDATE 잠금으로 동시 요청 시 정원 초과를 방지한다.
+
+        Args:
+            tournament_id: 참가할 토너먼트 UUID 문자열.
+            agent_id: 참가시킬 에이전트 UUID 문자열.
+            user: 현재 인증된 사용자 (소유권 검증용).
+
+        Returns:
+            생성된 DebateTournamentEntry 객체.
+
+        Raises:
+            ValueError: 토너먼트 미존재, 참가 기간 아님, 정원 초과, 'DUPLICATE'.
+        """
         # 토너먼트 행 잠금 — 동시 참가 요청 시 bracket_size 초과 방지
         res = await self.db.execute(
             select(DebateTournament)
@@ -139,6 +167,14 @@ class DebateTournamentService:
         logger.info("Tournament %s advanced to round %d", tournament_id, next_round)
 
     async def get_tournament(self, tournament_id: str) -> dict | None:
+        """토너먼트 상세 정보와 참가자 목록을 반환.
+
+        Args:
+            tournament_id: 토너먼트 UUID 문자열.
+
+        Returns:
+            id, title, status, entries 등을 포함한 dict. 미존재 시 None.
+        """
         res = await self.db.execute(
             select(DebateTournament).where(DebateTournament.id == tournament_id)
         )
@@ -180,6 +216,15 @@ class DebateTournamentService:
         }
 
     async def list_tournaments(self, skip: int = 0, limit: int = 20) -> tuple[list, int]:
+        """토너먼트 목록을 최신순으로 반환.
+
+        Args:
+            skip: 건너뛸 항목 수.
+            limit: 반환할 최대 항목 수.
+
+        Returns:
+            (items, total) 튜플. items는 토너먼트 요약 dict 목록, total은 전체 수.
+        """
         count_res = await self.db.execute(select(func.count(DebateTournament.id)))
         total = count_res.scalar() or 0
         res = await self.db.execute(

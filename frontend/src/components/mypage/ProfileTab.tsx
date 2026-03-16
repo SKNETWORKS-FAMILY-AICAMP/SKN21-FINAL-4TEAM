@@ -1,19 +1,11 @@
-/** 마이페이지 프로필 탭. 하드코딩된 사용자 정보 + 비밀번호 변경 폼 UI. */
+/** 마이페이지 프로필 탭. 사용자 정보 표시 + 비밀번호 변경 폼. */
 'use client';
 
 import { useState } from 'react';
 import { User, Lock, Calendar, Shield, Mail, IdCard, Eye, EyeOff } from 'lucide-react';
-
-const MOCK_PROFILE = {
-  id: 'user-001',
-  login_id: 'nemo_user',
-  nickname: '토론왕김철수',
-  email: 'nemo_user@example.com',
-  role: 'user' as const,
-  age_group: 'adult_verified' as const,
-  adult_verified_at: '2025-11-15T09:00:00Z',
-  created_at: '2025-10-01T12:00:00Z',
-};
+import { useUserStore } from '@/stores/userStore';
+import { useToastStore } from '@/stores/toastStore';
+import { api, ApiError } from '@/lib/api';
 
 const AGE_GROUP_LABELS: Record<string, { label: string; color: string }> = {
   unverified: { label: '미인증', color: 'bg-text-muted' },
@@ -28,8 +20,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function ProfileTab() {
-  const profile = MOCK_PROFILE;
-  const ageInfo = AGE_GROUP_LABELS[profile.age_group] ?? { label: profile.age_group, color: 'bg-text-muted' };
+  const { user, setUser } = useUserStore();
+  const { addToast } = useToastStore();
 
   // 비밀번호 변경 폼 상태
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -37,21 +29,36 @@ export function ProfileTab() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) return;
     if (newPassword.length < 6) return;
-    // 하드코딩 — 실제 API 호출 없음
-    setPasswordChanged(true);
-    setTimeout(() => {
+
+    setPasswordLoading(true);
+    try {
+      await api.post('/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setPasswordChanged(true);
+      addToast('success', '비밀번호가 변경되었습니다.');
       setShowPasswordForm(false);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setPasswordChanged(false);
-    }, 1500);
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : '비밀번호 변경에 실패했습니다.';
+      addToast('error', message);
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   // 비밀번호 강도 체크
@@ -69,6 +76,27 @@ export function ProfileTab() {
 
   const strength = getStrength(newPassword);
 
+  if (!user) {
+    return (
+      <div className="bg-white rounded-xl p-6 brutal-border brutal-shadow-sm animate-pulse">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-full bg-gray-200 brutal-border" />
+          <div className="flex-1 flex flex-col gap-2">
+            <div className="h-5 w-32 bg-gray-200 rounded" />
+            <div className="h-4 w-20 bg-gray-100 rounded" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 border-t-2 border-black/10 pt-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-4 bg-gray-100 rounded w-3/4" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const ageInfo = AGE_GROUP_LABELS[user.ageGroup] ?? { label: user.ageGroup, color: 'bg-text-muted' };
+
   return (
     <>
       {/* 사용자 정보 카드 */}
@@ -76,13 +104,13 @@ export function ProfileTab() {
         {/* 헤더: 아바타 + 닉네임 */}
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary text-2xl font-black brutal-border">
-            {profile.nickname.charAt(0).toUpperCase()}
+            {user.nickname.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="m-0 text-xl font-black text-black">{profile.nickname}</h2>
+            <h2 className="m-0 text-xl font-black text-black">{user.nickname}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-gray-500 font-semibold uppercase">
-                {ROLE_LABELS[profile.role] ?? profile.role}
+                {ROLE_LABELS[user.role] ?? user.role}
               </span>
               <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${ageInfo.color}`}>
                 {ageInfo.label}
@@ -96,30 +124,32 @@ export function ProfileTab() {
           <div className="flex items-center gap-3">
             <IdCard size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">아이디</span>
-            <span className="text-sm text-black font-medium">{profile.login_id}</span>
+            <span className="text-sm text-black font-medium">{user.login_id}</span>
           </div>
           <div className="flex items-center gap-3">
             <User size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">닉네임</span>
-            <span className="text-sm text-black font-medium">{profile.nickname}</span>
+            <span className="text-sm text-black font-medium">{user.nickname}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Mail size={16} className="text-gray-400 shrink-0" />
-            <span className="text-sm text-gray-500 w-24 font-semibold">이메일</span>
-            <span className="text-sm text-black font-medium">{profile.email}</span>
-          </div>
+          {user.email && (
+            <div className="flex items-center gap-3">
+              <Mail size={16} className="text-gray-400 shrink-0" />
+              <span className="text-sm text-gray-500 w-24 font-semibold">이메일</span>
+              <span className="text-sm text-black font-medium">{user.email}</span>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <Shield size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">역할</span>
-            <span className="text-sm text-black font-medium">{ROLE_LABELS[profile.role] ?? profile.role}</span>
+            <span className="text-sm text-black font-medium">{ROLE_LABELS[user.role] ?? user.role}</span>
           </div>
           <div className="flex items-center gap-3">
             <Shield size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">연령 상태</span>
             <span className="text-sm text-black font-medium">{ageInfo.label}</span>
-            {profile.adult_verified_at && (
+            {user.adultVerifiedAt && (
               <span className="text-xs text-gray-400">
-                ({new Date(profile.adult_verified_at).toLocaleDateString('ko-KR')} 인증)
+                ({new Date(user.adultVerifiedAt).toLocaleDateString('ko-KR')} 인증)
               </span>
             )}
           </div>
@@ -127,7 +157,7 @@ export function ProfileTab() {
             <Calendar size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">가입일</span>
             <span className="text-sm text-black font-medium">
-              {new Date(profile.created_at).toLocaleDateString('ko-KR', {
+              {new Date(user.createdAt).toLocaleDateString('ko-KR', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -240,20 +270,26 @@ export function ProfileTab() {
             <div className="flex gap-2 mt-2">
               <button
                 type="submit"
-                disabled={!currentPassword || newPassword.length < 6 || newPassword !== confirmPassword || passwordChanged}
+                disabled={
+                  !currentPassword ||
+                  newPassword.length < 6 ||
+                  newPassword !== confirmPassword ||
+                  passwordLoading
+                }
                 className="flex-1 py-3 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
               >
-                {passwordChanged ? '변경 완료!' : '비밀번호 변경'}
+                {passwordLoading ? '변경 중...' : '비밀번호 변경'}
               </button>
               <button
                 type="button"
+                disabled={passwordLoading}
                 onClick={() => {
                   setShowPasswordForm(false);
                   setCurrentPassword('');
                   setNewPassword('');
                   setConfirmPassword('');
                 }}
-                className="flex-1 py-3 bg-white text-black text-sm font-black rounded-xl brutal-border hover:bg-gray-50 transition-all cursor-pointer"
+                className="flex-1 py-3 bg-white text-black text-sm font-black rounded-xl brutal-border hover:bg-gray-50 transition-all cursor-pointer disabled:opacity-50"
               >
                 취소
               </button>

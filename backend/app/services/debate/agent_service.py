@@ -1,5 +1,6 @@
+"""에이전트 CRUD, 랭킹, 갤러리, 클론, H2H, 버전 관리 서비스."""
+
 import logging
-import re
 import uuid
 from datetime import UTC, datetime
 
@@ -7,11 +8,13 @@ from sqlalchemy import case, func, select, update
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.encryption import encrypt_api_key
+from app.core.config import settings  # 에이전트 이름 변경 쿨다운 등 설정값
+from app.core.encryption import encrypt_api_key  # BYOK API 키 암호화
 from app.models.debate_agent import DebateAgent, DebateAgentSeasonStats, DebateAgentVersion
-from app.models.debate_agent_template import DebateAgentTemplate
+from app.models.debate_match import DebateMatch
 from app.models.user import User
-from app.schemas.debate_agent import AgentCreate, AgentTemplateCreate, AgentTemplateUpdate, AgentUpdate
+from app.schemas.debate_agent import AgentCreate, AgentUpdate
+from app.services.debate.template_service import DebateTemplateService  # 템플릿 기반 프롬프트 조립
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +31,36 @@ _TIER_THRESHOLDS: list[tuple[int, str]] = [
 
 
 def get_tier_from_elo(elo: int) -> str:
-    """ELO 기반 티어 계산."""
+    """ELO 점수 기반 티어 문자열을 반환한다.
+
+    Args:
+        elo: 에이전트 ELO 점수.
+
+    Returns:
+        'Iron' | 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond' | 'Master'
+    """
     for threshold, tier in _TIER_THRESHOLDS:
         if elo >= threshold:
             return tier
     return "Iron"
 
 
+def _build_like_pattern(search: str) -> str:
+    """SQL LIKE 패턴 생성 — 와일드카드 문자(%, _, \) 이스케이프 후 %로 감싸기.
+
+    Args:
+        search: 사용자 입력 검색어.
+
+    Returns:
+        SQL LIKE에 안전하게 사용할 수 있는 패턴 문자열.
+    """
+    escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 class DebateAgentService:
+    """에이전트 생명주기(CRUD), 랭킹, 갤러리, 클론, H2H 집계를 담당하는 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -126,8 +151,7 @@ class DebateAgentService:
 
         if data.name is not None and data.name != agent.name:
             # 이름 변경 쿨다운 제한
-            from app.core.config import settings as _s
-            cooldown = _s.agent_name_change_cooldown_days
+            cooldown = settings.agent_name_change_cooldown_days
             if agent.name_changed_at is not None:
                 days_since = (datetime.now(UTC) - agent.name_changed_at).days
                 if days_since < cooldown:
@@ -191,12 +215,28 @@ class DebateAgentService:
         return agent
 
     async def get_agent(self, agent_id: str) -> DebateAgent | None:
+        """에이전트 단건 조회.
+
+        Args:
+            agent_id: 조회할 에이전트 UUID 문자열.
+
+        Returns:
+            DebateAgent 객체. 존재하지 않으면 None.
+        """
         result = await self.db.execute(
             select(DebateAgent).where(DebateAgent.id == agent_id)
         )
         return result.scalar_one_or_none()
 
     async def get_my_agents(self, user: User) -> list[DebateAgent]:
+        """내 에이전트 목록을 생성 역순으로 반환.
+
+        Args:
+            user: 현재 인증된 사용자.
+
+        Returns:
+            소유한 DebateAgent 목록 (최신 생성순).
+        """
         result = await self.db.execute(
             select(DebateAgent)
             .where(DebateAgent.owner_id == user.id)
@@ -205,6 +245,14 @@ class DebateAgentService:
         return list(result.scalars().all())
 
     async def get_agent_versions(self, agent_id: str) -> list[DebateAgentVersion]:
+        """에이전트 버전 이력을 최신순으로 반환.
+
+        Args:
+            agent_id: 에이전트 UUID 문자열.
+
+        Returns:
+            DebateAgentVersion 목록 (버전 번호 내림차순).
+        """
         result = await self.db.execute(
             select(DebateAgentVersion)
             .where(DebateAgentVersion.agent_id == agent_id)
@@ -213,6 +261,14 @@ class DebateAgentService:
         return list(result.scalars().all())
 
     async def get_latest_version(self, agent_id: str) -> DebateAgentVersion | None:
+        """에이전트의 가장 최신 버전 조회 (인스턴스 메서드 래퍼).
+
+        Args:
+            agent_id: 에이전트 UUID 문자열.
+
+        Returns:
+            최신 DebateAgentVersion. 없으면 None.
+        """
         return await get_latest_version(self.db, agent_id)
 
     async def get_ranking(
@@ -242,8 +298,7 @@ class DebateAgentService:
             )
 
             if search:
-                escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                like = f"%{escaped}%"
+                like = _build_like_pattern(search)
                 base_query = base_query.where(
                     (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
                 )
@@ -370,8 +425,6 @@ class DebateAgentService:
 
     async def delete_agent(self, agent_id: str, user: User) -> None:
         """에이전트 삭제. 소유자만 삭제 가능. 진행 중인 매치가 있으면 삭제 불가."""
-        from app.models.debate_match import DebateMatch
-
         agent = await self.db.get(DebateAgent, agent_id)
         if agent is None:
             raise ValueError("Agent not found")
@@ -476,8 +529,6 @@ class DebateAgentService:
 
     async def get_head_to_head(self, agent_id: str, limit: int = 5) -> list[dict]:
         """상대별 전적 집계 (agent_a 또는 agent_b로 참가한 매치 모두 포함)."""
-        from app.models.debate_match import DebateMatch
-
         agent_uuid = uuid.UUID(agent_id)
 
         # agent_a 측: opponent = agent_b
@@ -670,7 +721,17 @@ class DebateAgentService:
 
 
 async def get_latest_version(db: AsyncSession, agent_id) -> DebateAgentVersion | None:
-    """에이전트의 최신 버전 조회 (standalone 함수 — admin API 등에서 사용)."""
+    """에이전트의 최신 버전을 조회한다 (모듈 수준 독립 함수).
+
+    admin API, auto_matcher 등 서비스 클래스 인스턴스 없이 호출이 필요한 곳에서 사용.
+
+    Args:
+        db: 비동기 DB 세션.
+        agent_id: 에이전트 UUID (str 또는 UUID 객체 모두 허용).
+
+    Returns:
+        가장 최신 DebateAgentVersion. 버전이 없으면 None.
+    """
     result = await db.execute(
         select(DebateAgentVersion)
         .where(DebateAgentVersion.agent_id == agent_id)
@@ -679,197 +740,3 @@ async def get_latest_version(db: AsyncSession, agent_id) -> DebateAgentVersion |
     )
     return result.scalar_one_or_none()
 
-
-# --- DebateTemplateService ---
-
-# 프롬프트 인젝션 의심 패턴 — free_text 입력에만 적용
-_INJECTION_PATTERNS = re.compile(
-    r"(<\|im_end\|>|<\|endoftext\|>|</s>|\[INST\]|\[/INST\]"
-    r"|###\s*(Human|Assistant|System)"
-    r"|IGNORE\s+ALL\s+PREVIOUS\s+INSTRUCTIONS"
-    r"|<!--.*?-->)",
-    re.IGNORECASE | re.DOTALL,
-)
-
-
-class DebateTemplateService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
-    # ------------------------------------------------------------------
-    # 조회
-    # ------------------------------------------------------------------
-
-    async def list_active_templates(self) -> list[DebateAgentTemplate]:
-        """활성 템플릿 목록 (sort_order 오름차순)."""
-        result = await self.db.execute(
-            select(DebateAgentTemplate)
-            .where(DebateAgentTemplate.is_active == True)  # noqa: E712
-            .order_by(DebateAgentTemplate.sort_order)
-        )
-        return list(result.scalars().all())
-
-    async def list_all_templates(self) -> list[DebateAgentTemplate]:
-        """전체 템플릿 목록 (관리자용, 비활성 포함)."""
-        result = await self.db.execute(
-            select(DebateAgentTemplate).order_by(DebateAgentTemplate.sort_order)
-        )
-        return list(result.scalars().all())
-
-    async def get_template(self, template_id: str | uuid.UUID) -> DebateAgentTemplate | None:
-        result = await self.db.execute(
-            select(DebateAgentTemplate).where(DebateAgentTemplate.id == template_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_template_by_slug(self, slug: str) -> DebateAgentTemplate | None:
-        result = await self.db.execute(
-            select(DebateAgentTemplate).where(DebateAgentTemplate.slug == slug)
-        )
-        return result.scalar_one_or_none()
-
-    # ------------------------------------------------------------------
-    # 커스터마이징 검증 + 프롬프트 조립
-    # ------------------------------------------------------------------
-
-    def validate_customizations(
-        self,
-        template: DebateAgentTemplate,
-        customizations: dict | None,
-        enable_free_text: bool = False,
-    ) -> dict:
-        """커스터마이징 값을 검증하고 누락 키는 기본값으로 채운다.
-
-        Args:
-            template: 검증 기준 템플릿
-            customizations: 사용자 입력 (None이면 기본값만 반환)
-            enable_free_text: True여야 free_text 필드를 포함
-
-        Returns:
-            검증 완료된 flat dict
-
-        Raises:
-            ValueError: 유효하지 않은 값 (범위 초과, 허용되지 않은 옵션 등)
-        """
-        schema = template.customization_schema
-        defaults = template.default_values
-        result: dict = dict(defaults)  # 기본값으로 초기화
-
-        if customizations:
-            result.update(customizations)
-
-        # 슬라이더 범위 검증
-        for slider in schema.get("sliders", []):
-            key = slider["key"]
-            val = result.get(key, slider["default"])
-            try:
-                val = int(val)
-            except (TypeError, ValueError) as err:
-                raise ValueError(f"슬라이더 '{key}' 값은 정수여야 합니다.") from err
-            if not (slider["min"] <= val <= slider["max"]):
-                raise ValueError(
-                    f"슬라이더 '{key}' 값 {val}은 {slider['min']}~{slider['max']} 범위여야 합니다."
-                )
-            result[key] = val
-
-        # 셀렉트 옵션 검증
-        for sel in schema.get("selects", []):
-            key = sel["key"]
-            val = result.get(key, sel["default"])
-            valid_values = [opt["value"] for opt in sel["options"]]
-            if val not in valid_values:
-                raise ValueError(
-                    f"'{key}' 값 '{val}'은 허용된 옵션({valid_values})이 아닙니다."
-                )
-            result[key] = val
-
-        # free_text 처리
-        ft = schema.get("free_text")
-        if ft:
-            ft_key = ft["key"]
-            ft_val = result.get(ft_key)
-            if not enable_free_text:
-                # 체크박스 비활성 시 제거
-                result.pop(ft_key, None)
-            elif ft_val is not None:
-                ft_val = str(ft_val)
-                max_len = ft.get("max_length", 500)
-                if len(ft_val) > max_len:
-                    raise ValueError(
-                        f"추가 지시사항은 {max_len}자를 초과할 수 없습니다."
-                    )
-                # 프롬프트 인젝션 패턴 스캔
-                if _INJECTION_PATTERNS.search(ft_val):
-                    raise ValueError("추가 지시사항에 허용되지 않는 패턴이 포함되어 있습니다.")
-                result[ft_key] = ft_val
-
-        return result
-
-    def assemble_prompt(
-        self, template: DebateAgentTemplate, customizations: dict
-    ) -> str:
-        """검증된 customizations로 {customization_block}을 치환하여 최종 프롬프트 반환."""
-        schema = template.customization_schema
-        lines: list[str] = ["[커스터마이징 설정]"]
-
-        # 슬라이더 → 텍스트 표현
-        slider_labels = {s["key"]: s["label"] for s in schema.get("sliders", [])}
-        for key, label in slider_labels.items():
-            val = customizations.get(key)
-            if val is not None:
-                lines.append(f"- {label}: {val}/5")
-
-        # 셀렉트 → 텍스트 표현
-        for sel in schema.get("selects", []):
-            key = sel["key"]
-            val = customizations.get(key)
-            if val is not None:
-                label_map = {opt["value"]: opt["label"] for opt in sel["options"]}
-                lines.append(f"- {sel['label']}: {label_map.get(val, val)}")
-
-        # free_text
-        ft = schema.get("free_text")
-        if ft:
-            ft_val = customizations.get(ft["key"])
-            if ft_val:
-                lines.append(f"- {ft['label']}: {ft_val}")
-
-        customization_block = "\n".join(lines)
-        return template.base_system_prompt.replace("{customization_block}", customization_block)
-
-    # ------------------------------------------------------------------
-    # 관리자 CRUD
-    # ------------------------------------------------------------------
-
-    async def create_template(self, data: AgentTemplateCreate) -> DebateAgentTemplate:
-        """템플릿 생성 (superadmin)."""
-        tmpl = DebateAgentTemplate(
-            slug=data.slug,
-            display_name=data.display_name,
-            description=data.description,
-            icon=data.icon,
-            base_system_prompt=data.base_system_prompt,
-            customization_schema=data.customization_schema,
-            default_values=data.default_values,
-            sort_order=data.sort_order,
-            is_active=data.is_active,
-        )
-        self.db.add(tmpl)
-        await self.db.commit()
-        await self.db.refresh(tmpl)
-        return tmpl
-
-    async def update_template(
-        self, template_id: str | uuid.UUID, data: AgentTemplateUpdate
-    ) -> DebateAgentTemplate:
-        """템플릿 수정 (superadmin)."""
-        tmpl = await self.get_template(template_id)
-        if tmpl is None:
-            raise ValueError("Template not found")
-
-        for field, value in data.model_dump(exclude_none=True).items():
-            setattr(tmpl, field, value)
-
-        await self.db.commit()
-        await self.db.refresh(tmpl)
-        return tmpl

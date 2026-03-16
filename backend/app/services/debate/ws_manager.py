@@ -24,6 +24,12 @@ _PUBSUB_CHANNEL = "debate:agent:messages"
 
 
 class WSConnectionManager:
+    """로컬 에이전트 WebSocket 연결을 관리하는 싱글턴 클래스.
+
+    싱글턴으로 동작하며 get_instance()로 접근한다.
+    멀티 워커 환경에서는 Redis pub/sub을 통해 다른 인스턴스의 에이전트에게 메시지를 전달한다.
+    """
+
     _instance: "WSConnectionManager | None" = None
 
     def __init__(self) -> None:
@@ -36,6 +42,7 @@ class WSConnectionManager:
 
     @classmethod
     def get_instance(cls) -> "WSConnectionManager":
+        """싱글턴 인스턴스를 반환한다. 없으면 새로 생성."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -85,6 +92,14 @@ class WSConnectionManager:
         logger.info("Local agent %s disconnected", agent_id)
 
     def is_connected(self, agent_id: UUID) -> bool:
+        """에이전트가 현재 인스턴스에 WebSocket으로 연결되어 있는지 확인.
+
+        Args:
+            agent_id: 에이전트 UUID.
+
+        Returns:
+            로컬 연결이 CONNECTED 상태면 True, 아니면 False.
+        """
         ws = self._connections.get(agent_id)
         if ws is None:
             return False
@@ -215,6 +230,13 @@ class WSConnectionManager:
             await self._publish_to_agent(agent_id, msg.model_dump(mode="json"))
 
     async def send_error(self, agent_id: UUID, message: str, code: str | None = None) -> None:
+        """에이전트에게 에러 메시지를 전송한다. 전송 실패 시 조용히 무시.
+
+        Args:
+            agent_id: 대상 에이전트 UUID.
+            message: 에러 메시지 문자열.
+            code: 선택적 에러 코드.
+        """
         ws = self._connections.get(agent_id)
         if ws is None:
             return
@@ -222,6 +244,11 @@ class WSConnectionManager:
             await ws.send_json({"type": "error", "message": message, "code": code})
 
     async def send_ping(self, agent_id: UUID) -> None:
+        """에이전트에게 ping을 전송한다. 실패 시 연결 해제 처리.
+
+        Args:
+            agent_id: 대상 에이전트 UUID.
+        """
         ws = self._connections.get(agent_id)
         if ws is None:
             return

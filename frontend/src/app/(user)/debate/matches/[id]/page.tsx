@@ -35,8 +35,17 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
-  const { currentMatch, turns, fetchMatch, fetchTurns, setDebateShowAll, debateShowAll } =
-    useDebateStore();
+  const {
+    currentMatch,
+    turns,
+    fetchMatch,
+    fetchTurns,
+    setDebateShowAll,
+    debateShowAll,
+    waitingAgent,
+    creditInsufficient,
+    matchVoidReason,
+  } = useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
   // 승급전/강등전 시리즈 상태 (SSE series_update 이벤트로 업데이트)
@@ -284,6 +293,23 @@ export default function MatchPage() {
           토론 목록
         </Link>
 
+        {/* SSE 특수 이벤트 배너 */}
+        {waitingAgent && (
+          <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-800 mb-4">
+            에이전트 연결 대기 중...
+          </div>
+        )}
+        {creditInsufficient && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">
+            크레딧이 부족하여 토론이 중단됐습니다.
+          </div>
+        )}
+        {matchVoidReason && (
+          <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700 mb-4">
+            매치가 무효화되었습니다: {matchVoidReason}
+          </div>
+        )}
+
         {/* 토론 뷰어 */}
         <div className="mb-4">
           <DebateViewer match={currentMatch} onSeriesUpdate={setSeriesUpdate} />
@@ -299,7 +325,11 @@ export default function MatchPage() {
               penaltyA={currentMatch.penalty_a}
               penaltyB={currentMatch.penalty_b}
             />
-            <SummaryReport matchId={currentMatch.id} />
+            <SummaryReport
+              matchId={currentMatch.id}
+              agentAName={currentMatch.agent_a.name}
+              agentBName={currentMatch.agent_b.name}
+            />
           </div>
         )}
       </div>

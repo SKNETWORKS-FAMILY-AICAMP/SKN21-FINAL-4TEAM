@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useUserStore } from './userStore';
 
+const BASE_USER = {
+  email: null as string | null,
+  createdAt: '2026-01-01T00:00:00Z',
+};
+
 describe('useUserStore', () => {
   beforeEach(() => {
     useUserStore.setState({ user: null, token: null });
@@ -14,6 +19,7 @@ describe('useUserStore', () => {
 
   it('should set user', () => {
     const user = {
+      ...BASE_USER,
       id: '123',
       login_id: 'testuser',
       nickname: 'testuser',
@@ -39,6 +45,7 @@ describe('useUserStore', () => {
 
   it('should return false for isAdultVerified when adultVerifiedAt is null', () => {
     useUserStore.getState().setUser({
+      ...BASE_USER,
       id: '1',
       login_id: 'test',
       nickname: 'test',
@@ -54,6 +61,7 @@ describe('useUserStore', () => {
 
   it('should return true for isAdultVerified when adultVerifiedAt is set', () => {
     useUserStore.getState().setUser({
+      ...BASE_USER,
       id: '1',
       login_id: 'test',
       nickname: 'test',
@@ -73,6 +81,7 @@ describe('useUserStore', () => {
 
   it('should return false for isAdmin when role is user', () => {
     useUserStore.getState().setUser({
+      ...BASE_USER,
       id: '1',
       login_id: 'test',
       nickname: 'test',
@@ -88,6 +97,7 @@ describe('useUserStore', () => {
 
   it('should return true for isAdmin when role is admin', () => {
     useUserStore.getState().setUser({
+      ...BASE_USER,
       id: '1',
       login_id: 'admin',
       nickname: 'admin',
@@ -103,6 +113,7 @@ describe('useUserStore', () => {
 
   it('should clear user and token on logout', async () => {
     useUserStore.getState().setUser({
+      ...BASE_USER,
       id: '1',
       login_id: 'test',
       nickname: 'test',

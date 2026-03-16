@@ -9,6 +9,22 @@ from app.core.database import Base
 
 
 class UserNotification(Base):
+    """사용자 알림 ORM 모델.
+
+    매치 이벤트·예측 결과·신규 팔로워 등 플랫폼 알림을 저장한다.
+    미읽기 알림 목록 조회 성능을 위해 복합 인덱스를 사용한다.
+
+    Attributes:
+        id: 알림 고유 UUID.
+        user_id: 알림 수신 사용자 UUID (users FK, CASCADE).
+        type: 알림 유형 문자열 (예: match_completed, prediction_result, new_follower).
+        title: 알림 제목 (최대 200자).
+        body: 알림 본문 텍스트 (선택, 최대 500자).
+        link: 관련 페이지 URL (선택, 최대 300자).
+        is_read: 읽음 여부 (기본 False).
+        created_at: 알림 생성 시각.
+    """
+
     __tablename__ = "user_notifications"
 
     id: Mapped[uuid.UUID] = mapped_column(

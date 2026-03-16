@@ -1,3 +1,5 @@
+"""토픽 CRUD, 스케줄 상태 자동 갱신, Redis 캐싱 서비스."""
+
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -5,8 +7,8 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_password_hash
-from app.core.redis import get_redis
+from app.core.auth import get_password_hash  # 비밀번호 보호 토픽 해시 생성
+from app.core.redis import get_redis  # 스케줄 동기화 분산 락
 from app.models.debate_match import DebateMatch, DebateMatchQueue
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
@@ -19,6 +21,8 @@ _TOPIC_SYNC_INTERVAL_SECS = 60
 
 
 class DebateTopicService:
+    """토론 주제(토픽) 생성·조회·수정·삭제 및 스케줄 상태 자동 갱신 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -75,6 +79,14 @@ class DebateTopicService:
         return topic
 
     async def get_topic(self, topic_id: str) -> DebateTopic | None:
+        """토픽 단건 조회.
+
+        Args:
+            topic_id: 토픽 UUID 문자열.
+
+        Returns:
+            DebateTopic 객체. 존재하지 않으면 None.
+        """
         result = await self.db.execute(
             select(DebateTopic).where(DebateTopic.id == topic_id)
         )
@@ -183,6 +195,18 @@ class DebateTopicService:
         return items, total
 
     async def update_topic(self, topic_id: str, data: TopicUpdate) -> DebateTopic:
+        """관리자 전용 토픽 수정. 미존재 시 ValueError.
+
+        Args:
+            topic_id: 수정할 토픽 UUID 문자열.
+            data: 수정할 필드만 포함하는 TopicUpdate 스키마.
+
+        Returns:
+            수정된 DebateTopic 객체.
+
+        Raises:
+            ValueError: 토픽이 존재하지 않는 경우.
+        """
         result = await self.db.execute(
             select(DebateTopic).where(DebateTopic.id == topic_id)
         )
@@ -306,12 +330,28 @@ class DebateTopicService:
         await self.db.commit()
 
     async def count_queue(self, topic_id) -> int:
+        """토픽의 현재 대기 큐 항목 수를 반환.
+
+        Args:
+            topic_id: 토픽 UUID (str 또는 UUID 모두 허용).
+
+        Returns:
+            현재 대기 중인 에이전트 수.
+        """
         result = await self.db.execute(
             select(func.count(DebateMatchQueue.id)).where(DebateMatchQueue.topic_id == topic_id)
         )
         return result.scalar() or 0
 
     async def count_matches(self, topic_id) -> int:
+        """토픽의 정식 매치 수 반환 (테스트 매치 제외).
+
+        Args:
+            topic_id: 토픽 UUID (str 또는 UUID 모두 허용).
+
+        Returns:
+            해당 토픽에서 진행된 정식 매치 수.
+        """
         result = await self.db.execute(
             select(func.count(DebateMatch.id)).where(
                 DebateMatch.topic_id == topic_id,

@@ -1,7 +1,43 @@
+"""애플리케이션 설정 모듈.
+
+환경 변수와 .env 파일을 통해 모든 설정값을 관리한다.
+BaseSettings를 상속하므로 환경 변수가 .env 파일보다 우선 적용된다.
+"""
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    """전체 애플리케이션 설정.
+
+    pydantic-settings BaseSettings를 통해 .env 파일과 환경 변수에서
+    설정값을 자동으로 로드한다. 환경 변수가 .env 파일보다 우선 적용된다.
+
+    Attributes:
+        app_env: 실행 환경 식별자 (development | production).
+        debug: FastAPI 디버그 모드 활성화 여부.
+        database_url: 비동기 ORM용 asyncpg 데이터베이스 URL.
+        database_sync_url: Alembic 마이그레이션용 동기 psycopg URL.
+        redis_url: Redis 연결 URL.
+        secret_key: JWT 서명 키. 프로덕션에서는 반드시 강한 랜덤값으로 설정.
+        access_token_expire_minutes: 액세스 토큰 만료 시간 (기본 7일).
+        encryption_key: API 키 암호화용 Fernet 키. 미설정 시 secret_key에서 파생.
+        cors_origins: CORS 허용 출처 목록.
+        runpod_api_key: RunPod Serverless API 키.
+        runpod_endpoint_id: RunPod 기본 엔드포인트 ID.
+        openai_api_key: OpenAI 플랫폼 API 키.
+        anthropic_api_key: Anthropic 플랫폼 API 키.
+        google_api_key: Google AI 플랫폼 API 키.
+        langfuse_public_key: Langfuse LLM 추적 퍼블릭 키.
+        langfuse_secret_key: Langfuse LLM 추적 시크릿 키.
+        langfuse_host: Langfuse 서버 주소.
+        sentry_dsn: Sentry 에러 수집 DSN. 빈 문자열이면 비활성.
+        credit_system_enabled: 크레딧 차감 기능 전체 ON/OFF.
+        upload_dir: 업로드 파일 저장 디렉토리.
+        max_upload_size: 단일 파일 최대 크기 (바이트).
+        allowed_image_types: 허용 이미지 MIME 타입 목록.
+        debate_enabled: 토론 기능 전체 ON/OFF.
+    """
     app_env: str = "development"        # 실행 환경 (development | production)
     debug: bool = True                  # FastAPI 디버그 모드
 
@@ -60,9 +96,12 @@ class Settings(BaseSettings):
     debate_turn_timeout_seconds: int = 60           # 에이전트 발언 생성 최대 대기 시간
     debate_turn_delay_seconds: float = 1.5          # 턴 간 인위적 딜레이 — 관전 UX 개선용
     debate_queue_timeout_seconds: int = 120         # 매칭 큐 최대 대기 시간
-    debate_pending_timeout_seconds: int = 600       # pending/waiting_agent 상태 자동 error 처리
+    debate_pending_timeout_seconds: int = 600        # pending/waiting_agent 상태 자동 error 처리
+    debate_inprogress_timeout_seconds: int = 3600   # in_progress 상태 자동 error 처리 (최대 1시간)
     debate_auto_match_check_interval: int = 10      # 자동 매칭 루프 실행 주기 (초)
-    debate_agent_connect_timeout: int = 30          # 로컬 에이전트 WebSocket 접속 대기
+    debate_agent_connect_timeout: int = 30          # 로컬 에이전트 WebSocket 접속 대기 (회당)
+    debate_agent_connect_timeout_tool: int = 120    # 툴 사용 모드 에이전트 접속 대기 (회당, 외부 데이터 페치 시간 고려)
+    debate_agent_connect_retries: int = 3           # 로컬 에이전트 접속 재시도 횟수
     debate_ws_heartbeat_interval: int = 15          # WebSocket 핑 전송 간격 (초)
 
     # 제한
@@ -89,6 +128,7 @@ class Settings(BaseSettings):
     debate_draw_threshold: int = 1                  # 승패 판정 최소 점수차 (미만이면 무승부)
     debate_review_max_tokens: int = 2000            # 턴 검토 LLM max_tokens (gpt-5-nano reasoning 포함)
     debate_judge_max_tokens: int = 1024             # 최종 판정 LLM max_tokens
+    debate_judge_temperature: float = 0.2           # 최종 판정 LLM temperature
     debate_prediction_cutoff_turns: int = 2         # 예측투표 가능 최대 턴 수 (초과 시 마감)
     debate_ready_countdown_seconds: int = 10        # 첫 준비 완료 후 자동매치 카운트다운 (초)
 

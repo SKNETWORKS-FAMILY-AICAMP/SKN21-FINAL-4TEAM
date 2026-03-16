@@ -1,9 +1,10 @@
 /** 사용자 사이드바. 모바일에서는 드로어, 데스크톱에서는 고정 사이드바. */
 'use client';
 
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
 import {
   Swords,
   MessageSquare,
@@ -24,7 +25,6 @@ import { useUIStore } from '@/stores/uiStore';
 type MenuItem = { href: string; label: string; icon: typeof Swords };
 
 const PLATFORM_ITEMS: MenuItem[] = [
-  { href: '/', label: 'Home', icon: Swords },
   { href: '/debate', label: 'Debate', icon: MessageSquare },
   { href: '/debate/ranking', label: 'Ranking', icon: Trophy },
   { href: '/debate/gallery', label: 'Gallery', icon: LayoutGrid },
@@ -35,15 +35,39 @@ const MY_ITEMS: MenuItem[] = [
   { href: '/mypage', label: '마이페이지', icon: UserCircle },
 ];
 
+type TopicCountResponse = { items: unknown[]; total: number };
+
 export const UserSidebar = memo(function UserSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, isAdmin } = useUserStore();
   const { sidebarOpen, closeSidebar, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
 
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const [scheduledCount, setScheduledCount] = useState<number | null>(null);
+
   useEffect(() => {
     closeSidebar();
   }, [pathname, closeSidebar]);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const [liveData, scheduledData] = await Promise.all([
+          api.get<TopicCountResponse>('/topics?status=in_progress&page=1&page_size=1'),
+          api.get<TopicCountResponse>('/topics?status=scheduled&page=1&page_size=1'),
+        ]);
+        setLiveCount(liveData.total);
+        setScheduledCount(scheduledData.total);
+      } catch {
+        // 통계 로드 실패는 조용히 무시
+      }
+    }
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -95,7 +119,7 @@ export const UserSidebar = memo(function UserSidebar() {
           >
             <Menu size={20} strokeWidth={2.5} />
           </button>
-          
+
           <button
             onClick={closeSidebar}
             className="p-1 rounded-lg bg-transparent border-none text-text-muted hover:text-text cursor-pointer md:hidden"
@@ -180,21 +204,18 @@ export const UserSidebar = memo(function UserSidebar() {
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                     실시간 토론
                   </span>
-                  <span className="text-sm font-black text-black">3</span>
-                </div>
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
-                    <Users size={10} className="text-gray-400" />
-                    오늘의 참여자
+                  <span className="text-sm font-black text-black">
+                    {liveCount === null ? '...' : liveCount.toLocaleString()}
                   </span>
-                  <span className="text-sm font-black text-black">1,435</span>
                 </div>
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
                     <List size={10} className="text-gray-400" />
                     진행 예정
                   </span>
-                  <span className="text-sm font-black text-black">2</span>
+                  <span className="text-sm font-black text-black">
+                    {scheduledCount === null ? '...' : scheduledCount.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>

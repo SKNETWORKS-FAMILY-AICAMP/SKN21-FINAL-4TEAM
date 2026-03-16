@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate.orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, calculate_elo
+from app.services.debate.judge import DebateJudge
+from app.services.debate.orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, ReviewResult, calculate_elo
 
 
 class TestEloCalculation:
@@ -124,7 +125,7 @@ def _elo_delta(ra, rb, result, diff=0):
 
 
 class TestJudge:
-    """DebateOrchestrator.judge() — LLM 판정·스코어 계산·폴백 로직."""
+    """DebateJudge.judge() — LLM 판정·스코어 계산·폴백 로직."""
 
     def _make_match(self, penalty_a: int = 0, penalty_b: int = 0,
                     agent_a_id: str = "aaa", agent_b_id: str = "bbb") -> MagicMock:
@@ -155,12 +156,12 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_a_wins_when_diff_gte_5(self):
         """A 점수가 B보다 5 이상 높으면 A가 승자."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84, B=63 → diff=21 ≥ 5
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "aaa"
         assert result["score_a"] == 84
@@ -169,15 +170,15 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_b_wins_when_b_score_higher(self):
         """B 점수가 A보다 5 이상 높으면 B가 승자."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=49, B=84 → B wins
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=15, a_evidence=12, a_rebuttal=12, a_relevance=10,
                 b_logic=25, b_evidence=20, b_rebuttal=22, b_relevance=17,
             )}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "bbb"
         assert result["score_b"] > result["score_a"]
@@ -185,15 +186,15 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_draw_when_scores_equal(self):
         """점수가 동일하면 무승부 (winner_id=None)."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=80, B=80 → diff=0 < 1 → draw
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=20, a_evidence=20, a_rebuttal=20, a_relevance=20,
                 b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=20,
             )}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] is None
         assert result["score_a"] == result["score_b"]
@@ -201,15 +202,15 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_exact_5_diff_is_not_draw(self):
         """점수차가 정확히 5이면 무승부가 아닌 승/패로 처리된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84, B=79 → diff=5 → A wins (not draw)
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
                 a_logic=25, a_evidence=20, a_rebuttal=22, a_relevance=17,
                 b_logic=22, b_evidence=19, b_rebuttal=21, b_relevance=17,
             )}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["score_a"] - result["score_b"] == 5
         assert result["winner_id"] == "aaa"
@@ -217,11 +218,11 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_fallback_on_invalid_json(self):
         """LLM이 잘못된 JSON을 반환하면 균등 점수 폴백으로 무승부 처리."""
-        orch = DebateOrchestrator()
-        orch.client.generate_byok = AsyncMock(
+        judge = DebateJudge()
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": "이것은 JSON이 아닙니다"}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] is None
         assert result["score_a"] == result["score_b"]
@@ -230,23 +231,23 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_fallback_on_missing_scorecard_keys(self):
         """scorecard 내 agent_a/agent_b 키가 없으면 폴백 처리."""
-        orch = DebateOrchestrator()
-        orch.client.generate_byok = AsyncMock(
+        judge = DebateJudge()
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": '{"invalid": "structure"}'}
         )
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] is None
 
     @pytest.mark.asyncio
     async def test_judge_penalty_reduces_final_score(self):
         """벌점이 기본 점수에서 차감되어 최종 점수에 반영된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84 - penalty_a(10) = 74, B=63 → diff=11 ≥ 5 → A wins
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(penalty_a=10), [], self._make_topic())
+        result = await judge.judge(self._make_match(penalty_a=10), [], self._make_topic())
 
         assert result["score_a"] == 74
         assert result["penalty_a"] == 10
@@ -255,12 +256,12 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_penalty_flips_winner(self):
         """벌점이 충분히 크면 원래 승자가 패자로 뒤집힐 수 있다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84, B=63, penalty_a=30 → final_a=54, final_b=63 → diff=9 ≥ 5 → B wins
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(penalty_a=30), [], self._make_topic())
+        result = await judge.judge(self._make_match(penalty_a=30), [], self._make_topic())
 
         assert result["score_a"] == 54
         assert result["winner_id"] == "bbb"
@@ -268,12 +269,12 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_penalty_small_diff_still_wins(self):
         """벌점 후 점수차가 1이어도 승/패로 처리된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84, B=63, penalty_a=20 → final_a=64, final_b=63 → diff=1 ≥ 1 → A wins
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(penalty_a=20), [], self._make_topic())
+        result = await judge.judge(self._make_match(penalty_a=20), [], self._make_topic())
 
         assert result["score_a"] == 64
         assert result["winner_id"] == "aaa"
@@ -281,12 +282,12 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_score_capped_at_zero_with_large_penalty(self):
         """벌점이 점수를 초과하면 최종 점수는 0으로 제한된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         # A=84, penalty_a=100 → max(0, -16) = 0, B=63 → B wins
-        orch.client.generate_byok = AsyncMock(
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(penalty_a=100), [], self._make_topic())
+        result = await judge.judge(self._make_match(penalty_a=100), [], self._make_topic())
 
         assert result["score_a"] == 0
         assert result["winner_id"] == "bbb"
@@ -294,12 +295,12 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_handles_markdown_wrapped_json(self):
         """LLM이 마크다운 코드블록으로 감싼 JSON을 반환해도 정상 파싱된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         raw = self._scorecard()
         wrapped = f"```json\n{raw}\n```"
-        orch.client.generate_byok = AsyncMock(return_value={"content": wrapped})
+        judge.client.generate_byok = AsyncMock(return_value={"content": wrapped})
 
-        result = await orch.judge(self._make_match(), [], self._make_topic())
+        result = await judge.judge(self._make_match(), [], self._make_topic())
 
         assert result["winner_id"] == "aaa"
         assert result["score_a"] == 84
@@ -307,11 +308,11 @@ class TestJudge:
     @pytest.mark.asyncio
     async def test_judge_returns_penalty_info(self):
         """결과에 penalty_a·penalty_b 정보가 포함된다."""
-        orch = DebateOrchestrator()
-        orch.client.generate_byok = AsyncMock(
+        judge = DebateJudge()
+        judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard()}
         )
-        result = await orch.judge(self._make_match(penalty_a=5, penalty_b=3), [], self._make_topic())
+        result = await judge.judge(self._make_match(penalty_a=5, penalty_b=3), [], self._make_topic())
 
         assert result["penalty_a"] == 5
         assert result["penalty_b"] == 3
@@ -452,7 +453,7 @@ class TestReviewTurn:
         orch = self._make_orch()
         violations = [
             {"type": "prompt_injection", "severity": "severe", "detail": "인젝션 시도"},
-            {"type": "false_claim", "severity": "minor", "detail": "허위 주장"},
+            {"type": "repetition", "severity": "minor", "detail": "의미적 반복 주장"},
         ]
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(
@@ -470,9 +471,9 @@ class TestReviewTurn:
         )
 
         assert result["penalties"]["prompt_injection"] == LLM_VIOLATION_PENALTIES["prompt_injection"]
-        assert result["penalties"]["false_claim"] == LLM_VIOLATION_PENALTIES["false_claim"]
+        assert result["penalties"]["repetition"] == LLM_VIOLATION_PENALTIES["repetition"]
         expected_total = (
-            LLM_VIOLATION_PENALTIES["prompt_injection"] + LLM_VIOLATION_PENALTIES["false_claim"]
+            LLM_VIOLATION_PENALTIES["prompt_injection"] + LLM_VIOLATION_PENALTIES["repetition"]
         )
         assert result["penalty_total"] == expected_total
         assert result["block"] is True
@@ -539,7 +540,7 @@ class TestOrchestratorUnification:
 
         async def mock_call_review(model_id, api_key, messages):
             called_with_model.append(model_id)
-            return {"logic_score": 7, "violations": [], "severity": "none", "feedback": "ok", "block": False}, 10, 10
+            return ReviewResult(logic_score=7, violations=[], feedback="ok", block=False), 10, 10
 
         monkeypatch.setattr(orch, "_call_review_llm", mock_call_review)
         await orch.review_turn(topic="test", speaker="agent_a", turn_number=1, claim="test claim", evidence=None, action="argue")
@@ -559,7 +560,7 @@ class TestOrchestratorUnification:
 
         async def mock_call_review(model_id, api_key, messages):
             called_with_model.append(model_id)
-            return {"logic_score": 7, "violations": [], "severity": "none", "feedback": "ok", "block": False}, 10, 10
+            return ReviewResult(logic_score=7, violations=[], feedback="ok", block=False), 10, 10
 
         monkeypatch.setattr(orch, "_call_review_llm", mock_call_review)
         await orch.review_turn(topic="test", speaker="agent_a", turn_number=1, claim="test claim", evidence=None, action="argue")
@@ -573,7 +574,7 @@ class TestOrchestratorUnification:
 
 
 class TestFormatDebateLog:
-    """_format_debate_log 벌점 요약 섹션 검증."""
+    """DebateJudge._format_debate_log 벌점 요약 섹션 검증."""
 
     def _make_turn(
         self,
@@ -596,7 +597,7 @@ class TestFormatDebateLog:
 
     def test_no_violations_shows_no_violations(self):
         """위반 없는 경우 벌점 요약에 '위반 없음'이 표시된다."""
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         topic = MagicMock()
         topic.title = "AI 발전"
         topic.description = "테스트 주제"
@@ -605,7 +606,7 @@ class TestFormatDebateLog:
             self._make_turn(1, "agent_a", "AI는 발전해야 한다"),
             self._make_turn(2, "agent_b", "AI 발전은 위험하다"),
         ]
-        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+        log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
 
         assert "[벌점 요약]" in log
         assert "에이전트A: 위반 없음" in log
@@ -617,7 +618,7 @@ class TestFormatDebateLog:
         schema_violation은 US-004에서 PENALTY_KO_LABELS에서 제거됐으므로
         영문 키 이름 그대로 출력된다.
         """
-        orch = DebateOrchestrator()
+        judge = DebateJudge()
         topic = MagicMock()
         topic.title = "AI 발전"
         topic.description = "테스트 주제"
@@ -629,7 +630,7 @@ class TestFormatDebateLog:
             self._make_turn(4, "agent_b", "주장B2"),
             self._make_turn(5, "agent_a", "주장A3", {"schema_violation": 5}, 5),
         ]
-        log = orch._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+        log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
 
         assert "[벌점 요약]" in log
         assert "에이전트A" in log

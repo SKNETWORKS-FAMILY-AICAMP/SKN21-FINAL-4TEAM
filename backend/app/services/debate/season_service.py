@@ -17,12 +17,25 @@ logger = logging.getLogger(__name__)
 
 
 class DebateSeasonService:
+    """시즌 생성·종료, 에이전트별 시즌 ELO/전적 집계, 보상 지급 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def create_season(
         self, season_number: int, title: str, start_at: datetime, end_at: datetime
     ) -> DebateSeason:
+        """새 시즌을 생성한다 (status='upcoming').
+
+        Args:
+            season_number: 시즌 번호 (1부터 증가).
+            title: 시즌 제목.
+            start_at: 시작 일시.
+            end_at: 종료 일시.
+
+        Returns:
+            생성된 DebateSeason 객체.
+        """
         season = DebateSeason(
             season_number=season_number,
             title=title,
@@ -46,6 +59,11 @@ class DebateSeasonService:
         return res.scalar_one_or_none()
 
     async def get_current_season(self) -> DebateSeason | None:
+        """현재 시즌을 반환한다. active 우선, 없으면 가장 최신 upcoming.
+
+        Returns:
+            현재 시즌 DebateSeason. 없으면 None.
+        """
         # active 우선, 없으면 가장 최신 upcoming — 단일 쿼리로 통합
         res = await self.db.execute(
             select(DebateSeason)
@@ -112,6 +130,15 @@ class DebateSeasonService:
             stats.draws += 1
 
     async def get_season_results(self, season_id: str) -> list[dict]:
+        """시즌 최종 결과(순위·ELO·보상)를 반환한다.
+
+        Args:
+            season_id: 시즌 UUID 문자열.
+
+        Returns:
+            rank, agent_id, agent_name, final_elo, final_tier, wins, losses, draws,
+            reward_credits 키를 포함한 dict 목록 (순위 오름차순).
+        """
         res = await self.db.execute(
             select(DebateSeasonResult, DebateAgent)
             .join(DebateAgent, DebateSeasonResult.agent_id == DebateAgent.id)

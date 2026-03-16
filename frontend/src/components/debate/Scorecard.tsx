@@ -22,10 +22,9 @@ type Props = {
 };
 
 const REASONING_LABELS: { key: string; label: string; emoji: string }[] = [
-  { key: 'logic', label: '논리성', emoji: '🧠' },
-  { key: 'evidence', label: '근거 활용', emoji: '📚' },
+  { key: 'argumentation', label: '주장·논거', emoji: '🧠' },
   { key: 'rebuttal', label: '반박력', emoji: '⚔️' },
-  { key: 'relevance', label: '주제 적합성', emoji: '🎯' },
+  { key: 'strategy', label: '전략·흐름', emoji: '♟️' },
 ];
 
 function parseReasoning(text: string): { key: string; label: string; emoji: string; body: string }[] {
@@ -74,10 +73,9 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
 }
 
 const CRITERIA: { key: string; label: string; max: number; emoji: string }[] = [
-  { key: 'logic', label: '논리성', max: 30, emoji: '🧠' },
-  { key: 'evidence', label: '근거 활용', max: 25, emoji: '📚' },
-  { key: 'rebuttal', label: '반박력', max: 25, emoji: '⚔️' },
-  { key: 'relevance', label: '주제 적합성', max: 20, emoji: '🎯' },
+  { key: 'argumentation', label: '주장·논거', max: 40, emoji: '🧠' },
+  { key: 'rebuttal', label: '반박력', max: 35, emoji: '⚔️' },
+  { key: 'strategy', label: '전략·흐름', max: 25, emoji: '♟️' },
 ];
 
 export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props) {
@@ -98,7 +96,7 @@ export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props
         <div className="h-4 bg-border rounded w-1/3 mb-4" />
         <div className="h-20 bg-border rounded mb-3" />
         <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3].map((i) => (
             <div key={i} className="h-10 bg-border rounded" />
           ))}
         </div>

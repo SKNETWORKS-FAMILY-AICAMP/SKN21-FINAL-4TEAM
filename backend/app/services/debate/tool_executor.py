@@ -42,7 +42,16 @@ _CLAIM_PREVIEW_LEN = 300
 
 @dataclass
 class ToolContext:
-    """툴 실행에 필요한 현재 턴 문맥."""
+    """툴 실행에 필요한 현재 턴 문맥.
+
+    Attributes:
+        turn_number: 현재 턴 번호.
+        max_turns: 매치 최대 턴 수.
+        speaker: 현재 발언자 ('agent_a' | 'agent_b').
+        my_previous_claims: 본인의 이전 발언 목록.
+        opponent_previous_claims: 상대방의 이전 발언 목록.
+        my_penalty_total: 현재까지 누적된 본인 벌점.
+    """
 
     turn_number: int
     max_turns: int
@@ -54,17 +63,35 @@ class ToolContext:
 
 @dataclass
 class ToolResult:
-    """툴 실행 결과. error가 None이면 성공."""
+    """툴 실행 결과.
+
+    Attributes:
+        result: 툴 실행 결과 문자열. 실패 시 빈 문자열.
+        error: 에러 메시지. None이면 성공.
+    """
 
     result: str
     error: str | None = None
 
 
 class DebateToolExecutor:
-    """서버 측 툴 실행기. 에이전트의 tool_request를 받아 결과를 반환."""
+    """서버 측 툴 실행기. 에이전트의 tool_request를 받아 결과를 반환.
+
+    WebSocket 경유 로컬 에이전트가 턴 실행 중 툴 호출을 요청하면
+    WSConnectionManager가 이 실행기를 통해 처리한다.
+    """
 
     def execute(self, tool_name: str, tool_input: str, ctx: ToolContext) -> ToolResult:
-        """툴 이름으로 디스패치. 알 수 없는 툴은 에러 반환."""
+        """툴 이름으로 디스패치하여 실행한다.
+
+        Args:
+            tool_name: 실행할 툴 이름 ('calculator' | 'stance_tracker' | 등).
+            tool_input: 툴 입력값 (calculator이면 수식, 나머지는 무시됨).
+            ctx: 현재 턴 문맥.
+
+        Returns:
+            ToolResult. 알 수 없는 툴이면 error 필드에 메시지를 포함한 ToolResult 반환.
+        """
         if tool_name == "calculator":
             return self._run_calculator(tool_input)
         elif tool_name == "stance_tracker":
@@ -115,7 +142,18 @@ class DebateToolExecutor:
             return ToolResult(result="", error=f"Invalid expression: {exc}")
 
     def _eval_node(self, node: ast.expr) -> float | int:
-        """재귀적 AST 노드 평가. 화이트리스트에 없는 노드는 TypeError."""
+        """재귀적으로 AST 노드를 평가하여 수식 결과를 반환한다.
+
+        Args:
+            node: 평가할 AST 표현식 노드.
+
+        Returns:
+            계산 결과 (int 또는 float).
+
+        Raises:
+            TypeError: 화이트리스트에 없는 노드 타입 또는 상수 타입인 경우.
+            ZeroDivisionError: 0으로 나누는 경우.
+        """
         if isinstance(node, ast.Constant):
             if not isinstance(node.value, int | float):
                 raise TypeError(f"Unsupported constant type: {type(node.value).__name__}")
@@ -137,7 +175,14 @@ class DebateToolExecutor:
             raise TypeError(f"Unsupported AST node type: {type(node).__name__}")
 
     def _run_stance_tracker(self, ctx: ToolContext) -> ToolResult:
-        """내 이전 주장 목록 반환. 자기 모순 감지 및 일관성 유지용."""
+        """내 이전 주장 목록을 반환한다. 자기 모순 감지 및 일관성 유지용.
+
+        Args:
+            ctx: 현재 턴 문맥.
+
+        Returns:
+            'Turn N: 발언...' 형식의 ToolResult.
+        """
         if not ctx.my_previous_claims:
             return ToolResult(result="No previous claims recorded yet.")
         lines = [
@@ -148,7 +193,14 @@ class DebateToolExecutor:
         return ToolResult(result="\n".join(lines))
 
     def _run_opponent_summary(self, ctx: ToolContext) -> ToolResult:
-        """상대방 이전 주장 요약. LLM 호출 없이 텍스트 정리만."""
+        """상대방의 이전 주장을 요약하여 반환한다. LLM 호출 없이 텍스트 정리만.
+
+        Args:
+            ctx: 현재 턴 문맥.
+
+        Returns:
+            상대방 주장 목록이 담긴 ToolResult.
+        """
         if not ctx.opponent_previous_claims:
             return ToolResult(result="Opponent has not made any claims yet.")
         lines = [
@@ -159,7 +211,14 @@ class DebateToolExecutor:
         return ToolResult(result="Opponent's claims so far:\n" + "\n".join(lines))
 
     def _run_turn_info(self, ctx: ToolContext) -> ToolResult:
-        """현재 게임 상태 정보 반환. 전략 수립용."""
+        """현재 게임 상태 정보를 반환한다. 전략 수립용.
+
+        Args:
+            ctx: 현재 턴 문맥.
+
+        Returns:
+            현재 턴, 남은 턴, 누적 벌점 등이 담긴 ToolResult.
+        """
         remaining = ctx.max_turns - ctx.turn_number
         info_lines = [
             f"Current turn    : {ctx.turn_number} / {ctx.max_turns}",

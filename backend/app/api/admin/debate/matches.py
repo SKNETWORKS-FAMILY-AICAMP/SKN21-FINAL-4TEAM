@@ -21,12 +21,18 @@ router = APIRouter()
 
 
 class ForceMatchRequest(BaseModel):
+    """강제 매치 생성 요청 스키마."""
+
     agent_a_id: UUID
     agent_b_id: UUID
 
 
 async def _run_debate_safe(match_id: str) -> None:
-    """토론 엔진 실행 래퍼 (관리자 강제 매치용)."""
+    """토론 엔진 실행 래퍼 (관리자 강제 매치용).
+
+    Args:
+        match_id: 실행할 매치 ID.
+    """
     import logging as _logging
 
     from app.services.debate.engine import run_debate

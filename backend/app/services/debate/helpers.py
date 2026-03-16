@@ -34,41 +34,25 @@ action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
 - "concede": 상대방 논거 중 타당한 부분을 인정하되 자신의 핵심 입장은 유지할 때
 - "summarize": 논점을 정리하거나 마무리 단계에서 핵심을 압축할 때"""
 
-# 코드 기반 벌점 — LLM 검토 이전에 즉시 적용 (debate_engine 단독 처리)
-# LLM 기반 벌점은 debate_orchestrator.LLM_VIOLATION_PENALTIES 참조
-PENALTY_REPETITION = 3         # detect_repetition()이 단어 중복 70%+ 감지 시 부여
-PENALTY_FALSE_SOURCE = 7       # tool_result를 실제 도구 호출 없이 허위로 반환한 경우
-
-
-def detect_repetition(new_claim: str, previous_claims: list[str], threshold: float = 0.7) -> bool:
-    """단순 단어 집합 유사도로 동어반복 감지.
-
-    overlap / max(len_new, len_prev) >= threshold(0.7)이면 반복 판정.
-    공백 분리 단어 기준이므로 어휘 수준 비교만 수행 (의미적 유사도 미포함).
-    허용 오탐율을 고려해 threshold를 0.7로 설정 — 0.6이면 정상 발언도 자주 차단됨.
-    """
-    # 비교 대상이 없으면 반복으로 볼 수 없음 — 첫 번째 발언은 항상 통과
-    if not previous_claims:
-        return False
-    new_words = set(new_claim.lower().split())
-    # 빈 발언은 단어가 없으므로 유사도 계산 불가 — 반복 판정 제외
-    if not new_words:
-        return False
-    # 모든 이전 발언과 비교해 하나라도 threshold를 초과하면 즉시 반복 판정
-    for prev in previous_claims:
-        prev_words = set(prev.lower().split())
-        # 이전 발언이 비어있으면 분모가 0이 되므로 스킵
-        if not prev_words:
-            continue
-        overlap = len(new_words & prev_words)
-        similarity = overlap / max(len(new_words), len(prev_words))
-        if similarity >= threshold:
-            return True
-    return False
+# detect_repetition() 제거 — 단어 집합 비교로는 의미적 반복 탐지 불가.
+# repetition 탐지를 REVIEW_SYSTEM_PROMPT 기반 LLM 검토로 위임 (orchestrator.py).
+# PENALTY_FALSE_SOURCE = 7
+# TODO: 허위 출처 탐지 미구현 — WebSocket/LLM tool_use 응답에서 실제 도구 호출 여부를
+# 서버 측에서 검증할 방법이 없어 상수만 정의됨. 구현 시 활성화.
 
 
 def validate_response_schema(response_text: str) -> dict | None:
-    """응답 JSON 파싱 및 스키마 검증. 유효하면 dict, 아니면 None."""
+    """에이전트 응답 JSON을 파싱하고 스키마를 검증한다.
+
+    3단계 파싱: 마크다운 코드블록 제거 → 전체 JSON 파싱 시도 → 텍스트 내 JSON 추출.
+    action이 유효한 5종 중 하나가 아니거나 claim이 비어 있으면 None을 반환한다.
+
+    Args:
+        response_text: LLM이 반환한 원문 응답 텍스트.
+
+    Returns:
+        파싱·검증 성공 시 필수 키가 보장된 dict, 실패 시 None.
+    """
     text = response_text.strip()
 
     # 1단계: 마크다운 코드블록 제거
@@ -114,39 +98,38 @@ def validate_response_schema(response_text: str) -> dict | None:
 
 
 def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
-    """에이전트 API 키 반환. 우선순위: BYOK 복호화 → 플랫폼 환경변수 → 빈 문자열.
+    """에이전트 LLM API 키를 반환한다.
 
-    force_platform=True이면 BYOK를 무시하고 플랫폼 환경변수 키를 직접 사용.
-    테스트 매치(is_test=True)에서 호출 시 항상 True로 전달됨.
+    우선순위: BYOK 복호화 → 플랫폼 환경변수 → 빈 문자열.
+    플랫폼 키는 force_platform=True 또는 use_platform_credits=True 에이전트에만 사용한다.
+    BYOK 복호화 실패 시 플랫폼 키로 자동 폴백하지 않고 빈 문자열 반환 — 명시적 실패 유도.
+
+    Args:
+        agent: API 키를 조회할 에이전트.
+        force_platform: True이면 BYOK 무시하고 플랫폼 환경변수 키를 사용.
+
+    Returns:
+        복호화된 API 키 문자열. 키가 없거나 복호화 실패 시 빈 문자열.
     """
     if agent.provider == "local":
         return ""
 
-    # 플랫폼 강제 모드 (테스트 매치 또는 platform credits 에이전트)
-    if force_platform or getattr(agent, "use_platform_credits", False):
-        match agent.provider:
-            case "openai":
-                return settings.openai_api_key or ""
-            case "anthropic":
-                return settings.anthropic_api_key or ""
-            case "google":
-                return settings.google_api_key or ""
-            case "runpod":
-                return settings.runpod_api_key or ""
-            case _:
-                return ""
+    use_platform = force_platform or getattr(agent, "use_platform_credits", False)
 
-    # BYOK 키가 설정돼 있으면 복호화 시도
-    if agent.encrypted_api_key:
-        try:
-            return decrypt_api_key(agent.encrypted_api_key)
-        except ValueError:
-            # 키 불일치(SECRET_KEY 변경 등) → 플랫폼 키로 폴백
-            logger.warning(
-                "Agent %s API key decrypt failed, falling back to platform key", agent.id
-            )
+    # BYOK 키 복호화 시도 (플랫폼 모드가 아닐 때만)
+    if not use_platform:
+        if agent.encrypted_api_key:
+            try:
+                return decrypt_api_key(agent.encrypted_api_key)
+            except ValueError:
+                # 복호화 실패 시 플랫폼 키로 자동 전환하지 않음 — 운영자가 즉시 인지하도록 명시적 실패
+                logger.warning(
+                    "Agent %s API key decrypt failed, returning empty key (platform fallback disabled)",
+                    agent.id,
+                )
+        return ""
 
-    # 플랫폼 기본 API 키 폴백
+    # 플랫폼 모드 (force_platform 또는 use_platform_credits=True)
     match agent.provider:
         case "openai":
             return settings.openai_api_key or ""
@@ -168,7 +151,23 @@ def _build_messages(
     my_claims: list[str],
     opponent_claims: list[str],
 ) -> list[dict]:
-    """에이전트에게 보낼 메시지 컨텍스트 구성."""
+    """에이전트에게 보낼 LLM 메시지 컨텍스트를 구성한다.
+
+    시스템 메시지에 토론 컨텍스트·RESPONSE_SCHEMA_INSTRUCTION·에이전트 시스템 프롬프트를 합친다.
+    이전 발언 이력은 최근 4턴만 포함해 컨텍스트 과부하를 방지한다.
+    턴 단계(초반·중반·후반·마지막)에 따라 전략 힌트를 달리 주입한다.
+
+    Args:
+        system_prompt: 에이전트 버전 스냅샷의 시스템 프롬프트 (캐릭터·어투 설정).
+        topic: 토론 주제 (제목·설명·최대 턴·툴 허용 여부 포함).
+        turn_number: 현재 턴 번호 (1-indexed).
+        speaker: 발언자 ('agent_a' | 'agent_b').
+        my_claims: 본인의 이전 발언 목록.
+        opponent_claims: 상대방의 이전 발언 목록.
+
+    Returns:
+        OpenAI/Anthropic 호환 messages 리스트.
+    """
     side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
     tools_line = (
         "툴 사용: 허용됨 (calculator, stance_tracker, opponent_summary, turn_info)"

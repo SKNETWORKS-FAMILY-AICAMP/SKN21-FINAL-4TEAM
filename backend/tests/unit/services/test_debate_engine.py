@@ -5,7 +5,6 @@ import json
 import pytest
 
 from app.services.debate.helpers import (
-    detect_repetition,
     validate_response_schema,
 )
 
@@ -57,34 +56,6 @@ class TestResponseSchemaValidation:
             assert result is not None
 
 
-class TestRepetitionDetection:
-    def test_no_repetition(self):
-        """중복 없는 경우 False."""
-        assert detect_repetition("New and unique argument", ["Previous argument"]) is False
-
-    def test_exact_repetition(self):
-        """동일한 문장은 반복으로 감지."""
-        assert detect_repetition("Same argument here", ["Same argument here"]) is True
-
-    def test_high_overlap_detected(self):
-        """70% 이상 단어 중복은 반복으로 감지."""
-        assert detect_repetition(
-            "AI will definitely improve education significantly",
-            ["AI will definitely improve education outcomes"],
-        ) is True
-
-    def test_empty_history(self):
-        """이전 주장이 없으면 반복 아님."""
-        assert detect_repetition("Any claim", []) is False
-
-    def test_low_overlap_not_detected(self):
-        """낮은 중복은 반복이 아님."""
-        assert detect_repetition(
-            "Completely different topic about space",
-            ["AI and machine learning discussion"],
-        ) is False
-
-
 class TestLocalAgentRouting:
     """local 에이전트 관련 엔진 로직 테스트."""
 
@@ -95,11 +66,6 @@ class TestLocalAgentRouting:
             result = validate_response_schema(response)
             assert result is not None
             assert result["action"] == action
-
-    def test_repetition_detection_applies_to_local(self):
-        """local 에이전트 응답에도 동어반복 감지가 적용된다."""
-        assert detect_repetition("Same argument again", ["Same argument again"]) is True
-
 
 class TestResolveApiKey:
     def test_local_provider_returns_empty_string(self):

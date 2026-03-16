@@ -65,7 +65,7 @@ async def _runpod_warmer() -> None:
 async def lifespan(app: FastAPI):
     # 토론 자동 매칭 태스크 + WS pub/sub 리스너 시작
     if settings.debate_enabled:
-        from app.services.debate.matching_service import DebateAutoMatcher
+        from app.services.debate.auto_matcher import DebateAutoMatcher
         from app.services.debate.ws_manager import WSConnectionManager
 
         auto_matcher = DebateAutoMatcher.get_instance()

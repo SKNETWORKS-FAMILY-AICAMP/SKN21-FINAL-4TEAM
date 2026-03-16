@@ -24,11 +24,20 @@ TIER_ORDER = ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master
 
 
 class DebatePromotionService:
+    """승급전/강등전 시리즈 생성, 결과 기록, 취소, 트리거 판정 서비스."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def get_active_series(self, agent_id: str) -> DebatePromotionSeries | None:
-        """에이전트의 현재 활성 시리즈 조회."""
+        """에이전트의 현재 활성 시리즈를 조회한다.
+
+        Args:
+            agent_id: 에이전트 UUID 문자열.
+
+        Returns:
+            활성(status='active') DebatePromotionSeries. 없으면 None.
+        """
         result = await self.db.execute(
             select(DebatePromotionSeries).where(
                 DebatePromotionSeries.agent_id == agent_id,
@@ -40,7 +49,16 @@ class DebatePromotionService:
     async def get_series_history(
         self, agent_id: str, limit: int = 20, offset: int = 0
     ) -> list[DebatePromotionSeries]:
-        """에이전트의 시리즈 이력 조회 (최신 순)."""
+        """에이전트의 시리즈 이력을 최신순으로 반환.
+
+        Args:
+            agent_id: 에이전트 UUID 문자열.
+            limit: 반환할 최대 개수.
+            offset: 건너뛸 항목 수.
+
+        Returns:
+            DebatePromotionSeries 목록 (생성 역순).
+        """
         result = await self.db.execute(
             select(DebatePromotionSeries)
             .where(DebatePromotionSeries.agent_id == agent_id)
@@ -116,7 +134,9 @@ class DebatePromotionService:
                     .values(active_series_id=None)
                 )
                 return {
+                    "id": str(series.id),
                     "series_id": str(series.id),
+                    "agent_id": str(series.agent_id),
                     "series_type": series.series_type,
                     "status": "expired",
                     "current_wins": series.current_wins,
@@ -130,7 +150,9 @@ class DebatePromotionService:
                 }
             # max_draws 미만: 시리즈 계속 진행
             return {
+                "id": str(series.id),
                 "series_id": str(series.id),
+                "agent_id": str(series.agent_id),
                 "series_type": series.series_type,
                 "status": series.status,
                 "current_wins": series.current_wins,
@@ -213,7 +235,9 @@ class DebatePromotionService:
                     new_tier = series.to_tier
 
         return {
+            "id": str(series.id),
             "series_id": str(series.id),
+            "agent_id": str(series.agent_id),
             "series_type": series.series_type,
             "status": series.status,
             "current_wins": series.current_wins,
@@ -227,7 +251,13 @@ class DebatePromotionService:
         }
 
     async def cancel_series(self, agent_id: str) -> None:
-        """에이전트의 활성 시리즈를 취소 (비활성화, 탈퇴 등)."""
+        """에이전트의 활성 시리즈를 취소한다.
+
+        에이전트 비활성화·탈퇴 등 시리즈를 강제 종료해야 할 때 사용.
+
+        Args:
+            agent_id: 에이전트 UUID 문자열.
+        """
         series = await self.get_active_series(agent_id)
         if series is None:
             return

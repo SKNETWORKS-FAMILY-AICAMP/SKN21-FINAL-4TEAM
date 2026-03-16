@@ -1,3 +1,5 @@
+"""관리자 사용자 관리 API — 목록 조회, 역할 변경, 일괄 삭제."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -21,12 +23,16 @@ router = APIRouter()
 
 
 class UserListResponse(BaseModel):
+    """사용자 목록 응답 스키마."""
+
     items: list[UserResponse]
     total: int
     stats: UserStats | None = None
 
 
 class RoleUpdate(BaseModel):
+    """사용자 역할 변경 요청 스키마."""
+
     role: str
 
 

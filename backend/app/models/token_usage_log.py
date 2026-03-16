@@ -9,6 +9,22 @@ from app.core.database import Base
 
 
 class TokenUsageLog(Base):
+    """LLM 토큰 사용량 로그 ORM 모델.
+
+    모든 LLM 호출의 토큰 수와 비용을 기록한다.
+    사용자별·모델별 집계로 과금 근거 및 사용량 현황을 제공한다.
+
+    Attributes:
+        id: 로그 레코드 자동 증가 BigInteger PK.
+        user_id: 호출한 사용자 UUID (users FK, CASCADE).
+        session_id: 관련 세션 UUID (선택, FK 없음).
+        llm_model_id: 사용한 LLM 모델 UUID (llm_models FK).
+        input_tokens: 입력 토큰 수.
+        output_tokens: 출력 토큰 수.
+        cost: 호출 비용 (USD, 소수점 6자리).
+        created_at: 호출 시각.
+    """
+
     __tablename__ = "token_usage_logs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

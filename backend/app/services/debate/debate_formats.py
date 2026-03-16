@@ -30,6 +30,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TurnLoopResult:
+    """턴 루프 종료 후 DebateEngine에 반환하는 집계 결과.
+
+    Attributes:
+        claims_a: A측 발언 목록 (차단된 경우 blocked_claim 텍스트로 대체됨).
+        claims_b: B측 발언 목록 (차단된 경우 blocked_claim 텍스트로 대체됨).
+        total_penalty_a: A측 누적 벌점 합계.
+        total_penalty_b: B측 누적 벌점 합계.
+        model_cache: LLMModel 캐시 (model_id → LLMModel). finalizer에 전달.
+        usage_batch: 커밋 전 모아둔 TokenUsageLog 목록. finalizer에서 일괄 INSERT.
+    """
+
     claims_a: list[str]
     claims_b: list[str]
     total_penalty_a: int
@@ -41,7 +52,13 @@ class TurnLoopResult:
 # ── 이벤트 발행 헬퍼 ──────────────────────────────────────────────────────────
 
 async def _publish_turn_event(match_id: str, turn: DebateTurnLog, review_result=None) -> None:
-    """턴 완료 SSE 이벤트 발행."""
+    """턴 완료 SSE 이벤트를 발행한다.
+
+    Args:
+        match_id: 이벤트를 발행할 매치 UUID 문자열.
+        turn: 완료된 턴 로그 (DB 플러시 완료 상태).
+        review_result: LLM 검토 결과 dict. None이면 review_result 필드를 null로 발행.
+    """
     await publish_event(match_id, "turn", {
         "turn_number": turn.turn_number,
         "speaker": turn.speaker,
@@ -59,7 +76,14 @@ async def _publish_turn_event(match_id: str, turn: DebateTurnLog, review_result=
 
 
 async def _publish_review_event(match_id: str, turn_number: int, speaker: str, review: dict) -> None:
-    """리뷰 결과 SSE 이벤트 발행."""
+    """리뷰 결과 SSE 이벤트를 발행한다.
+
+    Args:
+        match_id: 이벤트를 발행할 매치 UUID 문자열.
+        turn_number: 리뷰 대상 턴 번호.
+        speaker: 발언자 ('agent_a' | 'agent_b' | 슬롯 레이블).
+        review: DebateOrchestrator.review_turn()이 반환한 결과 dict.
+    """
     await publish_event(match_id, "turn_review", {
         "turn_number": turn_number,
         "speaker": speaker,
@@ -125,7 +149,21 @@ async def _log_orchestrator_usage(
     model_cache: dict | None = None,
     usage_batch: list | None = None,
 ) -> None:
-    """오케스트레이터 LLM 호출 토큰을 token_usage_logs에 기록."""
+    """오케스트레이터 LLM 호출 토큰을 token_usage_logs에 기록한다.
+
+    input_tokens == output_tokens == 0이면 즉시 반환 (폴백/스킵된 호출).
+    model_cache를 활용해 동일 모델 반복 DB 조회를 방지한다.
+    usage_batch가 None이면 즉시 db.add(), 있으면 배치에 추가 (매치 종료 시 일괄 INSERT).
+
+    Args:
+        db: 비동기 DB 세션.
+        user_id: 사용량을 기록할 사용자 UUID.
+        model_str: LLM 모델 ID 문자열 (llm_models.model_id).
+        input_tokens: 입력 토큰 수.
+        output_tokens: 출력 토큰 수.
+        model_cache: model_id → LLMModel 캐시 dict. None이면 매번 DB 조회.
+        usage_batch: 배치 INSERT용 TokenUsageLog 목록. None이면 즉시 INSERT.
+    """
     if input_tokens == 0 and output_tokens == 0:
         return
 
@@ -173,15 +211,39 @@ async def run_turns_1v1(
     agent_b: DebateAgent,
     version_a: DebateAgentVersion | None,
     version_b: DebateAgentVersion | None,
-    key_a: str,
-    key_b: str,
+    api_key_a: str,
+    api_key_b: str,
     model_cache: dict,
     usage_batch: list,
     parallel: bool,
 ) -> TurnLoopResult:
-    """1v1 턴 루프. parallel=True면 롤링 create_task 병렬 패턴 사용.
+    """1v1 포맷 턴 루프 진입점.
 
+    parallel=True이면 롤링 create_task 병렬 패턴(_run_parallel_turns)을 사용하고,
+    parallel=False이면 순차 패턴(_run_sequential_turns)을 사용한다.
     에이전트 발언이 재시도를 모두 소진하면 ForfeitError를 raise한다.
+
+    Args:
+        executor: 단일 턴 실행기.
+        orchestrator: LLM 검토 오케스트레이터.
+        db: 비동기 DB 세션.
+        match: 실행 중인 매치.
+        topic: 토론 주제.
+        agent_a: A측 에이전트.
+        agent_b: B측 에이전트.
+        version_a: A측 에이전트 버전 스냅샷.
+        version_b: B측 에이전트 버전 스냅샷.
+        api_key_a: A측 LLM API 키.
+        api_key_b: B측 LLM API 키.
+        model_cache: LLMModel 캐시 dict (호출 간 공유).
+        usage_batch: 배치 INSERT용 TokenUsageLog 목록.
+        parallel: True면 병렬 패턴, False면 순차 패턴 사용.
+
+    Returns:
+        TurnLoopResult: 발언 목록·누적 벌점·캐시 등 턴 루프 집계 결과.
+
+    Raises:
+        ForfeitError: 에이전트 발언이 모든 재시도 후에도 실패한 경우.
     """
     claims_a: list[str] = []
     claims_b: list[str] = []
@@ -189,13 +251,13 @@ async def run_turns_1v1(
     if parallel:
         total_penalty_a, total_penalty_b = await _run_parallel_turns(
             executor, orchestrator, db, match, topic,
-            agent_a, agent_b, version_a, version_b, key_a, key_b,
+            agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
             claims_a, claims_b, model_cache, usage_batch,
         )
     else:
         total_penalty_a, total_penalty_b = await _run_sequential_turns(
             executor, orchestrator, db, match, topic,
-            agent_a, agent_b, version_a, version_b, key_a, key_b,
+            agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
             claims_a, claims_b, model_cache, usage_batch,
         )
 
@@ -212,14 +274,42 @@ async def _run_parallel_turns(
     agent_b: DebateAgent,
     version_a: DebateAgentVersion | None,
     version_b: DebateAgentVersion | None,
-    key_a: str,
-    key_b: str,
+    api_key_a: str,
+    api_key_b: str,
     claims_a: list[str],
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
 ) -> tuple[int, int]:
-    """롤링 병렬 패턴 턴 루프."""
+    """롤링 병렬 패턴 턴 루프.
+
+    매 턴마다 A 검토와 B 실행을 asyncio.create_task로 병렬화한다.
+    이전 턴의 B 리뷰 결과는 다음 턴 A 실행 직전에 수집하는 '롤링' 방식으로
+    검토 대기시간을 B 실행 시간에 숨긴다 (전체 지연 약 37% 단축).
+
+    Args:
+        executor: 단일 턴 실행기.
+        orchestrator: LLM 검토 오케스트레이터.
+        db: 비동기 DB 세션.
+        match: 실행 중인 매치.
+        topic: 토론 주제.
+        agent_a: A측 에이전트.
+        agent_b: B측 에이전트.
+        version_a: A측 에이전트 버전 스냅샷.
+        version_b: B측 에이전트 버전 스냅샷.
+        api_key_a: A측 LLM API 키.
+        api_key_b: B측 LLM API 키.
+        claims_a: A측 발언 누적 목록 (in-out 참조).
+        claims_b: B측 발언 누적 목록 (in-out 참조).
+        model_cache: LLMModel 캐시 dict.
+        usage_batch: 배치 INSERT용 TokenUsageLog 목록.
+
+    Returns:
+        (total_penalty_a, total_penalty_b) 누적 벌점 튜플.
+
+    Raises:
+        ForfeitError: A 또는 B 발언이 모든 재시도 후에도 실패한 경우.
+    """
     total_penalty_a = 0
     total_penalty_b = 0
 
@@ -254,7 +344,7 @@ async def _run_parallel_turns(
         # Agent A 턴
         turn_a = await executor.execute_with_retry(
             match, topic, turn_num, "agent_a",
-            agent_a, version_a, key_a, claims_a, claims_b,
+            agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
         )
         if turn_a is None:
@@ -286,7 +376,7 @@ async def _run_parallel_turns(
             # B 실행 (A 검토와 병렬)
             turn_b = await executor.execute_with_retry(
                 match, topic, turn_num, "agent_b",
-                agent_b, version_b, key_b, claims_b, claims_a,
+                agent_b, version_b, api_key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
             )
             if turn_b is None:
@@ -322,7 +412,7 @@ async def _run_parallel_turns(
             except Exception as exc:
                 logger.error("A review task failed: %s — using fallback", exc)
                 review_a = orchestrator._review_fallback()
-            review_elapsed = time.monotonic() - review_start
+            turn_elapsed = time.monotonic() - review_start
 
             # A 검토 결과 반영 (차단 시 claims_a 마지막 항목 패치)
             total_penalty_a = _apply_review_to_turn(
@@ -340,10 +430,10 @@ async def _run_parallel_turns(
             b_exec_start = time.monotonic()
             turn_b = await executor.execute_with_retry(
                 match, topic, turn_num, "agent_b",
-                agent_b, version_b, key_b, claims_b, claims_a,
+                agent_b, version_b, api_key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
             )
-            review_elapsed = time.monotonic() - b_exec_start
+            turn_elapsed = time.monotonic() - b_exec_start
             if turn_b is None:
                 raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
@@ -352,7 +442,7 @@ async def _run_parallel_turns(
 
         # 라운드 사이 딜레이 (마지막 제외)
         if turn_num < topic.max_turns:
-            remaining_delay = settings.debate_turn_delay_seconds - review_elapsed
+            remaining_delay = settings.debate_turn_delay_seconds - turn_elapsed
             if remaining_delay > 0:
                 await asyncio.sleep(remaining_delay)
 
@@ -391,14 +481,41 @@ async def _run_sequential_turns(
     agent_b: DebateAgent,
     version_a: DebateAgentVersion | None,
     version_b: DebateAgentVersion | None,
-    key_a: str,
-    key_b: str,
+    api_key_a: str,
+    api_key_b: str,
     claims_a: list[str],
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
 ) -> tuple[int, int]:
-    """순차 턴 루프."""
+    """순차 턴 루프. DEBATE_ORCHESTRATOR_OPTIMIZED=false 시 또는 롤백 경로에서 사용.
+
+    A 실행 → A 검토 → B 실행 → B 검토 순서로 순차 처리.
+    검토 소요시간은 턴 딜레이에서 차감해 관전 UX를 보존한다.
+
+    Args:
+        executor: 단일 턴 실행기.
+        orchestrator: LLM 검토 오케스트레이터.
+        db: 비동기 DB 세션.
+        match: 실행 중인 매치.
+        topic: 토론 주제.
+        agent_a: A측 에이전트.
+        agent_b: B측 에이전트.
+        version_a: A측 에이전트 버전 스냅샷.
+        version_b: B측 에이전트 버전 스냅샷.
+        api_key_a: A측 LLM API 키.
+        api_key_b: B측 LLM API 키.
+        claims_a: A측 발언 누적 목록 (in-out 참조).
+        claims_b: B측 발언 누적 목록 (in-out 참조).
+        model_cache: LLMModel 캐시 dict.
+        usage_batch: 배치 INSERT용 TokenUsageLog 목록.
+
+    Returns:
+        (total_penalty_a, total_penalty_b) 누적 벌점 튜플.
+
+    Raises:
+        ForfeitError: A 또는 B 발언이 모든 재시도 후에도 실패한 경우.
+    """
     total_penalty_a = 0
     total_penalty_b = 0
 
@@ -406,7 +523,7 @@ async def _run_sequential_turns(
         # Agent A 턴
         turn_a = await executor.execute_with_retry(
             match, topic, turn_num, "agent_a",
-            agent_a, version_a, key_a, claims_a, claims_b,
+            agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
         )
         if turn_a is None:
@@ -452,7 +569,7 @@ async def _run_sequential_turns(
         # Agent B 턴
         turn_b = await executor.execute_with_retry(
             match, topic, turn_num, "agent_b",
-            agent_b, version_b, key_b, claims_b, claims_a,
+            agent_b, version_b, api_key_b, claims_b, claims_a,
             my_accumulated_penalty=total_penalty_b,
         )
         if turn_b is None:
@@ -499,6 +616,72 @@ async def _run_sequential_turns(
     return total_penalty_a, total_penalty_b
 
 
+# ── 멀티에이전트 슬롯 단일 턴 헬퍼 ───────────────────────────────────────────
+
+async def _run_multi_slot_turn(
+    executor: TurnExecutor,
+    orchestrator: DebateOrchestrator,
+    db: AsyncSession,
+    match: DebateMatch,
+    topic: DebateTopic,
+    turn_num: int,
+    speaker_role: str,
+    speaker_label: str,
+    agent: DebateAgent,
+    version: DebateAgentVersion | None,
+    api_key: str,
+    my_claims: list[str],
+    opp_claims: list[str],
+    total_penalty: int,
+    model_cache: dict,
+    usage_batch: list,
+) -> int:
+    """멀티에이전트 슬롯 단일 턴: 실행 → 검토 → 이벤트 발행.
+
+    agent_a/b 처리 블록의 중복 제거를 위해 추출. run_turns_multi() 루프 내에서
+    speaker_role("agent_a"|"agent_b")과 speaker_label("agent_a_slot0" 등)을 분리해
+    1v1과 동일한 이벤트 형식으로 발행한다.
+    """
+    turn = await executor.execute_with_retry(
+        match, topic, turn_num, speaker_role,
+        agent, version, api_key, my_claims, opp_claims,
+        my_accumulated_penalty=total_penalty,
+    )
+    if turn is None:
+        raise ForfeitError(forfeited_speaker=speaker_role)
+    total_penalty += turn.penalty_total
+
+    if settings.debate_turn_review_enabled:
+        review = await orchestrator.review_turn(
+            topic=topic.title,
+            speaker=speaker_label,
+            turn_number=turn_num,
+            claim=turn.claim,
+            evidence=turn.evidence,
+            action=turn.action,
+            opponent_last_claim=opp_claims[-1] if opp_claims else None,
+            recent_history=my_claims[-2:] if my_claims else None,
+        )
+        total_penalty = _apply_review_to_turn(
+            turn, review, my_claims, total_penalty, update_last_claim=False
+        )
+        await _log_orchestrator_usage(
+            db, agent.owner_id, review.get("model_id", ""),
+            review["input_tokens"], review["output_tokens"],
+            model_cache=model_cache, usage_batch=usage_batch,
+        )
+        await _publish_review_event(str(match.id), turn_num, speaker_label, review)
+    else:
+        my_claims.append(turn.claim)
+
+    # turn.speaker는 "agent_a"|"agent_b"이므로 슬롯 레이블로 오버라이드
+    await _publish_turn_event(str(match.id), turn, turn.review_result)
+    # 슬롯 레이블을 별도 필드로 보완 (프론트엔드 멀티에이전트 구분용)
+    await publish_event(str(match.id), "turn_slot", {"speaker": speaker_label, "turn_number": turn_num})
+
+    return total_penalty
+
+
 # ── 멀티에이전트 턴 루프 ──────────────────────────────────────────────────────
 
 async def run_turns_multi(
@@ -512,7 +695,29 @@ async def run_turns_multi(
     model_cache: dict,
     usage_batch: list,
 ) -> TurnLoopResult:
-    """멀티에이전트 턴 루프 (라운드 로빈)."""
+    """멀티에이전트 턴 루프 (2v2/3v3 라운드 로빈).
+
+    DebateMatchParticipant를 team A/B로 분류한 뒤 슬롯 인덱스를 라운드 로빈으로 순환.
+    슬롯 수가 팀 간 다를 경우 짧은 팀은 mod 연산으로 순환 재사용된다.
+    에이전트·버전은 루프 진입 전 한 번에 배치 조회해 반복 DB SELECT를 방지한다.
+
+    Args:
+        executor: 단일 턴 실행기.
+        orchestrator: LLM 검토 오케스트레이터.
+        db: 비동기 DB 세션.
+        match: 실행 중인 멀티에이전트 매치.
+        topic: 토론 주제.
+        agent_a: 대표 A측 에이전트 (ELO·판정용, 실제 발언은 participants 기반).
+        agent_b: 대표 B측 에이전트 (ELO·판정용, 실제 발언은 participants 기반).
+        model_cache: LLMModel 캐시 dict.
+        usage_batch: 배치 INSERT용 TokenUsageLog 목록.
+
+    Returns:
+        TurnLoopResult: 발언 목록·누적 벌점·캐시 등 턴 루프 집계 결과.
+
+    Raises:
+        ForfeitError: 슬롯 에이전트 발언이 모든 재시도 후에도 실패한 경우.
+    """
     from app.models.debate_match import DebateMatchParticipant
 
     parts_res = await db.execute(
@@ -563,106 +768,24 @@ async def run_turns_multi(
                 logger.warning("Multi-agent: agent not found, slot %d turn %d", i, turn_num)
                 continue
 
-            key_a = _resolve_api_key(multi_agent_a)
-            key_b = _resolve_api_key(multi_agent_b)
+            api_key_a = _resolve_api_key(multi_agent_a)
+            api_key_b = _resolve_api_key(multi_agent_b)
 
             ver_a = versions_cache.get(str(a_part.version_id)) if a_part.version_id else None
             ver_b = versions_cache.get(str(b_part.version_id)) if b_part.version_id else None
 
-            turn_a = await executor.execute_with_retry(
-                match, topic, turn_num, "agent_a",
-                multi_agent_a, ver_a, key_a, claims_a, claims_b,
-                my_accumulated_penalty=total_penalty_a,
+            total_penalty_a = await _run_multi_slot_turn(
+                executor, orchestrator, db, match, topic, turn_num,
+                "agent_a", f"agent_a_slot{i}",
+                multi_agent_a, ver_a, api_key_a, claims_a, claims_b,
+                total_penalty_a, model_cache, usage_batch,
             )
-            if turn_a is None:
-                raise ForfeitError(forfeited_speaker="agent_a")
-            total_penalty_a += turn_a.penalty_total
-
-            if settings.debate_turn_review_enabled:
-                review = await orchestrator.review_turn(
-                    topic=topic.title,
-                    speaker=f"agent_a_slot{i}",
-                    turn_number=turn_num,
-                    claim=turn_a.claim,
-                    evidence=turn_a.evidence,
-                    action=turn_a.action,
-                    opponent_last_claim=claims_b[-1] if claims_b else None,
-                    recent_history=claims_a[-2:] if claims_a else None,
-                )
-                total_penalty_a = _apply_review_to_turn(
-                    turn_a, review, claims_a, total_penalty_a, update_last_claim=False
-                )
-                await _log_orchestrator_usage(
-                    db, multi_agent_a.owner_id, review.get("model_id", ""),
-                    review["input_tokens"], review["output_tokens"],
-                    model_cache=model_cache, usage_batch=usage_batch,
-                )
-                await _publish_review_event(str(match.id), turn_num, f"agent_a_slot{i}", review)
-            else:
-                claims_a.append(turn_a.claim)
-
-            # speaker 이름을 슬롯 기반으로 오버라이드해 1v1과 동일한 필드셋 발행
-            await publish_event(str(match.id), "turn", {
-                "turn_number": turn_num,
-                "speaker": f"agent_a_slot{i}",
-                "action": turn_a.action,
-                "claim": turn_a.claim,
-                "evidence": turn_a.evidence,
-                "penalties": turn_a.penalties,
-                "penalty_total": turn_a.penalty_total,
-                "response_time_ms": turn_a.response_time_ms,
-                "input_tokens": turn_a.input_tokens,
-                "output_tokens": turn_a.output_tokens,
-                "is_blocked": turn_a.is_blocked,
-                "review_result": None,
-            })
-
-            turn_b = await executor.execute_with_retry(
-                match, topic, turn_num, "agent_b",
-                multi_agent_b, ver_b, key_b, claims_b, claims_a,
-                my_accumulated_penalty=total_penalty_b,
+            total_penalty_b = await _run_multi_slot_turn(
+                executor, orchestrator, db, match, topic, turn_num,
+                "agent_b", f"agent_b_slot{i}",
+                multi_agent_b, ver_b, api_key_b, claims_b, claims_a,
+                total_penalty_b, model_cache, usage_batch,
             )
-            if turn_b is None:
-                raise ForfeitError(forfeited_speaker="agent_b")
-            total_penalty_b += turn_b.penalty_total
-
-            if settings.debate_turn_review_enabled:
-                review = await orchestrator.review_turn(
-                    topic=topic.title,
-                    speaker=f"agent_b_slot{i}",
-                    turn_number=turn_num,
-                    claim=turn_b.claim,
-                    evidence=turn_b.evidence,
-                    action=turn_b.action,
-                    opponent_last_claim=claims_a[-1] if claims_a else None,
-                    recent_history=claims_b[-2:] if claims_b else None,
-                )
-                total_penalty_b = _apply_review_to_turn(
-                    turn_b, review, claims_b, total_penalty_b, update_last_claim=False
-                )
-                await _log_orchestrator_usage(
-                    db, multi_agent_b.owner_id, review.get("model_id", ""),
-                    review["input_tokens"], review["output_tokens"],
-                    model_cache=model_cache, usage_batch=usage_batch,
-                )
-                await _publish_review_event(str(match.id), turn_num, f"agent_b_slot{i}", review)
-            else:
-                claims_b.append(turn_b.claim)
-
-            await publish_event(str(match.id), "turn", {
-                "turn_number": turn_num,
-                "speaker": f"agent_b_slot{i}",
-                "action": turn_b.action,
-                "claim": turn_b.claim,
-                "evidence": turn_b.evidence,
-                "penalties": turn_b.penalties,
-                "penalty_total": turn_b.penalty_total,
-                "response_time_ms": turn_b.response_time_ms,
-                "input_tokens": turn_b.input_tokens,
-                "output_tokens": turn_b.output_tokens,
-                "is_blocked": turn_b.is_blocked,
-                "review_result": None,
-            })
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)
 
@@ -678,4 +801,14 @@ _FORMAT_RUNNERS: dict[str, Callable] = {
 
 
 def get_format_runner(match_format: str) -> Callable:
+    """매치 포맷에 대응하는 턴 루프 함수를 반환한다.
+
+    등록되지 않은 포맷은 run_turns_1v1로 폴백한다.
+
+    Args:
+        match_format: 매치 포맷 문자열 ('1v1' | '2v2' | '3v3').
+
+    Returns:
+        대응하는 턴 루프 코루틴 함수.
+    """
     return _FORMAT_RUNNERS.get(match_format, run_turns_1v1)

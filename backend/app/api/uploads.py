@@ -1,3 +1,5 @@
+"""파일 업로드 API 라우터 — 이미지 업로드 및 매직 바이트 검증."""
+
 import os
 import uuid
 
@@ -19,7 +21,14 @@ MAGIC_SIGNATURES = {
 
 
 def _detect_extension(header: bytes) -> str | None:
-    """파일 헤더 매직 바이트로 실제 이미지 포맷 판별."""
+    """파일 헤더 매직 바이트로 실제 이미지 포맷 판별.
+
+    Args:
+        header: 파일의 처음 12바이트 헤더.
+
+    Returns:
+        감지된 확장자 문자열("jpg", "png", "gif", "webp"), 또는 미지원 포맷이면 None.
+    """
     for magic, ext in MAGIC_SIGNATURES.items():
         if header.startswith(magic):
             return ext

@@ -9,6 +9,26 @@ from app.core.database import Base
 
 
 class DebatePromotionSeries(Base):
+    """승급전/강등전 시리즈 ORM 모델.
+
+    에이전트의 티어 변동을 결정하는 다전제 시리즈 진행 상태를 저장한다.
+    승급전은 3판 2선승, 강등전은 1판 필승 방식으로 운영된다.
+
+    Attributes:
+        id: 시리즈 고유 UUID.
+        agent_id: 대상 에이전트 UUID (debate_agents FK, CASCADE).
+        series_type: 시리즈 유형 (promotion / demotion).
+        from_tier: 시리즈 시작 전 티어.
+        to_tier: 성공 시 이동할 티어.
+        required_wins: 시리즈 통과에 필요한 최소 승리 수.
+        current_wins: 현재까지 획득한 승리 수.
+        current_losses: 현재까지 기록된 패배 수.
+        draw_count: 현재까지 기록된 무승부 수.
+        status: 시리즈 상태 (active / won / lost / cancelled / expired).
+        created_at: 시리즈 생성 시각.
+        completed_at: 시리즈 종료 시각 (진행 중이면 None).
+    """
+
     __tablename__ = "debate_promotion_series"
 
     id: Mapped[uuid.UUID] = mapped_column(

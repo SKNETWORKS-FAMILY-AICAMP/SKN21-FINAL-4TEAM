@@ -1,3 +1,5 @@
+"""토론 에이전트 API 라우터 — CRUD, 랭킹, 갤러리, H2H, 승급전."""
+
 import asyncio
 
 import httpx
@@ -22,7 +24,8 @@ from app.schemas.debate_agent import (
     HeadToHeadListResponse,
     PromotionSeriesResponse,
 )
-from app.services.debate.agent_service import DebateAgentService, DebateTemplateService
+from app.services.debate.agent_service import DebateAgentService
+from app.services.debate.template_service import DebateTemplateService
 from app.services.debate.ws_manager import WSConnectionManager
 
 router = APIRouter()
@@ -32,7 +35,20 @@ _ADMIN_ROLES: frozenset[str] = frozenset({"admin", "superadmin"})
 
 
 async def _require_agent_access(service: DebateAgentService, agent_id: str, user: User) -> DebateAgent:
-    """에이전트 존재 확인 + 접근 권한 검증. 소유자 또는 관리자만 허용."""
+    """에이전트 존재 확인 + 접근 권한 검증. 소유자 또는 관리자만 허용.
+
+    Args:
+        service: 에이전트 서비스 인스턴스.
+        agent_id: 접근할 에이전트 ID.
+        user: 요청한 사용자.
+
+    Returns:
+        DebateAgent — 검증을 통과한 에이전트 모델.
+
+    Raises:
+        HTTPException(404): 에이전트가 존재하지 않을 때.
+        HTTPException(403): 소유자도 관리자도 아닐 때.
+    """
     agent = await service.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
@@ -48,6 +64,13 @@ def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
       OpenAI    → body["error"]["code"]:   "invalid_api_key" | "model_not_found"
       Anthropic → body["error"]["type"]:   "authentication_error" | "not_found_error"
       Google    → body["error"]["status"]: "UNAUTHENTICATED" | "NOT_FOUND"
+
+    Args:
+        exc: httpx HTTP 상태 에러.
+
+    Returns:
+        (error_type, user_message) 튜플.
+        error_type은 "api_key" | "model" | "other" 중 하나.
     """
     code = exc.response.status_code
     try:
@@ -96,7 +119,16 @@ def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
 
 
 def _agent_response(agent: DebateAgent) -> AgentResponse:
-    """AgentResponse에 is_connected 플래그를 추가하여 반환."""
+    """AgentResponse에 is_connected 플래그를 추가하여 반환.
+
+    로컬 에이전트인 경우 WSConnectionManager에서 현재 연결 여부를 조회한다.
+
+    Args:
+        agent: 응답으로 변환할 DebateAgent 모델.
+
+    Returns:
+        AgentResponse — is_connected 필드가 설정된 응답 스키마.
+    """
     resp = AgentResponse.model_validate(agent)
     if agent.provider == "local":
         manager = WSConnectionManager.get_instance()
@@ -116,6 +148,8 @@ async def list_templates(
 
 
 class AgentTestRequest(BaseModel):
+    """에이전트 API 키/모델 ID 사전 테스트 요청 스키마."""
+
     provider: str
     model_id: str
     api_key: str = ""
@@ -126,7 +160,17 @@ async def test_agent_connection(
     data: AgentTestRequest,
     user: User = Depends(get_current_user),
 ):
-    """API 키·모델 ID 유효성 사전 테스트. DB 저장 없음."""
+    """API 키·모델 ID 유효성 사전 테스트. DB 저장 없음.
+
+    local/runpod 프로바이더는 플랫폼 키를 사용하므로 항상 ok를 반환한다.
+
+    Args:
+        data: 테스트할 provider, model_id, api_key.
+        user: 인증된 현재 사용자.
+
+    Returns:
+        ok(bool)와 선택적 error_type, error, model_response 필드를 포함한 딕셔너리.
+    """
     # local/runpod은 플랫폼 키 사용 — 사용자 측 테스트 불필요
     if data.provider in ("local", "runpod"):
         return {"ok": True}

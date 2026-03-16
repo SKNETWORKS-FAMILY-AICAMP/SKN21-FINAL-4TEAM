@@ -58,6 +58,10 @@ type DebateState = {
   debateShowAll: boolean;
   predictionStats: PredictionStats | null;
   predictionLoading: boolean;
+  // SSE 특수 이벤트 상태
+  waitingAgent: boolean;
+  creditInsufficient: boolean;
+  matchVoidReason: string | null;
   // ─── ranking 상태 ──────────────────────────────────────────
   ranking: RankingEntry[];
   rankingLoading: boolean;
@@ -88,6 +92,9 @@ type DebateState = {
   tickReplay: () => void;
   setReplayTyping: (v: boolean) => void;
   setDebateShowAll: (v: boolean) => void;
+  setWaitingAgent: (v: boolean) => void;
+  setCreditInsufficient: (v: boolean) => void;
+  setMatchVoidReason: (reason: string | null) => void;
   submitPrediction: (matchId: string, prediction: 'a_win' | 'b_win' | 'draw') => Promise<void>;
   fetchPredictionStats: (matchId: string) => Promise<void>;
   // ─── ranking 액션 ──────────────────────────────────────────
@@ -120,6 +127,9 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   debateShowAll: false,
   predictionStats: null,
   predictionLoading: false,
+  waitingAgent: false,
+  creditInsufficient: false,
+  matchVoidReason: null,
   // ─── ranking 초기 상태 ──────────────────────────────────────
   ranking: [],
   rankingLoading: false,
@@ -213,6 +223,9 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         replayTyping: false,
         debateShowAll: false,
         predictionStats: null,
+        waitingAgent: false,
+        creditInsufficient: false,
+        matchVoidReason: null,
       }),
     });
     try {
@@ -416,6 +429,9 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   },
   setReplayTyping: (v) => set({ replayTyping: v }),
   setDebateShowAll: (v) => set({ debateShowAll: v }),
+  setWaitingAgent: (v) => set({ waitingAgent: v }),
+  setCreditInsufficient: (v) => set({ creditInsufficient: v }),
+  setMatchVoidReason: (reason) => set({ matchVoidReason: reason }),
   submitPrediction: async (matchId, prediction) => {
     await api.post(`/matches/${matchId}/predictions`, { prediction });
     // 제출 후 통계 갱신

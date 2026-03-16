@@ -13,13 +13,17 @@ from app.core.config import settings
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
 from app.services.debate.broadcast import publish_event
+from app.services.debate.forfeit import _update_season_elo
 from app.services.debate.helpers import calculate_elo
 
 logger = logging.getLogger(__name__)
 
 
 class MatchFinalizer:
-    """매치 완료 후처리 통합. 1v1·멀티 공통 진입점."""
+    """매치 완료 후처리를 통합 관리하는 클래스.
+
+    1v1·멀티 포맷 공통 진입점. ELO 갱신 → 시즌 → 승급전 → 커밋 → SSE → 예측투표 → 토너먼트 → 요약 순으로 처리한다.
+    """
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -33,22 +37,21 @@ class MatchFinalizer:
         model_cache: dict,
         usage_batch: list,
     ) -> None:
-        """처리 순서 (SSE는 db.commit() 이전에 반드시 발행):
+        """처리 순서:
         1. judge 토큰 usage_batch 추가
         2. ELO 계산 + DB 갱신
         3. 시즌 ELO 갱신 (match.season_id 있을 때만)
         4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
-        5. finished SSE 발행 (elo_a_before/elo_b_before 포함, 커밋 전)
-        6. DB 커밋 + usage_batch 일괄 INSERT
+        5. DB 커밋 + usage_batch 일괄 INSERT
+        6. finished SSE 발행 (커밋 후 — 새로고침 시 DB 결과와 항상 일치)
         7. 예측투표 정산
         8. 토너먼트 라운드 진행
         9. 요약 리포트 백그라운드 태스크
         """
         from app.services.debate.agent_service import DebateAgentService
-        from app.services.debate.formats import _log_orchestrator_usage
+        from app.services.debate.debate_formats import _log_orchestrator_usage
         from app.services.debate.match_service import DebateMatchService, generate_summary_task
         from app.services.debate.promotion_service import DebatePromotionService
-        from app.services.debate.season_service import DebateSeasonService
 
         # 1. Judge 토큰 usage_batch 추가 (조기 커밋 버그 수정 — 판정 전 커밋하지 않음)
         await _log_orchestrator_usage(
@@ -90,14 +93,9 @@ class MatchFinalizer:
 
             # 3. 시즌 ELO 갱신
             if match.season_id:
-                season_svc = DebateSeasonService(self.db)
-                stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
-                stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
-                season_new_a, season_new_b = calculate_elo(
-                    stats_a.elo_rating, stats_b.elo_rating, elo_result, score_diff=score_diff
+                await _update_season_elo(
+                    self.db, match, agent_a, agent_b, elo_result, result_a, result_b, score_diff,
                 )
-                await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), season_new_a, result_a)
-                await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), season_new_b, result_b)
 
             # 4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
             promo_svc = DebatePromotionService(self.db)
@@ -121,7 +119,9 @@ class MatchFinalizer:
                         )
                         if new_series:
                             series_updates.append({
+                                "id": str(new_series.id),
                                 "series_id": str(new_series.id),
+                                "agent_id": str(new_series.agent_id),
                                 "series_type": new_series.series_type,
                                 "status": new_series.status,
                                 "current_wins": 0,
@@ -137,21 +137,7 @@ class MatchFinalizer:
             for su in series_updates:
                 await publish_event(str(match.id), "series_update", su)
 
-        # 5. finished SSE 발행 — DB 커밋 이전 (체감 지연 최소화, elo_before 포함 버그 수정)
-        await publish_event(str(match.id), "finished", {
-            "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
-            "score_a": judgment["score_a"],
-            "score_b": judgment["score_b"],
-            "elo_a_before": elo_a_before,
-            "elo_a_after": new_a,
-            "elo_b_before": elo_b_before,
-            "elo_b_after": new_b,
-            # 하위 호환
-            "elo_a": new_a,
-            "elo_b": new_b,
-        })
-
-        # 6. DB 커밋 + usage_batch 일괄 INSERT
+        # 5. DB 커밋 + usage_batch 일괄 INSERT — SSE 발행 전 커밋으로 데이터 정합성 보장
         await self.db.execute(
             update(DebateMatch)
             .where(DebateMatch.id == match.id)
@@ -165,6 +151,20 @@ class MatchFinalizer:
         if usage_batch:
             self.db.add_all(usage_batch)
         await self.db.commit()
+
+        # 6. finished SSE 발행 — 커밋 완료 후 발행하여 새로고침 시에도 DB 결과와 일치
+        await publish_event(str(match.id), "finished", {
+            "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
+            "score_a": judgment["score_a"],
+            "score_b": judgment["score_b"],
+            "elo_a_before": elo_a_before,
+            "elo_a_after": new_a,
+            "elo_b_before": elo_b_before,
+            "elo_b_after": new_b,
+            # 하위 호환
+            "elo_a": new_a,
+            "elo_b": new_b,
+        })
 
         # 7. 예측투표 정산
         match_service = DebateMatchService(self.db)
@@ -181,8 +181,14 @@ class MatchFinalizer:
             t_service = DebateTournamentService(self.db)
             await t_service.advance_round(str(match.tournament_id))
 
-        # 9. 요약 리포트 백그라운드 태스크
+        # 9. 요약 리포트 백그라운드 태스크 — 참조 보관으로 GC 수거 방지
         if settings.debate_summary_enabled:
-            asyncio.create_task(generate_summary_task(str(match.id)))
+            task = asyncio.create_task(generate_summary_task(str(match.id)))
+
+            def _on_summary_done(t: asyncio.Task, mid: str = str(match.id)) -> None:
+                if not t.cancelled() and (exc := t.exception()):
+                    logger.warning("Summary task failed for match %s: %s", mid, exc)
+
+            task.add_done_callback(_on_summary_done)
 
         logger.info("Match %s completed. Winner: %s", match.id, judgment["winner_id"])

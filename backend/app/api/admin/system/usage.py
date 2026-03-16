@@ -1,3 +1,5 @@
+"""관리자 사용량 조회 API — 전체 사용량 통계, 사용자 검색, 쿼터 관리."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +16,8 @@ router = APIRouter()
 
 
 class UserSearchResult(BaseModel):
+    """사용자 검색 결과 스키마."""
+
     id: uuid.UUID
     nickname: str
     login_id: str

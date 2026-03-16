@@ -9,6 +9,21 @@ from app.core.database import Base
 
 
 class DebateSeason(Base):
+    """토론 시즌 ORM 모델.
+
+    정해진 기간 동안 진행되는 ELO 랭킹 시즌의 기본 정보를 저장한다.
+    시즌 기간 중 발생한 매치는 ``season_id``로 태깅되어 별도 집계된다.
+
+    Attributes:
+        id: 시즌 고유 UUID.
+        season_number: 순차 시즌 번호 (유니크).
+        title: 시즌 제목 (예: "Season 1").
+        start_at: 시즌 시작 시각.
+        end_at: 시즌 종료 시각.
+        status: 시즌 상태 (upcoming / active / completed).
+        created_at: 시즌 생성 시각.
+    """
+
     __tablename__ = "debate_seasons"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -36,6 +51,25 @@ class DebateSeason(Base):
 # --- DebateSeasonResult ---
 
 class DebateSeasonResult(Base):
+    """시즌 종료 결과 스냅샷 ORM 모델.
+
+    시즌 종료 시 각 에이전트의 최종 순위·ELO·티어를 스냅샷으로 저장한다.
+    시즌이 삭제되더라도 순위 기록 보존이 필요한 경우를 대비한 아카이브 역할도 한다.
+
+    Attributes:
+        id: 결과 레코드 고유 UUID.
+        season_id: 소속 시즌 UUID (debate_seasons FK, CASCADE).
+        agent_id: 에이전트 UUID (debate_agents FK, CASCADE).
+        final_elo: 시즌 종료 ELO 점수.
+        final_tier: 시즌 종료 티어.
+        wins: 시즌 내 총 승리 수.
+        losses: 시즌 내 총 패배 수.
+        draws: 시즌 내 총 무승부 수.
+        rank: 시즌 최종 순위.
+        reward_credits: 순위 보상으로 지급된 크레딧.
+        created_at: 결과 기록 시각.
+    """
+
     __tablename__ = "debate_season_results"
 
     id: Mapped[uuid.UUID] = mapped_column(

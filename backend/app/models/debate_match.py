@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -8,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     text,
@@ -19,6 +21,46 @@ from app.core.database import Base
 
 
 class DebateMatch(Base):
+    """토론 매치 ORM 모델.
+
+    두 에이전트가 특정 주제로 진행하는 단일 매치의 전체 상태를 저장한다.
+    점수·패널티·ELO 변동·시즌/시리즈 연결 정보를 통합 관리한다.
+
+    Attributes:
+        id: 매치 고유 UUID.
+        topic_id: 토론 주제 UUID (debate_topics FK).
+        agent_a_id: A 에이전트 UUID (debate_agents FK).
+        agent_b_id: B 에이전트 UUID (debate_agents FK).
+        agent_a_version_id: 매치 시 사용된 A 에이전트 버전 UUID.
+        agent_b_version_id: 매치 시 사용된 B 에이전트 버전 UUID.
+        status: 매치 상태 (pending / in_progress / completed / error / waiting_agent / forfeit).
+        is_test: 관리자 테스트 매치 여부 (True이면 ELO 미반영).
+        winner_id: 승리한 에이전트 UUID (무승부이면 None).
+        scorecard: 판정 세부 점수 JSONB ({agent_a: {...}, agent_b: {...}, reasoning: "..."}).
+        score_a: A 에이전트 획득 점수.
+        score_b: B 에이전트 획득 점수.
+        penalty_a: A 에이전트 누적 패널티.
+        penalty_b: B 에이전트 누적 패널티.
+        started_at: 매치 시작 시각.
+        finished_at: 매치 종료 시각.
+        elo_a_before: A 에이전트 매치 전 ELO.
+        elo_b_before: B 에이전트 매치 전 ELO.
+        elo_a_after: A 에이전트 매치 후 ELO.
+        elo_b_after: B 에이전트 매치 후 ELO.
+        is_featured: 주간 하이라이트 선정 여부.
+        featured_at: 하이라이트 선정 시각.
+        tournament_id: 소속 토너먼트 UUID (debate_tournaments FK).
+        tournament_round: 토너먼트 내 라운드 번호.
+        format: 매치 형식 (1v1 / 2v2 등).
+        summary_report: 토론 요약 리포트 JSONB.
+        season_id: 소속 시즌 UUID (debate_seasons FK).
+        match_type: 매치 유형 (ranked / promotion / demotion).
+        series_id: 소속 승급전/강등전 시리즈 UUID.
+        credits_deducted: 몰수패 처리 시 차감된 크레딧.
+        error_reason: 오류 또는 몰수패 사유 메시지.
+        created_at: 매치 생성 시각.
+    """
+
     __tablename__ = "debate_matches"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -80,6 +122,9 @@ class DebateMatch(Base):
         ForeignKey("debate_promotion_series.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # 몰수패/부전패 처리 시 차감된 크레딧 및 오류 사유
+    credits_deducted: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    error_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -110,6 +155,20 @@ class DebateMatch(Base):
 # --- DebateMatchParticipant ---
 
 class DebateMatchParticipant(Base):
+    """멀티에이전트 매치 참가자 ORM 모델.
+
+    2v2 이상 포맷에서 각 팀의 에이전트 슬롯 배정을 저장한다.
+    1v1 기본 포맷에서는 사용되지 않는다.
+
+    Attributes:
+        id: 참가자 레코드 고유 UUID.
+        match_id: 소속 매치 UUID (debate_matches FK, CASCADE).
+        agent_id: 참가 에이전트 UUID (debate_agents FK, CASCADE).
+        version_id: 매치 시 사용된 에이전트 버전 UUID.
+        team: 팀 구분 ('A' 또는 'B').
+        slot: 팀 내 슬롯 번호 (0-indexed).
+    """
+
     __tablename__ = "debate_match_participants"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -138,6 +197,21 @@ class DebateMatchParticipant(Base):
 # --- DebateMatchPrediction ---
 
 class DebateMatchPrediction(Base):
+    """사용자 예측투표 ORM 모델.
+
+    매치 시작 전 사용자가 승자를 예측한 투표 데이터를 저장한다.
+    매치 완료 후 ``is_correct`` 값이 채워진다.
+    사용자당 매치당 1회만 투표 가능 (UniqueConstraint).
+
+    Attributes:
+        id: 예측 레코드 고유 UUID.
+        match_id: 대상 매치 UUID (debate_matches FK, CASCADE).
+        user_id: 투표한 사용자 UUID (users FK, CASCADE).
+        prediction: 예측 결과 (a_win / b_win / draw).
+        is_correct: 예측 정답 여부 (매치 완료 전은 None).
+        created_at: 투표 시각.
+    """
+
     __tablename__ = "debate_match_predictions"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -167,6 +241,21 @@ class DebateMatchPrediction(Base):
 # --- DebateMatchQueue ---
 
 class DebateMatchQueue(Base):
+    """매칭 대기 큐 ORM 모델.
+
+    에이전트가 특정 토픽의 매칭을 기다리는 큐 항목을 저장한다.
+    ``DebateAutoMatcher``가 주기적으로 이 테이블을 스캔해 상대를 찾는다.
+
+    Attributes:
+        id: 큐 항목 고유 UUID.
+        topic_id: 대기 중인 토픽 UUID (debate_topics FK, CASCADE).
+        agent_id: 대기 에이전트 UUID (debate_agents FK, CASCADE).
+        user_id: 에이전트 소유자 UUID (users FK, CASCADE).
+        joined_at: 큐 등록 시각.
+        expires_at: 큐 만료 시각 (만료 시 자동 제거 대상).
+        is_ready: 매칭 준비 완료 여부.
+    """
+
     __tablename__ = "debate_match_queue"
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -481,35 +481,31 @@ for turn_num in range(1, topic.max_turns + 1):
 
 ### 채점 기준 (100점 만점)
 
-**구현 위치:** `services/debate/orchestrator.py` — `DebateOrchestrator._judge_with_model()`
+**구현 위치:** `services/debate/judge.py` — `DebateJudge._judge_with_model()`
+
+> **변경 이력 (2026-03-17):** 판정 로직이 `orchestrator.py`에서 `judge.py`(`DebateJudge`)로 분리됨. 채점 체계도 변경됨.
 
 ```python
-# services/debate/orchestrator.py
+# services/debate/judge.py (현행)
 SCORING_CRITERIA = {
-    "logic": 30,       # 논리적 일관성, 타당한 추론 체계
-    "evidence": 25,    # 근거·데이터·인용 활용도
-    "rebuttal": 25,    # 반박 논리의 질, 상대 주장에 대한 대응
-    "relevance": 20,   # 주제 적합성, 핵심 쟁점 집중도
+    "argumentation": 40,  # 주장·근거·추론의 일체 (logic + evidence 통합)
+    "rebuttal": 35,       # 상대 논거에 대한 직접 대응
+    "strategy": 25,       # 쟁점 주도력, 논점 우선순위 설정, 흐름 운영
 }
+# 구버전 체계 {"logic": 30, "evidence": 25, "rebuttal": 25, "relevance": 20} — 폐지됨
 ```
 
 | 항목 | 배점 | 의미 |
 |---|---|---|
-| `logic` | 30점 | 논리적 일관성, 타당한 추론 체계 |
-| `evidence` | 25점 | 근거·데이터·인용 활용도 |
-| `rebuttal` | 25점 | 반박 논리의 질, 상대 주장에 대한 대응 |
-| `relevance` | 20점 | 주제 적합성, 핵심 쟁점 집중도 |
-
-**왜 이 4가지 기준인가?**
-- `logic`이 가장 배점이 높은 이유: 토론의 본질은 논리 싸움이기 때문
-- `evidence`와 `rebuttal`이 동점인 이유: 새로운 주장을 펼치는 능력과 상대를 반박하는 능력을 동등하게 본다
-- `relevance`가 가장 낮은 이유: 어느 정도의 주제 이탈은 자연스럽고, 이미 LLM 검토에서 벌점으로 처리했기 때문
+| `argumentation` | 40점 | 주장·근거·추론의 일체. 핵심 주장 명확성, 근거와 추론의 논리적 연결, 구체적 사례·데이터 활용도 |
+| `rebuttal` | 35점 | 상대 논거에 대한 직접 대응. 상대 주장의 핵심 약점 파악 및 반박의 질 |
+| `strategy` | 25점 | 쟁점 주도력과 흐름 운영. 논점 우선순위, 유리한 쟁점 집중, 불리한 쟁점 처리 |
 
 ### 최종 점수 계산
 
 ```python
-# services/debate/orchestrator.py — _judge_with_model()
-score_a = sum(scorecard["agent_a"].values())  # logic + evidence + rebuttal + relevance
+# services/debate/judge.py — _judge_with_model()
+score_a = sum(scorecard["agent_a"].values())  # argumentation + rebuttal + strategy
 score_b = sum(scorecard["agent_b"].values())
 
 # 벌점 차감 (debate_engine.py에서 매치 내내 누적된 값)

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
@@ -18,9 +19,10 @@ from app.models.token_usage_log import TokenUsageLog
 from app.models.user import User
 from app.schemas.debate_ws import WSMatchReady
 from app.services.debate.broadcast import publish_event
+from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.finalizer import MatchFinalizer
 from app.services.debate.forfeit import ForfeitError, ForfeitHandler
-from app.services.debate.formats import (
+from app.services.debate.debate_formats import (
     TurnLoopResult,
     _apply_review_to_turn,
     _log_orchestrator_usage,
@@ -34,16 +36,51 @@ from app.services.debate.helpers import (
     _build_messages,
     _resolve_api_key,
     calculate_elo,
-    detect_repetition,
     validate_response_schema,
     RESPONSE_SCHEMA_INSTRUCTION,
 )
+from app.services.debate.judge import DebateJudge
 from app.services.debate.orchestrator import DebateOrchestrator
 from app.services.debate.turn_executor import TurnExecutor
 from app.services.debate.ws_manager import WSConnectionManager
 from app.services.llm.inference_client import InferenceClient
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_required_credits(
+    agent: DebateAgent,
+    models_map: dict,
+    max_turns: int,
+    turn_token_limit: int,
+) -> int:
+    """에이전트 모델 기준 필요 크레딧을 산정한다 (테스트 가능한 순수 함수).
+
+    예상 토큰 = max_turns × turn_token_limit × 1.5 (입력 토큰 누적 대비 버퍼).
+    리뷰·판정 토큰은 포함하지 않는다.
+
+    Args:
+        agent: 크레딧 산정 대상 에이전트.
+        models_map: model_id → LLMModel 매핑 dict (배치 조회 결과).
+        max_turns: 토픽의 최대 턴 수.
+        turn_token_limit: 턴당 최대 출력 토큰 수.
+
+    Returns:
+        필요 크레딧 수 (정수, 올림).
+    """
+    model = models_map.get(agent.model_id)
+    if model is None:
+        logger.warning(
+            "Model %s not found in llm_models for agent %s — falling back to credit_per_1k=1",
+            agent.model_id, agent.id,
+        )
+    credit_per_1k = model.credit_per_1k_tokens if model else 1
+    return math.ceil(max_turns * turn_token_limit * 1.5 * credit_per_1k / 1000)
+
+
+class CreditInsufficientError(Exception):
+    """크레딧 부족 — credit_insufficient SSE가 이미 발행됐으므로 run_debate에서 error SSE 재발행 생략."""
+
 
 # 상단 import로 sub-module 심볼을 이 네임스페이스에 바인딩 — 테스트 import 경로 보호
 # (from app.services.debate.engine import _resolve_api_key 등이 계속 동작)
@@ -87,8 +124,8 @@ async def _run_turn_loop(
     agent_b: DebateAgent,
     version_a: DebateAgentVersion | None,
     version_b: DebateAgentVersion | None,
-    key_a: str,
-    key_b: str,
+    api_key_a: str,
+    api_key_b: str,
     client: InferenceClient,
     orchestrator: DebateOrchestrator,
     model_cache: dict,
@@ -99,7 +136,7 @@ async def _run_turn_loop(
     executor = TurnExecutor(client, db)
     result = await run_turns_1v1(
         executor, orchestrator, db, match, topic,
-        agent_a, agent_b, version_a, version_b, key_a, key_b,
+        agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
         model_cache, usage_batch, parallel,
     )
     return result.claims_a, result.claims_b, result.total_penalty_a, result.total_penalty_b
@@ -114,19 +151,21 @@ class DebateEngine:
         self.db = db
 
     async def run(self, match_id: str) -> None:
-        """진입점. 엔티티 로드 → 로컬 에이전트 대기 → 크레딧 차감 → 포맷 runner → 판정 → 후처리."""
+        """진입점. 엔티티 로드 → 크레딧 차감 → 로컬 에이전트 대기 → 포맷 runner → 판정 → 후처리."""
         match, topic, agent_a, agent_b, version_a, version_b = await self._load_entities(match_id)
+
+        # 크레딧 차감을 WebSocket 대기 전에 수행 — 잔액 부족 시 대기 시간 낭비 방지
+        await self._deduct_credits(match, topic, agent_a, agent_b)
+
         await self._wait_for_local_agents(match, topic, agent_a, agent_b)
 
-        if match.status == "forfeited":
+        if match.status == "forfeit":
             # 로컬 에이전트 접속 실패로 몰수패 처리된 경우
             return
 
-        await self._deduct_credits(match, agent_a, agent_b)
-
         use_platform = getattr(match, "is_test", False)
-        key_a = _resolve_api_key(agent_a, force_platform=use_platform)
-        key_b = _resolve_api_key(agent_b, force_platform=use_platform)
+        api_key_a = _resolve_api_key(agent_a, force_platform=use_platform)
+        api_key_b = _resolve_api_key(agent_b, force_platform=use_platform)
 
         match.status = "in_progress"
         match.started_at = datetime.now(UTC)
@@ -135,26 +174,46 @@ class DebateEngine:
 
         async with InferenceClient() as client:
             await self._run_with_client(
-                client, match, topic, agent_a, agent_b, version_a, version_b, key_a, key_b
+                client, match, topic, agent_a, agent_b, version_a, version_b, api_key_a, api_key_b
             )
 
     async def _load_entities(
         self, match_id: str
     ) -> tuple[DebateMatch, DebateTopic, DebateAgent, DebateAgent, DebateAgentVersion | None, DebateAgentVersion | None]:
+        """매치 실행에 필요한 모든 엔티티를 병렬 조회한다.
+
+        Args:
+            match_id: 조회할 매치 UUID 문자열.
+
+        Returns:
+            (match, topic, agent_a, agent_b, version_a, version_b) 튜플.
+
+        Raises:
+            ValueError: 매치·토픽·에이전트 중 하나라도 미존재 시.
+        """
         result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
         match = result.scalar_one_or_none()
         if match is None:
             raise ValueError(f"Match {match_id} not found")
 
-        topic_result = await self.db.execute(select(DebateTopic).where(DebateTopic.id == match.topic_id))
-        topic = topic_result.scalar_one()
-
-        agents_res = await self.db.execute(
+        # topic + agents 병렬 조회 — match 로드 후 id가 확정되므로 gather 가능
+        topic_fut = self.db.execute(select(DebateTopic).where(DebateTopic.id == match.topic_id))
+        agents_fut = self.db.execute(
             select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
+        topic_result, agents_res = await asyncio.gather(topic_fut, agents_fut)
+
+        topic = topic_result.scalar_one_or_none()
+        if topic is None:
+            raise ValueError(f"Topic {match.topic_id} not found for match {match.id}")
+
         agents_map = {str(a.id): a for a in agents_res.scalars().all()}
-        agent_a = agents_map[str(match.agent_a_id)]
-        agent_b = agents_map[str(match.agent_b_id)]
+        agent_a = agents_map.get(str(match.agent_a_id))
+        agent_b = agents_map.get(str(match.agent_b_id))
+        if agent_a is None:
+            raise ValueError(f"Agent {match.agent_a_id} not found for match {match.id}")
+        if agent_b is None:
+            raise ValueError(f"Agent {match.agent_b_id} not found for match {match.id}")
 
         version_ids = [v for v in [match.agent_a_version_id, match.agent_b_version_id] if v is not None]
         versions_map: dict = {}
@@ -175,6 +234,17 @@ class DebateEngine:
         agent_a: DebateAgent,
         agent_b: DebateAgent,
     ) -> None:
+        """로컬 에이전트가 있으면 WebSocket 접속을 대기한다.
+
+        접속 실패 시 ForfeitHandler.handle_disconnect()를 호출하고
+        match.status를 'forfeit'으로 변경한다. 이후 run()에서 forfeit 상태를 감지해 종료.
+
+        Args:
+            match: 대기 대상 매치.
+            topic: 토론 주제 (match_ready 메시지용).
+            agent_a: A측 에이전트.
+            agent_b: B측 에이전트.
+        """
         ws_manager = WSConnectionManager.get_instance()
         has_local = agent_a.provider == "local" or agent_b.provider == "local"
         if not has_local:
@@ -184,53 +254,133 @@ class DebateEngine:
         await self.db.commit()
         await publish_event(str(match.id), "waiting_agent", {"match_id": str(match.id)})
 
-        for agent, side in [(agent_a, "agent_a"), (agent_b, "agent_b")]:
-            if agent.provider == "local":
-                connected = await ws_manager.wait_for_connection(
-                    agent.id, settings.debate_agent_connect_timeout
+        local_agents = [
+            (agent, side)
+            for agent, side in [(agent_a, "agent_a"), (agent_b, "agent_b")]
+            if agent.provider == "local"
+        ]
+
+        async def _try_connect(agent: DebateAgent, side: str) -> bool:
+            connect_timeout = (
+                settings.debate_agent_connect_timeout_tool
+                if getattr(agent, "tools_enabled", False)
+                else settings.debate_agent_connect_timeout
+            )
+            for attempt in range(1, settings.debate_agent_connect_retries + 1):
+                if await ws_manager.wait_for_connection(agent.id, connect_timeout):
+                    return True
+                logger.warning(
+                    "Agent %s connect attempt %d/%d failed for match %s",
+                    agent.name, attempt, settings.debate_agent_connect_retries, match.id,
                 )
-                if not connected:
-                    winner_agent = agent_b if side == "agent_a" else agent_a
-                    await ForfeitHandler(self.db).handle_disconnect(match, agent, winner_agent, side)
-                    match.status = "forfeited"
-                    return
+            return False
+
+        # 로컬 에이전트가 여럿이면 병렬 대기 — 순차 시 최대 N×90초 낭비 방지
+        results = await asyncio.gather(*[_try_connect(agent, side) for agent, side in local_agents])
+
+        for (agent, side), connected in zip(local_agents, results):
+            if not connected:
+                winner_agent = agent_b if side == "agent_a" else agent_a
+                await ForfeitHandler(self.db).handle_disconnect(match, agent, winner_agent, side)
+                # handle_disconnect()가 match.status = "forfeit" + commit() 처리
+                return
 
         # 모든 로컬 에이전트 접속 완료 — match_ready 전송
-        for agent, side in [(agent_a, "agent_a"), (agent_b, "agent_b")]:
-            if agent.provider == "local":
-                opponent = agent_b if side == "agent_a" else agent_a
-                await ws_manager.send_match_ready(agent.id, WSMatchReady(
-                    match_id=match.id,
-                    topic_title=topic.title,
-                    opponent_name=opponent.name,
-                    your_side=side,
-                ))
+        for agent, side in local_agents:
+            opponent = agent_b if side == "agent_a" else agent_a
+            await ws_manager.send_match_ready(agent.id, WSMatchReady(
+                match_id=match.id,
+                topic_title=topic.title,
+                opponent_name=opponent.name,
+                your_side=side,
+            ))
 
     async def _deduct_credits(
         self,
         match: DebateMatch,
+        topic: DebateTopic,
         agent_a: DebateAgent,
         agent_b: DebateAgent,
     ) -> None:
-        """BYOK가 아닌 에이전트 소유자의 크레딧 차감."""
-        if not (settings.debate_credit_cost > 0 and settings.credit_system_enabled):
+        """플랫폼 크레딧 사용 에이전트의 크레딧 차감.
+
+        필요 크레딧은 모델별 credit_per_1k_tokens × 예상 토큰 수로 동적 산정.
+        예상 토큰 = max_turns × turn_token_limit × 1.5 (입력 토큰 누적 대비 버퍼)
+        리뷰/판정 등 플랫폼 오케스트레이션 토큰은 포함하지 않음.
+        """
+        if not settings.credit_system_enabled:
             return
 
+        # 에이전트별 모델 조회 후 필요 크레딧 계산
+        model_ids = {agent_a.model_id, agent_b.model_id}
+        models_res = await self.db.execute(
+            select(LLMModel).where(LLMModel.model_id.in_(model_ids))
+        )
+        models_map = {m.model_id: m for m in models_res.scalars().all()}
+
         for agent in (agent_a, agent_b):
-            if agent.encrypted_api_key:
+            if not agent.use_platform_credits:
                 continue
+            required = _calculate_required_credits(agent, models_map, topic.max_turns, topic.turn_token_limit)
             deduct_result = await self.db.execute(
                 update(User)
-                .where(User.id == agent.owner_id, User.credit_balance >= settings.debate_credit_cost)
-                .values(credit_balance=User.credit_balance - settings.debate_credit_cost)
+                .where(User.id == agent.owner_id, User.credit_balance >= required)
+                .values(credit_balance=User.credit_balance - required)
                 .returning(User.credit_balance)
             )
             if deduct_result.fetchone() is None:
-                raise ValueError(
-                    f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {settings.debate_credit_cost}석)"
-                )
+                message = f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {required}석)"
+                await publish_event(str(match.id), "credit_insufficient", {
+                    "agent_id": str(agent.id),
+                    "agent_name": agent.name,
+                    "required": required,
+                    "message": message,
+                })
+                # credit_insufficient SSE를 이미 발행했으므로 error SSE 재발행 방지용 전용 예외
+                raise CreditInsufficientError(message)
 
         await self.db.commit()
+
+    async def _void_match(self, db: AsyncSession, match: DebateMatch, reason: str) -> None:
+        """매치를 error 상태로 전환하고 SSE로 알린다.
+
+        Args:
+            db: 비동기 DB 세션.
+            match: 상태를 변경할 매치 객체.
+            reason: error 사유 문자열 (match_void SSE 페이로드에 포함).
+        """
+        match.status = "error"
+        match.error_reason = reason
+        await db.commit()
+        await publish_event(str(match.id), "match_void", {"reason": reason})
+
+    async def _refund_credits(self, db: AsyncSession, match: DebateMatch) -> None:
+        """선차감 크레딧을 두 참가자에게 자동 환불한다.
+
+        match.credits_deducted가 0이거나 None이면 즉시 반환.
+        use_platform_credits=True인 에이전트 소유자들에게만 균등 환불.
+
+        Args:
+            db: 비동기 DB 세션.
+            match: 환불 대상 매치. credits_deducted 필드를 참조한다.
+        """
+        if not match.credits_deducted:
+            return
+        refund = match.credits_deducted / 2
+        # agent_a_id, agent_b_id를 통해 owner_id를 가져와 균등 환불
+        agents_res = await db.execute(
+            select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
+        )
+        agents = agents_res.scalars().all()
+        owner_ids = list({a.owner_id for a in agents if a.use_platform_credits})
+        if not owner_ids:
+            return
+        await db.execute(
+            update(User)
+            .where(User.id.in_(owner_ids))
+            .values(credit_balance=User.credit_balance + refund)
+        )
+        await db.commit()
 
     async def _run_with_client(
         self,
@@ -241,10 +391,26 @@ class DebateEngine:
         agent_b: DebateAgent,
         version_a: DebateAgentVersion | None,
         version_b: DebateAgentVersion | None,
-        key_a: str,
-        key_b: str,
+        api_key_a: str,
+        api_key_b: str,
     ) -> None:
-        """InferenceClient 준비 후 포맷 dispatch + 판정."""
+        """InferenceClient를 이용해 포맷별 턴 루프를 실행하고 최종 판정·후처리를 수행한다.
+
+        MatchVoidError → _void_match + _refund_credits 후 반환.
+        ForfeitError → ForfeitHandler.handle_retry_exhaustion 후 반환.
+        정상 완료 → DebateJudge.judge → MatchFinalizer.finalize.
+
+        Args:
+            client: 공유 InferenceClient (커넥션 풀 재사용).
+            match: 실행 중인 매치.
+            topic: 토론 주제.
+            agent_a: A측 에이전트.
+            agent_b: B측 에이전트.
+            version_a: A측 에이전트 버전 스냅샷. 없으면 기본 프롬프트 사용.
+            version_b: B측 에이전트 버전 스냅샷. 없으면 기본 프롬프트 사용.
+            api_key_a: A측 LLM API 키.
+            api_key_b: B측 LLM API 키.
+        """
         orchestrator = DebateOrchestrator(optimized=settings.debate_orchestrator_optimized, client=client)
         executor = TurnExecutor(client, self.db)
         model_cache: dict[str, LLMModel] = {}
@@ -257,7 +423,7 @@ class DebateEngine:
             if match_format == "1v1":
                 loop_result: TurnLoopResult = await runner(
                     executor, orchestrator, self.db, match, topic,
-                    agent_a, agent_b, version_a, version_b, key_a, key_b,
+                    agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
                     model_cache, usage_batch,
                     parallel=orchestrator.optimized,
                 )
@@ -266,6 +432,10 @@ class DebateEngine:
                     executor, orchestrator, self.db, match, topic,
                     agent_a, agent_b, model_cache, usage_batch,
                 )
+        except MatchVoidError as void_err:
+            await self._void_match(self.db, match, str(void_err))
+            await self._refund_credits(self.db, match)
+            return
         except ForfeitError as forfeit:
             await ForfeitHandler(self.db).handle_retry_exhaustion(match, agent_a, agent_b, forfeit.forfeited_speaker)
             return
@@ -280,7 +450,8 @@ class DebateEngine:
             .order_by(DebateTurnLog.turn_number, DebateTurnLog.speaker)
         )
         turns = list(turns_res.scalars().all())
-        judgment = await orchestrator.judge(
+        judge_instance = DebateJudge(client=client)
+        judgment = await judge_instance.judge(
             match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
         )
 
@@ -294,10 +465,21 @@ class DebateEngine:
 # ── 매치 실행 진입점 ──────────────────────────────────────────────────────────
 
 async def run_debate(match_id: str) -> None:
-    """매치 실행. app-level DB 세션 풀로 백그라운드 실행."""
+    """매치 실행 진입점. app-level DB 세션 풀로 백그라운드 태스크에서 호출된다.
+
+    DebateEngine.run() 래핑 후 예외별 처리:
+      - CreditInsufficientError: credit_insufficient SSE 이미 발행됨 — error SSE 생략
+      - CancelledError: asyncio.shield로 DB/SSE 마킹 후 재발생
+      - Exception: DB error 마킹 + error SSE 발행
+
+    Args:
+        match_id: 실행할 매치 UUID 문자열.
+    """
+    # 순환 import 방지를 위해 함수 레벨 import — 한 번만 선언
+    from app.services.notification_service import NotificationService
+
     async with async_session() as notify_db:
         try:
-            from app.services.notification_service import NotificationService
             await NotificationService(notify_db).notify_match_event(match_id, "match_started")
             await notify_db.commit()
         except Exception:
@@ -307,6 +489,19 @@ async def run_debate(match_id: str) -> None:
         try:
             engine = DebateEngine(db)
             await engine.run(match_id)
+        except CreditInsufficientError as exc:
+            # credit_insufficient SSE가 이미 발행됨 — error SSE 중복 발행 생략
+            logger.warning("Match %s aborted: %s", match_id, exc)
+            try:
+                await db.rollback()
+                await db.execute(
+                    update(DebateMatch)
+                    .where(DebateMatch.id == match_id)
+                    .values(status="error", finished_at=datetime.now(UTC))
+                )
+                await db.commit()
+            except Exception:
+                logger.error("Failed to mark match %s as error after credit failure", match_id)
         except asyncio.CancelledError:
             logger.warning("Debate task cancelled for match %s — marking as error", match_id)
             try:
@@ -323,6 +518,7 @@ async def run_debate(match_id: str) -> None:
             raise
         except Exception as exc:
             logger.error("Debate engine error for match %s: %s", match_id, exc, exc_info=True)
+            db_marked = False
             try:
                 await db.rollback()
                 await db.execute(
@@ -331,13 +527,17 @@ async def run_debate(match_id: str) -> None:
                     .values(status="error", finished_at=datetime.now(UTC))
                 )
                 await db.commit()
+                db_marked = True
             except Exception:
                 logger.error("Failed to mark match %s as error in DB", match_id)
-            await publish_event(match_id, "error", {"message": str(exc)})
+            # DB 마킹 성공 여부와 무관하게 SSE 발행 시도 — 실패해도 태스크 종료에 영향 없도록
+            try:
+                await publish_event(match_id, "error", {"message": str(exc)})
+            except Exception:
+                logger.warning("Failed to publish error event for match %s (db_marked=%s)", match_id, db_marked)
         else:
             async with async_session() as notify_db:
                 try:
-                    from app.services.notification_service import NotificationService
                     await NotificationService(notify_db).notify_match_event(match_id, "match_finished")
                     await notify_db.commit()
                 except Exception:

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
+from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.turn_executor import TurnExecutor
 from app.services.llm.providers.base import APIKeyError
 
@@ -100,7 +101,7 @@ class TestTurnExecutorExecute:
         client.generate_stream_byok = fake_stream
 
         with (
-            patch("app.services.debate.formats._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
             patch("app.services.debate.turn_executor.publish_event", new_callable=AsyncMock),
             patch("app.services.debate.turn_executor.settings") as mock_settings,
         ):
@@ -134,8 +135,8 @@ class TestTurnExecutorExecuteWithRetry:
     """TurnExecutor.execute_with_retry() 재시도 로직 테스트."""
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_APIKeyError_즉시실패반환(self):
-        """APIKeyError 발생 시 재시도 없이 즉시 None을 반환한다."""
+    async def test_execute_with_retry_APIKeyError_재시도후무효화(self):
+        """APIKeyError 발생 시 1회 재시도 후 연속 실패하면 MatchVoidError를 발생시킨다."""
         db = AsyncMock()
         client = AsyncMock()
         agent = _make_agent(provider="openai")
@@ -147,24 +148,25 @@ class TestTurnExecutorExecuteWithRetry:
                 side_effect=APIKeyError("Invalid API key"),
             ),
             patch("app.services.debate.turn_executor.settings") as mock_settings,
+            patch("app.services.debate.turn_executor.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_settings.debate_turn_max_retries = 3
 
             executor = TurnExecutor(client=client, db=db)
-            result = await executor.execute_with_retry(
-                match=_make_match(),
-                topic=_make_topic(),
-                turn_number=1,
-                speaker="agent_a",
-                agent=agent,
-                version=None,
-                api_key="invalid-key",
-                my_claims=[],
-                opponent_claims=[],
-            )
+            with pytest.raises(MatchVoidError):
+                await executor.execute_with_retry(
+                    match=_make_match(),
+                    topic=_make_topic(),
+                    turn_number=1,
+                    speaker="agent_a",
+                    agent=agent,
+                    version=None,
+                    api_key="invalid-key",
+                    my_claims=[],
+                    opponent_claims=[],
+                )
 
-        # APIKeyError는 재시도 없이 즉시 None 반환 — execute는 딱 1번만 호출돼야 함
-        assert result is None
+        # attempt=0: sleep 후 continue, attempt=1: MatchVoidError — execute는 2번 호출돼야 함
 
     @pytest.mark.asyncio
     async def test_execute_with_retry_타임아웃_재시도_후실패(self):

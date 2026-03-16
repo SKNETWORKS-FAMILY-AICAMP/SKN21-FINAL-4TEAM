@@ -3,15 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Swords, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { api, ApiError } from '@/lib/api';
 import { useUserStore } from '@/stores/userStore';
 
 type AuthMode = 'login' | 'register';
-
-/** 하드코딩 사용자 계정 (백엔드 미연동) */
-const MOCK_ACCOUNTS: Record<string, { password: string; nickname: string; role: 'user' | 'admin' }> = {
-  nemo_user: { password: '123456', nickname: '토론왕김철수', role: 'user' },
-  admin: { password: 'admin123', nickname: '관리자', role: 'admin' },
-};
 
 function validateLoginId(value: string): string | null {
   if (value.length < 2) return '2자 이상 입력하세요';
@@ -41,7 +36,7 @@ function getPasswordStrength(pw: string): { level: 0 | 1 | 2 | 3; label: string;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser } = useUserStore();
+  const { initialize, isAdmin } = useUserStore();
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginId, setLoginId] = useState('');
   const [nickname, setNickname] = useState('');
@@ -54,60 +49,69 @@ export default function LoginPage() {
 
   const passwordStrength = getPasswordStrength(password);
 
+  const resolveApiError = (err: unknown): string => {
+    if (err instanceof ApiError) {
+      // 백엔드가 내려주는 에러 코드별 한국어 메시지
+      switch (err.code) {
+        case 'AUTH_INVALID_CREDENTIALS':
+          return '아이디 또는 비밀번호가 올바르지 않습니다';
+        case 'AUTH_USER_NOT_FOUND':
+          return '존재하지 않는 아이디입니다';
+        case 'AUTH_DUPLICATE_LOGIN_ID':
+          return '이미 사용 중인 아이디입니다';
+        case 'AUTH_DUPLICATE_NICKNAME':
+          return '이미 사용 중인 닉네임입니다';
+        case 'AUTH_ACCOUNT_DISABLED':
+          return '비활성화된 계정입니다. 관리자에게 문의하세요';
+        default:
+          // 백엔드 detail 메시지가 있으면 그대로, 없으면 일반 메시지
+          return err.message || '요청 처리 중 오류가 발생했습니다';
+      }
+    }
+    return '네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // 짧은 딜레이로 실제 통신 느낌
-    await new Promise((r) => setTimeout(r, 500));
+    try {
+      if (mode === 'login') {
+        await api.post('/auth/login', { login_id: loginId, password });
+        // 로그인 성공 — 서버가 HttpOnly 쿠키를 발급했으므로 /auth/me로 사용자 정보 조회
+        // initialized를 초기화해 initialize()가 재실행되도록 함
+        useUserStore.setState({ initialized: false });
+        await initialize();
+        router.push(isAdmin() ? '/admin' : '/');
+      } else {
+        // 클라이언트 측 사전 검증
+        const loginIdErr = validateLoginId(loginId.trim());
+        if (loginIdErr) { setError(loginIdErr); return; }
+        const nicknameErr = validateNickname(nickname.trim());
+        if (nicknameErr) { setError(nicknameErr); return; }
+        if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); return; }
+        if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); return; }
 
-    if (mode === 'login') {
-      // 하드코딩 로그인 검증
-      const account = MOCK_ACCOUNTS[loginId];
-      if (!account || account.password !== password) {
-        setError('아이디 또는 비밀번호가 올바르지 않습니다');
-        setLoading(false);
-        return;
+        await api.post('/auth/signup', {
+          login_id: loginId.trim(),
+          password,
+          nickname: nickname.trim(),
+          ...(email.trim() ? { email: email.trim() } : {}),
+        });
+        // 회원가입 완료 후 로그인 탭으로 전환 (백엔드가 토큰을 내려주지 않으므로)
+        setMode('login');
+        setPassword('');
+        setConfirmPassword('');
+        setNickname('');
+        setEmail('');
+        setError('');
       }
-      setUser({
-        id: `user-${loginId}`,
-        login_id: loginId,
-        nickname: account.nickname,
-        role: account.role,
-        ageGroup: 'adult_verified',
-        adultVerifiedAt: '2025-11-15T09:00:00Z',
-        preferredLlmModelId: null,
-        creditBalance: 1000,
-        subscriptionPlanKey: null,
-      });
-      router.push(account.role === 'admin' ? '/admin' : '/');
-    } else {
-      // 하드코딩 회원가입 검증
-      const loginIdErr = validateLoginId(loginId.trim());
-      if (loginIdErr) { setError(loginIdErr); setLoading(false); return; }
-      const nicknameErr = validateNickname(nickname.trim());
-      if (nicknameErr) { setError(nicknameErr); setLoading(false); return; }
-      if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); setLoading(false); return; }
-      if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); setLoading(false); return; }
-      if (MOCK_ACCOUNTS[loginId.trim()]) { setError('이미 사용 중인 아이디입니다'); setLoading(false); return; }
-
-      // 새 계정을 메모리에 추가
-      MOCK_ACCOUNTS[loginId.trim()] = { password, nickname: nickname.trim(), role: 'user' };
-      setUser({
-        id: `user-${loginId.trim()}`,
-        login_id: loginId.trim(),
-        nickname: nickname.trim(),
-        role: 'user',
-        ageGroup: 'unverified',
-        adultVerifiedAt: null,
-        preferredLlmModelId: null,
-        creditBalance: 0,
-        subscriptionPlanKey: null,
-      });
-      router.push('/');
+    } catch (err) {
+      setError(resolveApiError(err));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -267,15 +271,6 @@ export default function LoginPage() {
           >
             {loading ? '처리 중...' : mode === 'login' ? '로그인' : '가입하기'}
           </button>
-
-          {/* 테스트 계정 안내 */}
-          {mode === 'login' && (
-            <div className="mt-2 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-              <p className="text-xs font-bold text-blue-700 m-0 mb-1">🧪 테스트 계정</p>
-              <p className="text-xs text-blue-600 m-0">아이디: <strong>nemo_user</strong> / 비밀번호: <strong>123456</strong></p>
-              <p className="text-xs text-blue-600 m-0">아이디: <strong>admin</strong> / 비밀번호: <strong>admin123</strong></p>
-            </div>
-          )}
         </form>
       </div>
     </div>

@@ -18,11 +18,62 @@ logger = logging.getLogger(__name__)
 
 
 class ForfeitError(Exception):
-    """재시도를 모두 소진한 에이전트의 부전패를 알리는 예외."""
+    """재시도를 모두 소진한 에이전트의 부전패를 알리는 예외.
+
+    ForfeitHandler.handle_retry_exhaustion()에서 처리된다.
+
+    Attributes:
+        forfeited_speaker: 부전패 처리된 발언자 ('agent_a' | 'agent_b').
+    """
 
     def __init__(self, forfeited_speaker: str) -> None:
         self.forfeited_speaker = forfeited_speaker
         super().__init__(f"Forfeit by {forfeited_speaker}")
+
+
+class ForfeitHandler:
+    """부전패 처리 — 접속 미이행(handle_disconnect) + 재시도 소진(handle_retry_exhaustion)."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+async def _update_season_elo(
+    db: AsyncSession,
+    match: DebateMatch,
+    agent_a: DebateAgent,
+    agent_b: DebateAgent,
+    elo_result: str,
+    result_a: str,
+    result_b: str,
+    score_diff: int,
+) -> tuple[float, float]:
+    """시즌 ELO를 갱신하는 공통 헬퍼.
+
+    MatchFinalizer와 ForfeitHandler 양쪽에서 동일 로직으로 사용한다.
+
+    Args:
+        db: 비동기 DB 세션.
+        match: 완료된 매치 (season_id 참조).
+        agent_a: A측 에이전트.
+        agent_b: B측 에이전트.
+        elo_result: 'a_win' | 'b_win' | 'draw'.
+        result_a: A 결과 문자열 ('win' | 'loss' | 'draw').
+        result_b: B 결과 문자열 ('win' | 'loss' | 'draw').
+        score_diff: 점수차 절댓값 (ELO 배수 계산용).
+
+    Returns:
+        (new_season_elo_a, new_season_elo_b) 튜플.
+    """
+    from app.services.debate.helpers import calculate_elo
+    from app.services.debate.season_service import DebateSeasonService
+
+    season_svc = DebateSeasonService(db)
+    stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
+    stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
+    new_a, new_b = calculate_elo(stats_a.elo_rating, stats_b.elo_rating, elo_result, score_diff=score_diff)
+    await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), new_a, result_a)
+    await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), new_b, result_b)
+    return new_a, new_b
 
 
 class ForfeitHandler:
@@ -42,10 +93,25 @@ class ForfeitHandler:
         version_a_id: str | None = None,
         version_b_id: str | None = None,
     ) -> tuple[float, float]:
-        """ELO + 전적 + 시즌 + 승급전 공통 처리. (new_a_elo, new_b_elo) 반환."""
+        """ELO·전적·시즌·승급전을 공통으로 처리한다.
+
+        is_test=True 매치는 ELO/전적 갱신을 건너뛴다.
+
+        Args:
+            match: 처리할 매치.
+            agent_a: A측 에이전트.
+            agent_b: B측 에이전트.
+            elo_result: 'a_win' | 'b_win' | 'draw'.
+            result_a: A 결과 ('win' | 'loss' | 'draw').
+            result_b: B 결과 ('win' | 'loss' | 'draw').
+            version_a_id: A 버전 UUID 문자열 (없으면 None).
+            version_b_id: B 버전 UUID 문자열 (없으면 None).
+
+        Returns:
+            (new_elo_a, new_elo_b) 튜플.
+        """
         from app.services.debate.agent_service import DebateAgentService
         from app.services.debate.promotion_service import DebatePromotionService
-        from app.services.debate.season_service import DebateSeasonService
 
         new_a, new_b = calculate_elo(
             agent_a.elo_rating, agent_b.elo_rating, elo_result,
@@ -60,15 +126,10 @@ class ForfeitHandler:
         await agent_service.update_elo(str(agent_b.id), new_b, result_b, version_b_id)
 
         if match.season_id:
-            season_svc = DebateSeasonService(self.db)
-            stats_a = await season_svc.get_or_create_season_stats(str(agent_a.id), str(match.season_id))
-            stats_b = await season_svc.get_or_create_season_stats(str(agent_b.id), str(match.season_id))
-            s_new_a, s_new_b = calculate_elo(
-                stats_a.elo_rating, stats_b.elo_rating, elo_result,
+            await _update_season_elo(
+                self.db, match, agent_a, agent_b, elo_result, result_a, result_b,
                 score_diff=settings.debate_elo_forfeit_score_diff,
             )
-            await season_svc.update_season_stats(str(agent_a.id), str(match.season_id), s_new_a, result_a)
-            await season_svc.update_season_stats(str(agent_b.id), str(match.season_id), s_new_b, result_b)
 
         promo_svc = DebatePromotionService(self.db)
         for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
@@ -86,7 +147,16 @@ class ForfeitHandler:
         winner: DebateAgent,
         side: str,
     ) -> None:
-        """로컬 에이전트 접속 미이행 부전패 처리 (기존 _handle_forfeit 로직)."""
+        """로컬 에이전트가 접속 제한 시간 내에 연결하지 못한 경우 부전패 처리.
+
+        match.status를 'forfeit'으로 변경하고 SSE로 알림을 발행한다.
+
+        Args:
+            match: 처리할 매치.
+            loser: 접속 실패한 에이전트 (부전패 측).
+            winner: 상대 에이전트 (승자).
+            side: 부전패 측 ('agent_a' | 'agent_b').
+        """
         match.status = "forfeit"
         match.finished_at = datetime.now(UTC)
         match.winner_id = winner.id
@@ -123,7 +193,16 @@ class ForfeitHandler:
         agent_b: DebateAgent,
         forfeited_speaker: str,
     ) -> None:
-        """재시도 소진 부전패 처리 (기존 _finalize_forfeit 로직). judge() 없이 즉시 종료."""
+        """재시도를 모두 소진한 에이전트의 부전패를 처리한다.
+
+        judge() LLM 호출 없이 즉시 종료하며, 예측투표 정산까지 수행한다.
+
+        Args:
+            match: 처리할 매치.
+            agent_a: A측 에이전트.
+            agent_b: B측 에이전트.
+            forfeited_speaker: 부전패 발언자 ('agent_a' | 'agent_b').
+        """
         from app.services.debate.match_service import DebateMatchService
 
         if forfeited_speaker == "agent_a":

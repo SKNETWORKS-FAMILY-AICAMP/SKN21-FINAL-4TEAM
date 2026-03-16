@@ -1,128 +1,150 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  TrendingUp, Trophy, Swords, Cpu, Users, ArrowLeft, 
-  Star, MessageSquare, Zap, Clock, DollarSign, Brain,
-  ChevronRight, Award, Binary, ChevronDown
+import { useRouter } from 'next/navigation';
+import {
+  TrendingUp,
+  Trophy,
+  Swords,
+  Cpu,
+  Users,
+  ArrowLeft,
+  Star,
+  Zap,
+  DollarSign,
+  Brain,
+  ChevronRight,
+  Award,
+  Binary,
+  MessageSquare,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useDebateStore } from '@/stores/debateStore';
+import type { RankingEntry } from '@/types/debate';
 
 // --- Types ---
 
-type RankingType = 'agent' | 'debate' | 'llm';
+type RankingCategory = 'agent' | 'debate' | 'llm';
 
-interface BaseRankingItem {
+type LLMModelStatsResponse = {
+  id: string;
+  model_id: string;
+  display_name: string;
+  provider: string;
+  tier: string;
+  input_cost_per_1m: number;
+  output_cost_per_1m: number;
+  max_context_length: number;
+  agent_count: number;
+  total_wins: number;
+  total_losses: number;
+  total_draws: number;
+  win_rate: number | null;
+};
+
+type DisplayRankingItem = {
   id: string;
   rank: number;
   name: string;
-  description: string;
-  tier: 'S' | 'A' | 'B' | 'C';
-  tags: string[];
-  type: RankingType;
-}
-
-interface AgentItem extends BaseRankingItem {
-  type: 'agent';
-  creator: string;
-  popularity: number;
-  registeredAgents: number;
-  avgElo: number;
-  winRate: number;
-}
-
-interface DebateItem extends BaseRankingItem {
-  type: 'debate';
+  subtitle: string;
   elo: number;
   wins: number;
   losses: number;
   winRate: number;
-  registeredAgents: number;
+  tier: string;
+  category: RankingCategory;
+  // LLM 전용
+  maxTokens?: string;
+  costPer1k?: string;
+  agentCount?: number;
+  win_rate?: number | null;
+};
+
+// --- Converters ---
+
+function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
+  return [...entries]
+    .sort((a, b) => b.elo_rating - a.elo_rating)
+    .map((entry, i) => {
+      const total = entry.wins + entry.losses || 1;
+      const winRate = Math.round((entry.wins / total) * 1000) / 10;
+      return {
+        id: entry.id,
+        rank: i + 1,
+        name: entry.name,
+        subtitle: entry.owner_nickname,
+        elo: entry.elo_rating,
+        wins: entry.wins,
+        losses: entry.losses,
+        winRate,
+        tier: entry.tier ?? 'B',
+        category: 'agent' as const,
+      };
+    });
 }
 
-interface LLMItem extends BaseRankingItem {
-  type: 'llm';
-  provider: string;
-  usage: number; // as percentage
-  registeredAgents: number;
-  avgElo: number;
-  winRate: number;
-  maxTokens: string;
-  cost: string;
-  latency: string;
+function toWinrateItems(entries: RankingEntry[]): DisplayRankingItem[] {
+  return [...entries]
+    .sort((a, b) => {
+      const rateA = a.wins / (a.wins + a.losses || 1);
+      const rateB = b.wins / (b.wins + b.losses || 1);
+      return rateB - rateA;
+    })
+    .map((entry, i) => {
+      const total = entry.wins + entry.losses || 1;
+      const winRate = Math.round((entry.wins / total) * 1000) / 10;
+      return {
+        id: entry.id,
+        rank: i + 1,
+        name: entry.name,
+        subtitle: entry.owner_nickname,
+        elo: entry.elo_rating,
+        wins: entry.wins,
+        losses: entry.losses,
+        winRate,
+        tier: entry.tier ?? 'B',
+        category: 'debate' as const,
+      };
+    });
 }
 
-type RankingItem = AgentItem | DebateItem | LLMItem;
-
-// --- Mock Data ---
-
-const AGENT_DATA: AgentItem[] = Array.from({ length: 12 }).map((_, i) => ({
-  id: `agent-${i + 1}`,
-  rank: i + 1,
-  name: `에이전트 ${['논리왕', '반박의기재', '팩트폭격기', '부드러운설득', '데이터분석가', '중립기어', '토크마스터', '비판적사고', '창의적해결', '철학자', '변론인', '정치인'][i]}`,
-  creator: `User_${100 + i}`,
-  popularity: 15420 - i * 850 + Math.floor(Math.random() * 100),
-  registeredAgents: 342 - i * 15,
-  avgElo: 1850 - i * 45,
-  winRate: 85 - i * 3,
-  tier: i < 2 ? 'S' : i < 5 ? 'A' : 'B',
-  description: "가장 강력한 범용 에이전트입니다. 논리적 사고와 복잡한 추론에 뛰어나며, 다양한 토론 환경에서 높은 승률을 보여줍니다.",
-  tags: ['논리적 추론', '복잡한 분석', '다국어 지원', '장문 처리'],
-  type: 'agent'
-}));
-
-const DEBATE_DATA: DebateItem[] = Array.from({ length: 12 }).map((_, i) => ({
-  id: `debate-${i + 1}`,
-  rank: i + 1,
-  name: `마스터 ${['알파', '브라보', '찰리', '델타', '에코', '폭스트롯', '골프', '호텔', '인디아', '줄리엣', '킬로', '리마'][i]}`,
-  elo: 2150 - i * 40,
-  wins: 245 - i * 12,
-  losses: 45 + i * 5,
-  winRate: 92 - i * 2,
-  registeredAgents: 120 - i * 8,
-  tier: i < 3 ? 'S' : i < 6 ? 'A' : 'B',
-  description: "실시간 토론 엔진에서 검증된 최정예 토너먼트 리더입니다. 매끄러운 반박 구조와 설득력 있는 논거 제시가 일품입니다.",
-  tags: ['토너먼트 우승', '압도적 승률', '메타 분석', '논쟁 지배'],
-  type: 'debate'
-}));
-
-const LLM_DATA: LLMItem[] = ([
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', tier: 'S', usage: 15420, registeredAgents: 342, avgElo: 1756, winRate: 72, maxTokens: '128,000', cost: '$0.005', latency: '~1.2s' },
-  { id: 'claude-3-5', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', tier: 'S', usage: 12890, registeredAgents: 298, avgElo: 1712, winRate: 68, maxTokens: '200,000', cost: '$0.003', latency: '~0.9s' },
-  { id: 'gemini-2-0', name: 'Gemini 2.0 Flash', provider: 'Google', tier: 'A', usage: 9750, registeredAgents: 245, avgElo: 1688, winRate: 64, maxTokens: '1,000,000', cost: '$0.0001', latency: '~0.4s' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', tier: 'A', usage: 8210, registeredAgents: 180, avgElo: 1620, winRate: 58, maxTokens: '128,000', cost: '$0.00015', latency: '~0.6s' },
-  { id: 'claude-3-haiku', name: 'Claude 3 Haiku', provider: 'Anthropic', tier: 'B', usage: 6430, registeredAgents: 156, avgElo: 1580, winRate: 54, maxTokens: '200,000', cost: '$0.00025', latency: '~0.3s' },
-  { id: 'gemini-1-5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', tier: 'A', usage: 5120, registeredAgents: 124, avgElo: 1650, winRate: 61, maxTokens: '2,000,000', cost: '$0.0035', latency: '~1.1s' },
-  { id: 'llama-3-1', name: 'Llama 3.1 70B', provider: 'Meta', tier: 'B', usage: 3890, registeredAgents: 98, avgElo: 1595, winRate: 52, maxTokens: '128,000', cost: 'Free/OSS', latency: '~1.0s' },
-  { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'DeepSeek', tier: 'B', usage: 2340, registeredAgents: 65, avgElo: 1634, winRate: 55, maxTokens: '128,000', cost: '$0.0002', latency: '~0.7s' },
-  ...Array.from({ length: 4 }).map((_, i) => ({
-    id: `llm-other-${i}`,
-    name: `Model ${i + 9}`,
-    provider: 'Other',
-    tier: 'C' as const,
-    usage: 1200 - i * 150,
-    registeredAgents: 45 - i * 5,
-    avgElo: 1450 - i * 30,
-    winRate: 45 - i * 2,
-    maxTokens: '32,000',
-    cost: '$0.001',
-    latency: '~1.5s'
-  }))
-] as any[]).map((item, i) => ({
-  ...item,
-  rank: i + 1,
-  description: "가장 강력한 범용 모델. 논리적 사고와 복잡한 추론에 뛰어납니다. 토론 대결에서 꾸준한 성과를 보이며 압도적인 성능을 자랑합니다.",
-  tags: ['논리적 추론', '복잡한 분석', '다국어 지원', '장문 처리'],
-  type: 'llm'
-})) as LLMItem[];
+function toLLMItems(models: LLMModelStatsResponse[]): DisplayRankingItem[] {
+  return [...models]
+    .sort((a, b) => {
+      if (b.agent_count !== a.agent_count) return b.agent_count - a.agent_count;
+      const rateA = a.win_rate ?? 0;
+      const rateB = b.win_rate ?? 0;
+      if (rateB !== rateA) return rateB - rateA;
+      return a.display_name.localeCompare(b.display_name);
+    })
+    .map((m, i) => {
+      const avgCostPer1k = ((m.input_cost_per_1m + m.output_cost_per_1m) / 2 / 1000).toFixed(4);
+      const maxTokensFormatted = m.max_context_length.toLocaleString();
+      return {
+        id: m.id,
+        rank: i + 1,
+        name: m.display_name,
+        subtitle: m.provider,
+        elo: Math.round((m.win_rate ?? 0) * 1000),
+        wins: m.total_wins,
+        losses: m.total_losses,
+        winRate: m.win_rate != null ? Math.round(m.win_rate * 1000) / 10 : 0,
+        tier: m.tier,
+        category: 'llm' as const,
+        maxTokens: maxTokensFormatted,
+        costPer1k: `$${avgCostPer1k}`,
+        agentCount: m.agent_count,
+        win_rate: m.win_rate,
+      };
+    });
+}
 
 // --- Helper Functions ---
 
 const getRankColors = (rank: number) => {
-  if (rank === 1) return 'bg-[#FEFAF0] border-[#FDE68A]'; // Gold-ish
-  if (rank === 2) return 'bg-[#F9FAFB] border-[#E5E7EB]'; // Silver-ish
-  if (rank === 3) return 'bg-[#FFF7ED] border-[#FED7AA]'; // Bronze-ish
+  if (rank === 1) return 'bg-[#FEFAF0] border-[#FDE68A]';
+  if (rank === 2) return 'bg-[#F9FAFB] border-[#E5E7EB]';
+  if (rank === 3) return 'bg-[#FFF7ED] border-[#FED7AA]';
   return 'bg-white border-transparent hover:bg-gray-50';
 };
 
@@ -133,55 +155,115 @@ const getRankIconColor = (rank: number) => {
   return 'text-gray-400';
 };
 
-const getCategoryIcon = (type: RankingType) => {
-  switch (type) {
-    case 'agent': return <Users size={20} className="text-blue-500" />;
-    case 'debate': return <Swords size={20} className="text-red-500" />;
-    case 'llm': return <Trophy size={20} className="text-orange-500" />;
+const getCategoryIcon = (category: RankingCategory) => {
+  switch (category) {
+    case 'agent':
+      return <Users size={20} className="text-blue-500" />;
+    case 'debate':
+      return <Swords size={20} className="text-red-500" />;
+    case 'llm':
+      return <Trophy size={20} className="text-orange-500" />;
   }
 };
 
-const getGradient = (type: RankingType) => {
-  switch (type) {
-    case 'agent': return 'from-[#3B82F6] to-[#1D4ED8]';
-    case 'debate': return 'from-[#EF4444] to-[#B91C1C]';
-    case 'llm': return 'from-[#10B981] to-[#059669]'; // Image used green for GPT-4o
+const getGradient = (category: RankingCategory) => {
+  switch (category) {
+    case 'agent':
+      return 'from-[#3B82F6] to-[#1D4ED8]';
+    case 'debate':
+      return 'from-[#EF4444] to-[#B91C1C]';
+    case 'llm':
+      return 'from-[#10B981] to-[#059669]';
   }
 };
+
+const getCategoryLabel = (category: RankingCategory) => {
+  switch (category) {
+    case 'agent':
+      return '에이전트 ELO 순위';
+    case 'debate':
+      return '토론 승률 순위';
+    case 'llm':
+      return 'LLM 모델 순위';
+  }
+};
+
+// --- Loading Skeleton ---
+
+function ColumnSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-gray-100 rounded-2xl animate-pulse" />
+        <div className="w-36 h-7 bg-gray-100 rounded-lg animate-pulse" />
+      </div>
+      <div className="bg-white brutal-border border-4 rounded-[32px] overflow-hidden">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0">
+            <div className="w-10 h-6 bg-gray-100 rounded animate-pulse" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-gray-100 rounded animate-pulse" />
+              <div className="h-3 w-2/3 bg-gray-100 rounded animate-pulse" />
+            </div>
+            <div className="w-16 h-8 bg-gray-100 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // --- Page Component ---
 
 export default function RankingPage() {
-  const [selectedCategory, setSelectedCategory] = useState<RankingType | null>(null);
-  const [selectedItem, setSelectedItem] = useState<RankingItem | null>(null);
-  const [myAgentIds, setMyAgentIds] = useState<string[]>([]);
-  const ranking = useDebateStore((s) => s.ranking);
+  const [selectedCategory, setSelectedCategory] = useState<RankingCategory | null>(null);
+  const [selectedItem, setSelectedItem] = useState<DisplayRankingItem | null>(null);
+  const [models, setModels] = useState<LLMModelStatsResponse[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
-  const activeItems = useMemo(() => {
-    if (!selectedCategory) return null;
-    if (selectedCategory === 'agent') return AGENT_DATA;
-    if (selectedCategory === 'debate') return DEBATE_DATA;
-    return LLM_DATA;
-  }, [selectedCategory]);
+  const ranking = useDebateStore((s) => s.ranking);
+  const rankingLoading = useDebateStore((s) => s.rankingLoading);
+  const fetchRanking = useDebateStore((s) => s.fetchRanking);
 
   useEffect(() => {
+    fetchRanking();
+    setModelsLoading(true);
     api
-      .get<{ agents: Array<{ id: string }> }>('/agents/me')
-      .then((res) => setMyAgentIds(res.agents.map((a) => a.id)))
+      .get<LLMModelStatsResponse[]>('/models/stats')
+      .then(setModels)
       .catch(() => {
-        // 비로그인 사용자는 에러 무시
-      });
-  }, []);
+        // 모델 목록 로드 실패는 무시
+      })
+      .finally(() => setModelsLoading(false));
+  }, [fetchRanking]);
 
-  const handleItemSelect = (item: RankingItem) => {
-    setSelectedCategory(item.type);
+  const agentItems = useMemo(() => toAgentItems(ranking), [ranking]);
+  const winrateItems = useMemo(() => toWinrateItems(ranking), [ranking]);
+  const llmItems = useMemo(() => toLLMItems(models), [models]);
+
+  const activeItems = useMemo<DisplayRankingItem[]>(() => {
+    if (!selectedCategory) return [];
+    if (selectedCategory === 'agent') return agentItems;
+    if (selectedCategory === 'debate') return winrateItems;
+    return llmItems;
+  }, [selectedCategory, agentItems, winrateItems, llmItems]);
+
+  const handleItemSelect = (item: DisplayRankingItem) => {
+    setSelectedCategory(item.category);
     setSelectedItem(item);
+  };
+
+  const handleCategorySelect = (category: RankingCategory) => {
+    setSelectedCategory(category);
+    setSelectedItem(null);
   };
 
   const handleBack = () => {
     setSelectedItem(null);
     setSelectedCategory(null);
   };
+
+  const isLoading = rankingLoading || modelsLoading;
 
   // 1. Grid View (initial)
   if (!selectedCategory) {
@@ -192,45 +274,59 @@ export default function RankingPage() {
             <Trophy size={42} className="text-[#F59E0B]" />
             NEMO Global Ranking
           </h1>
-          <p className="text-lg text-text-muted font-medium ml-1">상위 1% 에이전트와 모델의 압도적인 성취를 확인하세요.</p>
+          <p className="text-lg text-text-muted font-medium ml-1">
+            상위 1% 에이전트와 모델의 압도적인 성취를 확인하세요.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <CompactColumn 
-            title="에이전트 인기 순위" 
-            items={AGENT_DATA} 
-            icon={<Users size={22} className="text-blue-500" />}
-            onSelect={handleItemSelect}
-            statLabel="인기 점수"
-            statKey="popularity"
-          />
-          <CompactColumn 
-            title="토론 승률 순위" 
-            items={DEBATE_DATA} 
-            icon={<Swords size={22} className="text-red-500" />}
-            onSelect={handleItemSelect}
-            statLabel="승률"
-            statKey="winRate"
-            unit="%"
-          />
-          <CompactColumn 
-            title="LLM 모델 인기 순위" 
-            items={LLM_DATA} 
-            icon={<Cpu size={22} className="text-orange-500" />}
-            onSelect={handleItemSelect}
-            statLabel="사용 횟수"
-            statKey="usage"
-          />
+          {isLoading ? (
+            <>
+              <ColumnSkeleton />
+              <ColumnSkeleton />
+              <ColumnSkeleton />
+            </>
+          ) : (
+            <>
+              <CompactColumn
+                title="에이전트 ELO 순위"
+                items={agentItems}
+                icon={<Users size={22} className="text-blue-500" />}
+                onSelect={handleItemSelect}
+                statLabel="ELO"
+                statValue={(item) => item.elo.toLocaleString()}
+                onTitleClick={() => handleCategorySelect('agent')}
+              />
+              <CompactColumn
+                title="토론 승률 순위"
+                items={winrateItems}
+                icon={<Swords size={22} className="text-red-500" />}
+                onSelect={handleItemSelect}
+                statLabel="승률"
+                statValue={(item) => `${item.winRate}%`}
+                onTitleClick={() => handleCategorySelect('debate')}
+              />
+              <CompactColumn
+                title="LLM 모델 순위"
+                items={llmItems}
+                icon={<Cpu size={22} className="text-orange-500" />}
+                onSelect={handleItemSelect}
+                statLabel="에이전트 수"
+                statValue={(item) => `${item.agentCount ?? 0}개`}
+                onTitleClick={() => handleCategorySelect('llm')}
+              />
+            </>
+          )}
         </div>
       </div>
     );
   }
 
-  // 2. List + Detail View (SPA)
+  // 2. List + Detail View
   return (
     <div className="max-w-[1400px] mx-auto py-8 px-6 min-h-screen">
       <div className="flex items-center justify-between mb-8">
-        <button 
+        <button
           onClick={handleBack}
           className="flex items-center gap-2 px-5 py-2.5 bg-white brutal-border brutal-shadow-sm rounded-xl font-black hover:translate-y-[-2px] transition-all cursor-pointer"
         >
@@ -241,147 +337,69 @@ export default function RankingPage() {
           <div className="p-3 bg-white brutal-border brutal-shadow-sm rounded-xl">
             {getCategoryIcon(selectedCategory)}
           </div>
-          <h2 className="text-2xl font-black m-0">
-            {selectedCategory === 'agent' ? '에이전트 인기 순위' : selectedCategory === 'debate' ? '토론 승률 순위' : 'LLM 모델 인기 순위'}
-          </h2>
+          <h2 className="text-2xl font-black m-0">{getCategoryLabel(selectedCategory)}</h2>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: Scrollable List (4 cols) */}
+        {/* Left: Scrollable List */}
         <div className="lg:col-span-4 flex flex-col gap-3 max-h-[calc(100vh-200px)] overflow-y-auto pr-2 custom-scrollbar">
-          {activeItems?.map((item) => (
-            <div 
-              key={item.id}
-              onClick={() => setSelectedItem(item)}
-              className={`
-                group flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer
-                ${getRankColors(item.rank)}
-                ${selectedItem?.id === item.id ? 'ring-4 ring-primary/20 scale-[1.02]' : ''}
-              `}
-            >
-              <div className="flex-shrink-0 text-center w-10">
-                {item.rank <= 3 ? (
-                  <Trophy size={20} className={getRankIconColor(item.rank)} />
-                ) : (
-                  <span className="text-[20px] font-black text-gray-400 leading-none">{item.rank}</span>
-                )}
-              </div>
-              <div className="w-10 h-10 rounded-xl brutal-border border-2 bg-white flex items-center justify-center text-xl shadow-inner">
-                {item.type === 'llm' ? '🧠' : item.type === 'agent' ? '🤖' : '🥇'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-extrabold text-sm truncate m-0 group-hover:text-primary transition-colors">
-                    {item.name}
-                  </p>
-                  <span className="flex-shrink-0 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded-md leading-none">
-                    {item.tier}
-                  </span>
-                </div>
-                <p className="text-[10px] text-text-muted font-bold m-0 mt-0.5">
-                  {(item as LLMItem).provider || (item as AgentItem).creator || 'System'}
-                  {item.type === 'llm' && <span className="ml-2 opacity-60">• {(item as LLMItem).usage.toLocaleString()}회</span>}
-                </p>
-              </div>
-              <ChevronRight size={16} className="text-gray-300 transition-transform group-hover:translate-x-1" />
+          {activeItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+              <Brain size={48} className="opacity-30 mb-4" />
+              <p className="font-bold">데이터가 없습니다</p>
             </div>
-          ))}
+          ) : (
+            activeItems.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => setSelectedItem(item)}
+                className={`
+                  group flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer
+                  ${getRankColors(item.rank)}
+                  ${selectedItem?.id === item.id ? 'ring-4 ring-primary/20 scale-[1.02]' : ''}
+                `}
+              >
+                <div className="flex-shrink-0 text-center w-10">
+                  {item.rank <= 3 ? (
+                    <Trophy size={20} className={getRankIconColor(item.rank)} />
+                  ) : (
+                    <span className="text-[20px] font-black text-gray-400 leading-none">
+                      {item.rank}
+                    </span>
+                  )}
+                </div>
+                <div className="w-10 h-10 rounded-xl brutal-border border-2 bg-white flex items-center justify-center text-xl shadow-inner">
+                  {item.category === 'llm' ? '🧠' : '🤖'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-extrabold text-sm truncate m-0 group-hover:text-primary transition-colors">
+                      {item.name}
+                    </p>
+                    <span className="flex-shrink-0 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded-md leading-none">
+                      {item.tier}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-text-muted font-bold m-0 mt-0.5">{item.subtitle}</p>
+                </div>
+                <ChevronRight
+                  size={16}
+                  className="text-gray-300 transition-transform group-hover:translate-x-1"
+                />
+              </div>
+            ))
+          )}
         </div>
 
-        {/* Center: List of rankings (we'll just use the list-detail logic here) */}
-        {/* Right: Rich Detail View (8 cols) */}
+        {/* Right: Rich Detail View */}
         <div className="lg:col-span-8">
-          {selectedItem && (
-            <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
-              {/* Header Profile */}
-              <div className={`relative overflow-hidden bg-gradient-to-br ${getGradient(selectedItem.type)} brutal-border border-4 rounded-[32px] p-10 text-white`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
-                
-                <div className="flex flex-col md:flex-row gap-8 items-center md:items-start relative z-10">
-                  <div className="w-40 h-40 bg-white/20 backdrop-blur-md rounded-[40px] brutal-border border-4 flex items-center justify-center text-6xl shadow-2xl">
-                    {selectedItem.type === 'llm' ? '🧠' : selectedItem.type === 'agent' ? '🤖' : '🥇'}
-                  </div>
-                  <div className="flex-1 text-center md:text-left">
-                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
-                      <h2 className="text-4xl font-black m-0">{selectedItem.name}</h2>
-                      <div className="px-4 py-1.5 bg-yellow-400 text-black font-black rounded-xl border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-sm">
-                        {selectedItem.tier} Tier
-                      </div>
-                    </div>
-                    <p className="text-xl font-bold opacity-90 mb-6">
-                      {(selectedItem as LLMItem).provider || (selectedItem as AgentItem).creator}
-                    </p>
-                    <p className="text-base font-medium leading-relaxed max-w-2xl opacity-90">
-                      {selectedItem.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Dashboard */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <StatCard 
-                  label={selectedItem.type === 'llm' ? '총 사용 횟수' : '총 인기 점수'} 
-                  value={(selectedItem as LLMItem).usage?.toLocaleString() || (selectedItem as AgentItem).popularity?.toLocaleString()} 
-                  icon={<Users size={16} />}
-                />
-                <StatCard 
-                  label="등록 에이전트" 
-                  value={selectedItem.registeredAgents} 
-                  icon={<Binary size={16} />}
-                />
-                <StatCard 
-                  label="평균 ELO" 
-                  value={(selectedItem as LLMItem).avgElo || (selectedItem as DebateItem).elo} 
-                  icon={<Zap size={16} />}
-                />
-                <StatCard 
-                  label="평균 승률" 
-                  value={`${selectedItem.winRate}%`} 
-                  icon={<Star size={16} />}
-                />
-              </div>
-
-              {/* Technical Specs & Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
-                  <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-                    <Cpu size={22} className="text-primary" />
-                    모델 스펙
-                  </h3>
-                  <div className="space-y-4">
-                    <SpecRow icon={<MessageSquare size={18} />} label="최대 토큰" value={(selectedItem as LLMItem).maxTokens || '256,000'} />
-                    <SpecRow icon={<DollarSign size={18} />} label="비용 (1K 토큰)" value={(selectedItem as LLMItem).cost || '$0.002'} />
-                    <SpecRow icon={<Clock size={18} />} label="응답 속도" value={(selectedItem as LLMItem).latency || '~1.0s'} />
-                  </div>
-                </div>
-
-                <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
-                  <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-                    <Zap size={22} className="text-yellow-500" />
-                    주요 강점
-                  </h3>
-                  <div className="flex flex-wrap gap-3">
-                    {selectedItem.tags.map(tag => (
-                      <span key={tag} className="px-5 py-2.5 bg-gray-50 border-2 border-gray-100 font-bold rounded-2xl text-sm transition-all hover:border-gray-300">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Footer */}
-              <div className="bg-[#111] brutal-border border-4 rounded-[32px] p-8 flex items-center justify-between text-white">
-                <div>
-                  <h4 className="text-xl font-black m-0">지금 바로 {selectedItem.name}를 만나보세요</h4>
-                  <p className="text-sm font-bold opacity-60 m-0">토론 세션에 바로 참여하거나 새 에이전트를 생성할 수 있습니다.</p>
-                </div>
-                <button className="px-8 py-3.5 bg-white text-black font-black rounded-2xl border-4 border-white hover:bg-transparent hover:text-white transition-all shadow-[6px_6px_0_0_#333]">
-                  활동 시작하기
-                </button>
-              </div>
+          {selectedItem ? (
+            <DetailView item={selectedItem} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 text-text-muted">
+              <TrendingUp size={48} className="opacity-20 mb-4" />
+              <p className="font-bold">목록에서 항목을 선택하세요</p>
             </div>
           )}
         </div>
@@ -390,24 +408,161 @@ export default function RankingPage() {
   );
 }
 
+// --- Detail View ---
+
+function DetailView({ item }: { item: DisplayRankingItem }) {
+  const router = useRouter();
+
+  function handleAction() {
+    if (item.category === 'llm') {
+      router.push('/debate/agents/create');
+    } else {
+      router.push(`/debate/agents/${item.id}`);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
+      {/* Header Profile */}
+      <div
+        className={`relative overflow-hidden bg-gradient-to-br ${getGradient(item.category)} brutal-border border-4 rounded-[32px] p-10 text-white`}
+      >
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
+        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start relative z-10">
+          <div className="w-40 h-40 bg-white/20 backdrop-blur-md rounded-[40px] brutal-border border-4 flex items-center justify-center text-6xl shadow-2xl">
+            {item.category === 'llm' ? '🧠' : '🤖'}
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
+              <h2 className="text-4xl font-black m-0">{item.name}</h2>
+              <div className="px-4 py-1.5 bg-yellow-400 text-black font-black rounded-xl border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-sm">
+                {item.tier} Tier
+              </div>
+            </div>
+            <p className="text-xl font-bold opacity-90 mb-2">{item.subtitle}</p>
+            <p className="text-base font-medium opacity-70">#{item.rank}위 · {getCategoryLabel(item.category)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Dashboard */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {item.category === 'llm' ? (
+          <>
+            <StatCard
+              label="사용 에이전트"
+              value={`${item.agentCount ?? 0}개`}
+              icon={<Users size={16} />}
+            />
+            <StatCard
+              label="승률"
+              value={item.win_rate != null ? `${item.winRate}%` : '-'}
+              icon={<Star size={16} />}
+            />
+            <StatCard
+              label="승/패"
+              value={`${item.wins}W ${item.losses}L`}
+              icon={<Trophy size={16} />}
+            />
+            <StatCard
+              label="비용 (1K 토큰)"
+              value={item.costPer1k ?? '-'}
+              icon={<DollarSign size={16} />}
+            />
+          </>
+        ) : (
+          <>
+            <StatCard label="ELO 점수" value={item.elo.toLocaleString()} icon={<Zap size={16} />} />
+            <StatCard label="승률" value={`${item.winRate}%`} icon={<Star size={16} />} />
+            <StatCard label="승리" value={item.wins.toLocaleString()} icon={<Trophy size={16} />} />
+            <StatCard label="패배" value={item.losses.toLocaleString()} icon={<Swords size={16} />} />
+          </>
+        )}
+      </div>
+
+      {/* Additional Info */}
+      {item.category !== 'llm' && (
+        <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
+          <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+            <Binary size={22} className="text-primary" />
+            전적 현황
+          </h3>
+          <div className="space-y-4">
+            <SpecRow
+              icon={<Zap size={18} />}
+              label="ELO 레이팅"
+              value={item.elo.toLocaleString()}
+            />
+            <SpecRow icon={<Star size={18} />} label="승률" value={`${item.winRate}%`} />
+            <SpecRow
+              icon={<Trophy size={18} />}
+              label="승/패"
+              value={`${item.wins}승 ${item.losses}패`}
+            />
+          </div>
+        </div>
+      )}
+
+      {item.category === 'llm' && item.maxTokens && item.costPer1k && (
+        <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
+          <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+            <Cpu size={22} className="text-primary" />
+            모델 스펙
+          </h3>
+          <div className="space-y-4">
+            <SpecRow
+              icon={<MessageSquare size={18} />}
+              label="최대 토큰"
+              value={item.maxTokens}
+            />
+            <SpecRow
+              icon={<DollarSign size={18} />}
+              label="비용 (1K 토큰 평균)"
+              value={item.costPer1k}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Action Footer */}
+      <div className="bg-[#111] brutal-border border-4 rounded-[32px] p-8 flex items-center justify-between text-white">
+        <div>
+          <h4 className="text-xl font-black m-0">지금 바로 {item.name}를 만나보세요</h4>
+          <p className="text-sm font-bold opacity-60 m-0">
+            {item.category === 'llm'
+              ? '이 모델로 새 에이전트를 만들 수 있습니다.'
+              : '에이전트 프로필에서 전적과 상세 정보를 확인하세요.'}
+          </p>
+        </div>
+        <button
+          onClick={handleAction}
+          className="px-8 py-3.5 bg-white text-black font-black rounded-2xl border-4 border-white hover:bg-transparent hover:text-white transition-all shadow-[6px_6px_0_0_#333] cursor-pointer"
+        >
+          {item.category === 'llm' ? '에이전트 만들기' : '프로필 보기'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- Sub-components ---
 
-function CompactColumn({ 
-  title, 
-  items, 
-  icon, 
-  onSelect, 
-  statLabel, 
-  statKey, 
-  unit = '' 
-}: { 
-  title: string; 
-  items: any[]; 
-  icon: React.ReactNode; 
-  onSelect: (item: any) => void;
+function CompactColumn({
+  title,
+  items,
+  icon,
+  onSelect,
+  statLabel,
+  statValue,
+  onTitleClick,
+}: {
+  title: string;
+  items: DisplayRankingItem[];
+  icon: React.ReactNode;
+  onSelect: (item: DisplayRankingItem) => void;
   statLabel: string;
-  statKey: string;
-  unit?: string;
+  statValue: (item: DisplayRankingItem) => string;
+  onTitleClick?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -415,42 +570,63 @@ function CompactColumn({
         <div className="p-3.5 bg-white brutal-border border-2 rounded-2xl shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
           {icon}
         </div>
-        <h2 className="text-2xl font-black m-0">{title}</h2>
+        <h2
+          className="text-2xl font-black m-0 cursor-pointer hover:text-primary transition-colors"
+          onClick={onTitleClick}
+        >
+          {title}
+        </h2>
       </div>
 
       <div className="bg-white brutal-border border-4 rounded-[32px] overflow-hidden shadow-[8px_8px_0_0_rgba(0,0,0,0.05)]">
-        {items.map((item) => (
-          <div 
-            key={item.id}
-            onClick={() => onSelect(item)}
-            className={`
-              group flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0 transition-all cursor-pointer
-              ${getRankColors(item.rank)}
-            `}
-          >
-            <div className="w-10 flex justify-center">
-              {item.rank <= 3 ? (
-                <Award size={22} className={getRankIconColor(item.rank)} />
-              ) : (
-                <span className="text-[20px] font-black text-gray-400 leading-none">{item.rank}</span>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-base font-black truncate m-0 group-hover:text-primary transition-colors">{item.name}</p>
-              <p className="text-xs font-bold text-text-muted m-0 opacity-80">{item.provider || item.creator}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-text-muted m-0">{statLabel}</p>
-              <p className="text-sm font-black text-primary m-0">{item[statKey].toLocaleString()}{unit}</p>
-            </div>
+        {items.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-text-muted">
+            <p className="font-bold text-sm">데이터 없음</p>
           </div>
-        ))}
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => onSelect(item)}
+              className={`
+                group flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0 transition-all cursor-pointer
+                ${getRankColors(item.rank)}
+              `}
+            >
+              <div className="w-10 flex justify-center">
+                {item.rank <= 3 ? (
+                  <Award size={22} className={getRankIconColor(item.rank)} />
+                ) : (
+                  <span className="text-[20px] font-black text-gray-400 leading-none">{item.rank}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-black truncate m-0 group-hover:text-primary transition-colors">
+                  {item.name}
+                </p>
+                <p className="text-xs font-bold text-text-muted m-0 opacity-80">{item.subtitle}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-text-muted m-0">{statLabel}</p>
+                <p className="text-sm font-black text-primary m-0">{statValue(item)}</p>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value, icon }: { label: string, value: string | number, icon: React.ReactNode }) {
+function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+}) {
   return (
     <div className="bg-white brutal-border border-4 rounded-3xl p-6 flex flex-col gap-3">
       <div className="flex items-center justify-between text-text-muted">
@@ -462,7 +638,15 @@ function StatCard({ label, value, icon }: { label: string, value: string | numbe
   );
 }
 
-function SpecRow({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
+function SpecRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border-2 border-gray-100 hover:border-gray-200 transition-all">
       <div className="text-text-muted opacity-60">{icon}</div>

@@ -1,3 +1,5 @@
+"""토큰 사용량 API 라우터 — 내 사용량 요약 및 이력 조회."""
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 

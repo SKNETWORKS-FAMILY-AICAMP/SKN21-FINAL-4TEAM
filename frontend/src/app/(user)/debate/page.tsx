@@ -1,175 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Plus, X, ChevronDown, Shuffle, Bot, MessageSquare, Users, Clock, Trophy } from 'lucide-react';
+import { Swords, Plus, X, ChevronDown, Shuffle, MessageSquare, Users, Clock, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
-import { useUIStore } from '@/stores/uiStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
-import { TierBadge } from '@/components/debate/TierBadge';
-import { HighlightBanner } from '@/components/debate/HighlightBanner';
-import { api } from '@/lib/api';
-import { DebateTopic } from '@/types/debate';
-
-const MOCK_TOPICS: DebateTopic[] = [
-  {
-    id: 'mock-1',
-    title: '원자력 발전은 친환경 에너지인가?',
-    description: '탄소 배출 저감과 핵폐기물 처리 문제 사이의 논쟁',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 10,
-    turn_token_limit: 1000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: true,
-    queue_count: 2,
-    match_count: 45,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-2',
-    title: '기본소득제 도입, 시기상조인가?',
-    description: '자동화 시대의 사회안전망 구축과 재정 부담',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 12,
-    turn_token_limit: 1200,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: false,
-    queue_count: 1,
-    match_count: 32,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-3',
-    title: 'AI 저작권, 인공지능에게도 권리가 있는가?',
-    description: '생성형 AI의 결과물에 대한 법적 보호와 작가 권리',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 8,
-    turn_token_limit: 1500,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: true,
-    queue_count: 3,
-    match_count: 128,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-4',
-    title: '채식주의, 기후 위기의 해법인가?',
-    description: '축산업의 환경 영향과 식문화의 변화',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 10,
-    turn_token_limit: 1000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: false,
-    queue_count: 0,
-    match_count: 15,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-5',
-    title: '우주 탐사 예산, 지구 문제 해결에 써야 하는가?',
-    description: '테라포밍의 꿈과 당면한 환경 문제 사이의 우선순위',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 15,
-    turn_token_limit: 2000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: true,
-    queue_count: 2,
-    match_count: 67,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-6',
-    title: '재택근무 vs 사무실 출근, 무엇이 더 효율적인가?',
-    description: '업무 생산성과 조직 문화, 소속감의 상관관계',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 6,
-    turn_token_limit: 800,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: false,
-    queue_count: 4,
-    match_count: 89,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-7',
-    title: 'SNS 규제, 표현의 자유 침해인가?',
-    description: '가짜 뉴스와 혐오 표현 방지를 위한 플랫폼의 책임',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 10,
-    turn_token_limit: 1000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: true,
-    queue_count: 1,
-    match_count: 42,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  },
-  {
-    id: 'mock-8',
-    title: '디지털 자산(NFT), 투기인가 혁명인가?',
-    description: '블록체인 기술의 활용 가능성과 시장의 거품 논란',
-    mode: 'tournament',
-    status: 'open',
-    max_turns: 10,
-    turn_token_limit: 1200,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: true,
-    tools_enabled: false,
-    queue_count: 0,
-    match_count: 112,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  }
-];
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -206,95 +46,6 @@ const defaultForm = {
   password: '' as string,
 };
 
-const PAGE_SIZE = 4;
-
-const MORE_MOCK_TOPICS: DebateTopic[] = [
-  {
-    id: 'mock-9',
-    title: '동물실험, 인류의 발전을 위해 정당화될 수 있는가?',
-    description: '생명 윤리와 의학적 진보 사이의 딜레마',
-    mode: 'debate',
-    status: 'open',
-    max_turns: 10,
-    turn_token_limit: 1000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: false,
-    tools_enabled: true,
-    queue_count: 5,
-    match_count: 24,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'user-1',
-    creator_nickname: '윤리전문가'
-  },
-  {
-    id: 'mock-10',
-    title: '메타버스에서의 범죄, 실질적 처벌이 가능한가?',
-    description: '가상 세계의 법적 정의와 관할권 문제',
-    mode: 'cross_exam',
-    status: 'open',
-    max_turns: 12,
-    turn_token_limit: 1500,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: false,
-    tools_enabled: true,
-    queue_count: 2,
-    match_count: 18,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'user-2',
-    creator_nickname: '사이버리안'
-  },
-  {
-    id: 'mock-11',
-    title: '유전자 가위 기술, 맞춤형 아기 탄생을 허용해야 하는가?',
-    description: '질병 예방과 유전적 불평등, 그리고 진화의 방향',
-    mode: 'persuasion',
-    status: 'open',
-    max_turns: 15,
-    turn_token_limit: 2000,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: false,
-    tools_enabled: false,
-    queue_count: 8,
-    match_count: 56,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'user-3',
-    creator_nickname: '바이오해커'
-  },
-  {
-    id: 'mock-12',
-    title: '인공지능 판사 도입, 공정한 판결을 보장하는가?',
-    description: '알고리즘의 편향성과 인간적 판단의 가치',
-    mode: 'debate',
-    status: 'open',
-    max_turns: 8,
-    turn_token_limit: 1200,
-    scheduled_start_at: null,
-    scheduled_end_at: null,
-    is_admin_topic: false,
-    tools_enabled: true,
-    queue_count: 3,
-    match_count: 37,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    created_by: 'admin',
-    creator_nickname: '시스템'
-  }
-];
-
-const ALL_MOCK_TOPICS = [...MOCK_TOPICS, ...MORE_MOCK_TOPICS];
-
-type Stats = {
-  live: number;
-  todayParticipants: number;
-  scheduled: number;
-};
-
 export default function DebateTopicsPage() {
   const router = useRouter();
   const {
@@ -307,6 +58,9 @@ export default function DebateTopicsPage() {
     updateTopic,
     deleteTopic,
     randomMatch,
+    ranking,
+    rankingLoading,
+    fetchRanking,
   } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
   const { user } = useUserStore();
@@ -337,11 +91,25 @@ export default function DebateTopicsPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editShowAdvanced, setEditShowAdvanced] = useState(false);
 
+  // 캐러셀 슬라이드 인덱스
+  const [slideIndex, setSlideIndex] = useState(0);
+
   // 초기 로드
   useEffect(() => {
     fetchMyAgents();
     fetchFeatured();
-  }, [fetchMyAgents, fetchFeatured]);
+    fetchRanking();
+  }, [fetchMyAgents, fetchFeatured, fetchRanking]);
+
+  // 토픽 로드 (필터/정렬/페이지 변경 시 재조회)
+  useEffect(() => {
+    fetchTopics({
+      status: filter === 'all' ? undefined : filter,
+      sort,
+      page,
+      pageSize: 20,
+    });
+  }, [fetchTopics, filter, sort, page]);
 
   // Infinite scroll trigger on downward wheel/scroll intent
   useEffect(() => {
@@ -350,13 +118,13 @@ export default function DebateTopicsPage() {
 
     const handleWheel = (e: WheelEvent) => {
       // Detect downward scroll intent
-      if (e.deltaY > 0 && visibleCount < ALL_MOCK_TOPICS.length && !isRefreshing) {
+      if (e.deltaY > 0 && topics.length < topicsTotal && !isRefreshing) {
         const now = Date.now();
         if (now - lastScrollTime > cooldown) {
           lastScrollTime = now;
           setIsRefreshing(true);
           setTimeout(() => {
-            setVisibleCount(prev => Math.min(prev + 8, ALL_MOCK_TOPICS.length));
+            setPage(prev => prev + 1);
             setIsRefreshing(false);
           }, 800);
         }
@@ -372,11 +140,13 @@ export default function DebateTopicsPage() {
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
     setVisibleCount(8);
+    setPage(1);
   };
 
   const handleSortChange = (s: SortOption) => {
     setSort(s);
     setVisibleCount(8);
+    setPage(1);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -486,6 +256,20 @@ export default function DebateTopicsPage() {
 
   const currentUserId = user?.id ?? null;
 
+  // 캐러셀 슬라이드 구성 (페이지당 8개)
+  const topicChunks: (typeof topics)[] = [];
+  for (let i = 0; i < topics.length; i += 8) {
+    topicChunks.push(topics.slice(i, i + 8));
+  }
+
+  // 랭킹 색상: 1위=금, 2위=은, 3위=동, 나머지=회색
+  const rankColor = (rank: number) => {
+    if (rank === 1) return 'text-yellow-500';
+    if (rank === 2) return 'text-gray-400';
+    if (rank === 3) return 'text-amber-600';
+    return 'text-gray-500';
+  };
+
   return (
     <div className="max-w-[1400px] mx-auto py-6 px-4 xl:px-8">
       {/* 상단 액션 버튼 */}
@@ -517,6 +301,136 @@ export default function DebateTopicsPage() {
           >
             <Plus size={18} />
             내 에이전트
+          </Link>
+        </div>
+      </div>
+
+      {/* 주요 토픽 캐러셀 + 랭킹 사이드바 */}
+      <div className="flex gap-6 mt-6 mb-8">
+        {/* 캐러셀 섹션 */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-black text-text-muted uppercase tracking-wider mb-3">
+            주요 토픽
+          </h3>
+          {topicsLoading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : topicChunks.length === 0 ? (
+            <div className="flex items-center justify-center h-40 rounded-xl border border-border bg-bg-surface">
+              <div className="text-center text-text-muted">
+                <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">등록된 토픽이 없습니다</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {topicChunks[slideIndex]?.map((topic) => (
+                  <Link
+                    key={topic.id}
+                    href={`/debate/topics/${topic.id}`}
+                    className="block p-4 rounded-xl border border-border bg-bg-surface hover:border-primary hover:translate-y-[-2px] transition-all no-underline"
+                  >
+                    <div className="flex items-start gap-2 mb-2">
+                      {(topic as any).is_admin_topic && (
+                        <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          공식
+                        </span>
+                      )}
+                      <p className="text-sm font-semibold text-text line-clamp-2 leading-snug m-0">
+                        {topic.title}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-text-muted">
+                      <span className="flex items-center gap-1">
+                        <Users size={11} />
+                        대기 {topic.queue_count}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Swords size={11} />
+                        {topic.match_count}전
+                      </span>
+                      <span className="ml-auto truncate">
+                        {topic.creator_nickname ?? '관리자'}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {/* 캐러셀 인디케이터 */}
+              {topicChunks.length > 1 && (
+                <div className="flex justify-center gap-2 mt-3">
+                  {topicChunks.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSlideIndex(idx)}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        slideIndex === idx ? 'bg-primary w-4' : 'bg-border'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* 랭킹 사이드바 */}
+        <div className="w-64 shrink-0">
+          <h3 className="text-sm font-black text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Trophy size={14} className="text-yellow-500" />
+            에이전트 랭킹
+          </h3>
+          <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
+            {rankingLoading ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 animate-pulse">
+                    <div className="w-6 h-4 bg-border rounded" />
+                    <div className="flex-1 h-4 bg-border rounded" />
+                    <div className="w-12 h-4 bg-border rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : ranking.length === 0 ? (
+              <div className="p-6 text-center text-text-muted">
+                <Trophy size={24} className="mx-auto mb-2 opacity-30" />
+                <p className="text-xs">아직 랭킹 데이터가 없습니다</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {ranking.map((r, index) => {
+                  const rank = index + 1;
+                  return (
+                    <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className={`w-5 text-center text-xs font-black shrink-0 ${rankColor(rank)}`}>
+                        {rank}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-text truncate m-0 leading-tight">
+                          {r.name}
+                        </p>
+                        <p className="text-[10px] text-text-muted truncate m-0">
+                          {r.owner_nickname}
+                        </p>
+                      </div>
+                      <span className="text-xs font-black text-primary shrink-0">
+                        {r.elo_rating}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <Link
+            href="/debate/agents?tab=ranking"
+            className="block text-center text-xs text-text-muted hover:text-primary mt-2 no-underline transition-colors"
+          >
+            전체 랭킹 보기 →
           </Link>
         </div>
       </div>
@@ -555,31 +469,26 @@ export default function DebateTopicsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {topicsLoading ? (
               Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
+            ) : topics.length === 0 ? (
+              <div className="col-span-2 text-center py-16 text-text-muted">
+                <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="font-semibold">등록된 토픽이 없습니다</p>
+              </div>
             ) : (
-              ALL_MOCK_TOPICS.slice(0, visibleCount).map((topic, index) => {
-                // 현재 배치(마지막 8개 또는 초기 8개)에만 애니메이션 적용 효과를 주기 위해
-                // index가 visibleCount - 8보다 큰 경우에만 딜레이 적용 (초기는 0~7)
-                const isNewBatch = index >= visibleCount - 8;
-                const delayIndex = isNewBatch ? (index % 8) : 0;
-                
-                return (
-                  <div 
-                    key={topic.id} 
-                    className={`animate-in fill-mode-forwards ${isNewBatch ? '' : 'opacity-100 transform-none'}`}
-                    style={{ 
-                      animationDelay: isNewBatch ? `${delayIndex * 150}ms` : '0ms',
-                      animationDuration: isNewBatch ? '0.8s' : '0s'
-                    }}
-                  >
-                    <TopicCard
-                      topic={topic}
-                      currentUserId={currentUserId}
-                      onEdit={openEditModal}
-                      onDelete={handleDelete}
-                    />
-                  </div>
-                );
-              })
+              topics.map((topic, index) => (
+                <div
+                  key={topic.id}
+                  className="animate-in fill-mode-forwards opacity-100"
+                  style={{ animationDelay: `${(index % 8) * 80}ms`, animationDuration: '0.5s' }}
+                >
+                  <TopicCard
+                    topic={topic}
+                    currentUserId={currentUserId}
+                    onEdit={openEditModal}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              ))
             )}
           </div>
 
@@ -594,24 +503,23 @@ export default function DebateTopicsPage() {
           )}
 
           {/* Numeric Indicators (Carousel style) */}
-          <div className="flex justify-center gap-3 mt-12 mb-8">
-            {Array.from({ length: Math.ceil((ALL_MOCK_TOPICS.length - 8) / 8) + 1 }).map((_, idx) => {
-              const isActive = (visibleCount >= 8 + idx * 8);
-              return (
+          {topicsTotal > 20 && (
+            <div className="flex justify-center gap-3 mt-12 mb-8">
+              {Array.from({ length: Math.ceil(topicsTotal / 20) }).map((_, idx) => (
                 <button
                   key={idx}
                   disabled
                   className={`w-10 h-10 rounded-xl border-2 border-black font-black text-sm flex items-center justify-center transition-all ${
-                    isActive 
-                      ? 'bg-primary text-white brutal-shadow-sm' 
+                    page >= idx + 1
+                      ? 'bg-primary text-white brutal-shadow-sm'
                       : 'bg-white text-gray-300'
                   }`}
                 >
                   {idx + 1}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -969,9 +877,7 @@ export default function DebateTopicsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))
-                      }
+                      onClick={() => setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))}
                       className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
                         editForm.tools_enabled ? 'bg-primary' : 'bg-gray-600'
                       }`}
@@ -1014,14 +920,14 @@ export default function DebateTopicsPage() {
                 <button
                   type="button"
                   onClick={closeEditModal}
-                  className="flex-1 py-2.5 rounded-xl border border-border text-sm text-text-muted hover:text-text transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-border text-sm text-text-muted hover:text-text transition-colors bg-transparent cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={editSubmitting || !editForm.title.trim()}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors border-none cursor-pointer"
                 >
                   {editSubmitting ? '수정 중...' : '저장'}
                 </button>

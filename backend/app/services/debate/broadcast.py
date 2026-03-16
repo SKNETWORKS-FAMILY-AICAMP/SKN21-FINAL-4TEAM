@@ -5,6 +5,8 @@ import logging
 import time
 from collections.abc import AsyncGenerator
 
+from redis.asyncio.client import PubSub
+
 from app.core.redis import pubsub_client, redis_client  # 공유 연결 풀
 
 logger = logging.getLogger(__name__)
@@ -14,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _channel(match_id: str) -> str:
+    """매치 이벤트 Redis 채널명 반환."""
     return f"debate:match:{match_id}"
 
 
@@ -74,14 +77,22 @@ _MATCH_TERMINAL_EVENTS = {"finished", "error", "forfeit"}
 
 
 async def _poll_pubsub(
-    pubsub: object,
+    pubsub: PubSub,
     terminal_events: set[str],
     deadline: float,
 ) -> AsyncGenerator[str, None]:
     """Redis pub/sub 메시지를 SSE 형식으로 yield하는 공통 폴링 루프.
 
-    deadline 초과 시 루프를 종료하고 제어를 호출자에게 반환 (타임아웃 이벤트는 호출자가 발행).
-    0.05s 즉시 폴링 후 메시지 없으면 2.0s 블로킹 대기 → heartbeat 순으로 처리.
+    deadline 초과 시 루프를 종료하고 제어를 호출자에게 반환.
+    타임아웃 이벤트 발행은 호출자(subscribe/subscribe_queue)가 담당한다.
+
+    Args:
+        pubsub: Redis PubSub 인스턴스 (이미 채널 구독 완료).
+        terminal_events: 수신 시 루프를 종료할 이벤트 타입 집합.
+        deadline: monotonic 기준 종료 시각.
+
+    Yields:
+        'data: {...}\\n\\n' 또는 ': heartbeat\\n\\n' 형식의 SSE 문자열.
     """
     while time.monotonic() < deadline:
         # 즉시 폴링 후 없으면 블로킹 대기 — 중복 메시지 처리 로직 통합
@@ -102,6 +113,7 @@ async def _poll_pubsub(
 
 
 def _queue_channel(topic_id: str, agent_id: str) -> str:
+    """큐 이벤트 Redis 채널명 반환."""
     return f"debate:queue:{topic_id}:{agent_id}"
 
 

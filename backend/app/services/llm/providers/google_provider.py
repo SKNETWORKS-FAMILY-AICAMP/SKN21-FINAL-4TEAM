@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 import httpx
 
 from app.core.config import settings
-from app.services.llm.providers.base import BaseProvider
+from app.services.llm.providers.base import APIKeyError, BaseProvider
 
 logger = logging.getLogger(__name__)
 
@@ -15,37 +15,60 @@ logger = logging.getLogger(__name__)
 class GoogleProvider(BaseProvider):
     """Google Gemini API provider.
 
-    API 키를 URL 파라미터 대신 헤더로 전달 — 로그/트레이스에 키 노출 방지.
+    API 키를 URL 파라미터 대신 x-goog-api-key 헤더로 전달하여 로그/트레이스에 키 노출을 방지한다.
+    HTTP 클라이언트는 외부에서 주입받아 InferenceClient의 커넥션 풀을 공유한다.
     """
 
     def __init__(self, http: httpx.AsyncClient | None = None) -> None:
         self._http = http
 
     def _get_http(self) -> httpx.AsyncClient:
+        """공유 또는 폴백 HTTP 클라이언트를 반환한다.
+
+        InferenceClient에서 주입받은 클라이언트가 없으면 새 AsyncClient를 생성한다.
+        """
         if self._http is None:
             self._http = httpx.AsyncClient(timeout=120.0)
         return self._http
 
     async def generate(self, model_id: str, messages: list[dict], **kwargs) -> dict:
+        """플랫폼 Google API 키로 비스트리밍 호출한다."""
         return await self._call_impl(model_id, settings.google_api_key, messages, **kwargs)
 
     async def generate_byok(self, model_id: str, api_key: str, messages: list[dict], **kwargs) -> dict:
+        """사용자 제공 Google API 키(BYOK)로 비스트리밍 호출한다."""
         return await self._call_impl(model_id, api_key, messages, **kwargs)
 
     async def stream(
         self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
     ) -> AsyncGenerator[str, None]:
+        """플랫폼 Google API 키로 SSE 스트리밍 호출한다."""
         async for chunk in self._stream_impl(model_id, settings.google_api_key, messages, usage_out, **kwargs):
             yield chunk
 
     async def stream_byok(
         self, model_id: str, api_key: str, messages: list[dict], usage_out: dict, **kwargs
     ) -> AsyncGenerator[str, None]:
+        """사용자 제공 Google API 키(BYOK)로 SSE 스트리밍 호출한다."""
         async for chunk in self._stream_impl(model_id, api_key, messages, usage_out, **kwargs):
             yield chunk
 
     async def _call_impl(self, model_id: str, api_key: str, messages: list[dict], **kwargs) -> dict:
-        """Google Gemini API 호출 구현 (플랫폼/BYOK 공통)."""
+        """Google Gemini API 비스트리밍 호출 구현 (플랫폼/BYOK 공통).
+
+        Args:
+            model_id: Gemini 모델 ID 문자열 (예: "gemini-2.0-flash").
+            api_key: 플랫폼 키 또는 사용자 BYOK 키.
+            messages: OpenAI 형식 메시지 목록 (system 메시지 포함 가능).
+            **kwargs: temperature, max_tokens 등 추가 파라미터.
+
+        Returns:
+            content, input_tokens, output_tokens, finish_reason 키를 포함하는 dict.
+
+        Raises:
+            APIKeyError: API 키가 유효하지 않은 경우 (401/403).
+            httpx.HTTPStatusError: HTTP 요청 실패 시.
+        """
         system_prompt, gemini_contents = self._to_gemini_format(messages)
         body: dict = {
             "contents": gemini_contents,
@@ -61,7 +84,13 @@ class GoogleProvider(BaseProvider):
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=body,
         )
-        response.raise_for_status()
+        if response.status_code in (401, 403):
+            raise APIKeyError(f"Google {response.status_code}: {response.text[:300]}")
+        if not response.is_success:
+            raise httpx.HTTPStatusError(
+                f"Google API {response.status_code}: {response.text[:300]}",
+                request=response.request, response=response,
+            )
         data = response.json()
         candidate = data["candidates"][0]
         content_text = "".join(part["text"] for part in candidate["content"]["parts"] if "text" in part)
@@ -83,7 +112,21 @@ class GoogleProvider(BaseProvider):
     ) -> AsyncGenerator[str, None]:
         """Google Gemini API SSE 스트리밍 구현 (플랫폼/BYOK 공통).
 
-        usageMetadata(마지막 청크)에서 토큰 수 캡처.
+        usageMetadata 필드(마지막 청크)에서 promptTokenCount/candidatesTokenCount를 캡처한다.
+
+        Args:
+            model_id: Gemini 모델 ID 문자열.
+            api_key: 플랫폼 키 또는 사용자 BYOK 키.
+            messages: OpenAI 형식 메시지 목록.
+            usage_out: 스트리밍 완료 후 토큰 수를 기록할 dict.
+            **kwargs: temperature, max_tokens 등 추가 파라미터.
+
+        Yields:
+            스트리밍 텍스트 청크 문자열.
+
+        Raises:
+            APIKeyError: API 키가 유효하지 않은 경우 (401/403).
+            httpx.HTTPStatusError: HTTP 요청 실패 시.
         """
         system_prompt, gemini_contents = self._to_gemini_format(messages)
         body: dict = {
@@ -102,16 +145,32 @@ class GoogleProvider(BaseProvider):
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=body,
         ) as response:
-            response.raise_for_status()
+            if response.status_code in (401, 403):
+                body_bytes = await response.aread()
+                raise APIKeyError(f"Google {response.status_code}: {body_bytes.decode(errors='replace')[:300]}")
+            if not response.is_success:
+                body_bytes = await response.aread()
+                raise httpx.HTTPStatusError(
+                    f"Google API {response.status_code}: {body_bytes.decode(errors='replace')[:300]}",
+                    request=response.request, response=response,
+                )
             async for chunk in _iter_google_sse(response, usage_out):
                 yield chunk
 
     @staticmethod
     def _to_gemini_format(messages: list[dict]) -> tuple[str, list[dict]]:
-        """OpenAI 형식 messages를 Gemini contents 형식으로 변환.
+        """OpenAI 형식 messages를 Gemini contents 형식으로 변환한다.
 
-        Gemini는 role이 'user'와 'model'만 허용.
-        system 메시지는 systemInstruction으로 분리.
+        Gemini API는 role이 'user'와 'model'만 허용하며,
+        system 메시지는 systemInstruction으로 별도 전달해야 한다.
+        OpenAI의 'assistant' role은 Gemini의 'model'로 변환한다.
+
+        Args:
+            messages: OpenAI 형식 메시지 목록 (system/user/assistant role 포함 가능).
+
+        Returns:
+            (system_prompt, contents) 튜플.
+            system_prompt는 system 메시지를 합친 문자열, contents는 Gemini contents 형식 목록.
         """
         system_parts = []
         contents = []
@@ -128,7 +187,18 @@ class GoogleProvider(BaseProvider):
 async def _iter_google_sse(
     response: httpx.Response, usage_out: dict
 ) -> AsyncGenerator[str, None]:
-    """Google Gemini SSE 파서. usageMetadata(마지막 청크)에서 토큰 수 캡처."""
+    """Google Gemini SSE 스트림을 파싱하여 텍스트 청크를 생성한다.
+
+    usageMetadata 필드(마지막 청크)에서 promptTokenCount/candidatesTokenCount를 캡처한다.
+    finishReason MAX_TOKENS는 OpenAI 규격 "length"로 정규화한다.
+
+    Args:
+        response: httpx 스트리밍 응답 객체.
+        usage_out: 완료 후 토큰 수와 finish_reason을 기록할 dict.
+
+    Yields:
+        candidates[0].content.parts[].text 문자열 청크.
+    """
     async for line in response.aiter_lines():
         if not line.startswith("data: "):
             continue

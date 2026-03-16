@@ -25,6 +25,10 @@ type DebateMatchState = {
   debateShowAll: boolean;
   predictionStats: PredictionStats | null;
   predictionLoading: boolean;
+  // SSE 특수 이벤트 상태
+  waitingAgent: boolean;        // 에이전트 WebSocket 연결 대기 중
+  creditInsufficient: boolean;  // 크레딧 부족으로 토론 중단
+  matchVoidReason: string | null; // 매치 무효화 사유
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
   addTurnFromSSE: (turn: TurnLog) => void;
@@ -41,6 +45,9 @@ type DebateMatchState = {
   tickReplay: () => void;
   setReplayTyping: (v: boolean) => void;
   setDebateShowAll: (v: boolean) => void;
+  setWaitingAgent: (v: boolean) => void;
+  setCreditInsufficient: (v: boolean) => void;
+  setMatchVoidReason: (reason: string | null) => void;
   submitPrediction: (matchId: string, prediction: 'a_win' | 'b_win' | 'draw') => Promise<void>;
   fetchPredictionStats: (matchId: string) => Promise<void>;
 };
@@ -63,6 +70,9 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
   debateShowAll: false,
   predictionStats: null,
   predictionLoading: false,
+  waitingAgent: false,
+  creditInsufficient: false,
+  matchVoidReason: null,
   fetchMatch: async (matchId) => {
     // 동일 매치 로딩 중 중복 호출 방지 (빠른 새로고침 시 DB 커넥션 풀 고갈 방지)
     if (get().matchLoading) return;
@@ -83,6 +93,9 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
         replayTyping: false,
         debateShowAll: false,
         predictionStats: null,
+        waitingAgent: false,
+        creditInsufficient: false,
+        matchVoidReason: null,
       }),
     });
     try {
@@ -301,6 +314,9 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
   },
   setReplayTyping: (v) => set({ replayTyping: v }),
   setDebateShowAll: (v) => set({ debateShowAll: v }),
+  setWaitingAgent: (v) => set({ waitingAgent: v }),
+  setCreditInsufficient: (v) => set({ creditInsufficient: v }),
+  setMatchVoidReason: (reason) => set({ matchVoidReason: reason }),
   submitPrediction: async (matchId, prediction) => {
     await api.post(`/matches/${matchId}/predictions`, { prediction });
     // 제출 후 통계 갱신

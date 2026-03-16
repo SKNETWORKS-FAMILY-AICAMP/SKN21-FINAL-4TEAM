@@ -157,34 +157,42 @@ export default function HomePage() {
         const res = await login(loginId, password);
         setToken(res.access_token);
         const user = await api.get<{
-          id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
+          id: string; login_id: string; nickname: string; email: string | null;
+          role: 'user' | 'admin' | 'superadmin';
           age_group: string; adult_verified_at: string | null;
           preferred_llm_model_id: string | null;
           credit_balance?: number; subscription_plan_key?: string | null;
+          created_at: string;
         }>('/auth/me');
         setUser({
-          id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
+          id: user.id, login_id: user.login_id, nickname: user.nickname,
+          email: user.email ?? null, role: user.role,
           ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
           preferredLlmModelId: user.preferred_llm_model_id,
           creditBalance: user.credit_balance ?? 0,
           subscriptionPlanKey: user.subscription_plan_key ?? null,
+          createdAt: user.created_at,
         });
         router.push(['admin', 'superadmin'].includes(user.role) ? '/admin' : '/');
       } else {
         const res = await register(loginId.trim(), nickname.trim(), password, email || undefined);
         setToken(res.access_token);
         const user = await api.get<{
-          id: string; login_id: string; nickname: string; role: 'user' | 'admin' | 'superadmin';
+          id: string; login_id: string; nickname: string; email: string | null;
+          role: 'user' | 'admin' | 'superadmin';
           age_group: string; adult_verified_at: string | null;
           preferred_llm_model_id: string | null;
           credit_balance?: number; subscription_plan_key?: string | null;
+          created_at: string;
         }>('/auth/me');
         setUser({
-          id: user.id, login_id: user.login_id, nickname: user.nickname, role: user.role,
+          id: user.id, login_id: user.login_id, nickname: user.nickname,
+          email: user.email ?? null, role: user.role,
           ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
           preferredLlmModelId: user.preferred_llm_model_id,
           creditBalance: user.credit_balance ?? 0,
           subscriptionPlanKey: user.subscription_plan_key ?? null,
+          createdAt: user.created_at,
         });
         toast.success('가입이 완료되었습니다!');
         router.push('/');

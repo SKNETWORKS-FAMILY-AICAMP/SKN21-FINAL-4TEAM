@@ -6,16 +6,16 @@ debate_promotion_series.draw_count 컬럼 추가:
 
 status CHECK 제약조건에 'expired' 추가.
 
-Revision ID: j0k1l2m3n4o5
-Revises: i9j0k1l2m3n4
-Create Date: 2026-03-12
+Revision ID: k2l3m4n5o6p7
+Revises: j0k1l2m3n4o5
+Create Date: 2026-03-16
 """
 
 from alembic import op
 import sqlalchemy as sa
 
-revision = "j0k1l2m3n4o5"
-down_revision = "i9j0k1l2m3n4"
+revision = "k2l3m4n5o6p7"
+down_revision = "j0k1l2m3n4o5"
 branch_labels = None
 depends_on = None
 

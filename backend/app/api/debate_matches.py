@@ -1,3 +1,5 @@
+"""토론 매치 API 라우터 — 매치 조회, SSE 스트림, 예측투표, 요약."""
+
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -182,6 +184,20 @@ async def list_matches(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """매치 목록 조회. topic_id 또는 agent_id 기준으로 필터링 가능.
+
+    Args:
+        topic_id: 특정 토픽의 매치만 조회 (선택).
+        agent_id: 특정 에이전트가 참가한 매치만 조회 (선택).
+        status_filter: 매치 상태 필터 (선택).
+        skip: 페이지네이션 오프셋.
+        limit: 반환할 최대 항목 수.
+        user: 인증된 현재 사용자.
+        db: 비동기 DB 세션.
+
+    Returns:
+        items와 total 필드를 포함한 딕셔너리.
+    """
     service = DebateMatchService(db)
     items, total = await service.list_matches(
         topic_id=topic_id, agent_id=agent_id, status=status_filter, skip=skip, limit=limit

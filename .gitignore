@@ -79,3 +79,10 @@ frontend/playwright-report/
 
 # Claude Office Skills (로컬 전용, git 제외)
 claude-office-skills/
+
+# OMC (oh-my-claudecode) 내부 파일 (로컬 전용)
+.omc/
+
+# 임시 린트/타입체크 결과물
+frontend/lint_output.txt
+frontend/typescript_errors.txt

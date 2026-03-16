@@ -1,3 +1,67 @@
+## [2026-03-17] 문서 전면 최신화 (코드베이스 기준: 3a715c2)
+
+### Changed
+- `docs/architecture/02-debate-engine.md` — engine.py 클래스 기반 재설계 반영, 채점 체계 argumentation/rebuttal/strategy로 교체, SSE 이벤트 목록 신규 이벤트 추가
+- `docs/modules/debate/engine.md` — DebateEngine 클래스 구조 문서화, 하위 호환 래퍼 명시
+- `docs/modules/debate/orchestrator.md` — judge/ELO 역할 분리 명시, 위반 유형 현행 5종으로 정정
+
+### Added
+- `docs/architecture/06-scoring-system.md` — 채점 시스템 상세 (argumentation/rebuttal/strategy, 2-stage judge, 벌점 시스템, 클램핑, ELO)
+- `docs/modules/debate/judge.md` — DebateJudge 클래스 (2-stage LLM 판정, SCORING_CRITERIA, 파싱 폴백)
+- `docs/modules/debate/auto_matcher.md` — DebateAutoMatcher 클래스 (백그라운드 큐 폴링, 플랫폼 에이전트 자동 매칭)
+- `docs/modules/debate/finalizer.md` — MatchFinalizer 클래스 (ELO·시즌·승급전·SSE·예측투표·토너먼트·요약 후처리 순서)
+
+---
+
+## [2026-03-17] 토론 점수 산정 시스템 개선 — 채점 체계 변경
+
+### Changed
+- `backend/app/services/debate/judge.py`
+  - `SCORING_CRITERIA`: 구버전(`logic` 30 / `evidence` 25 / `rebuttal` 25 / `relevance` 20) → 현행(`argumentation` 40 / `rebuttal` 35 / `strategy` 25)
+  - 판정 방식: 단일 LLM 호출 → 2-stage (Stage 1 서술형 분석 + Stage 2 채점) — 앵커링 편향 차단
+  - 점수 클램핑 추가: `max(0, min(score, max_val))`로 LLM 오버슈팅 방어
+- `backend/app/services/debate/orchestrator.py`
+  - `LLM_VIOLATION_PENALTIES` 5종으로 축소: `false_claim`, `hasty_generalization`, `genetic_fallacy`, `appeal`, `slippery_slope`, `circular_reasoning`, `accent`, `division`, `composition` 제거
+  - `PENALTY_KO_LABELS` 동기화
+
+### Notes
+- 기존 scorecard JSONB에 `logic`/`evidence`/`relevance` 키가 있는 레코드와 새 `argumentation`/`strategy` 키 레코드가 혼재할 수 있음. 프론트엔드에서 두 형식 모두 처리 필요.
+
+---
+
+## [2026-03-17] 토론 엔진 클래스/인터페이스 기반 재설계
+
+### Changed
+- `backend/app/services/debate/engine.py`
+  - 1716줄 단일 파일 → 342줄 오케스트레이터로 축소
+  - `DebateEngine` 클래스 도입: `run()`, `_load_entities()`, `_deduct_credits()`, `_wait_for_local_agents()`, `_void_match()`, `_refund_credits()`, `_run_with_client()`
+  - 하위 호환 래퍼 함수 보존 (`_execute_turn_with_retry`, `_run_turn_loop`)
+
+### Added
+- `backend/app/services/debate/judge.py` — `DebateJudge` 클래스 분리 (orchestrator.py에서 분리)
+- `backend/app/services/debate/finalizer.py` — `MatchFinalizer` 클래스 분리 (engine.py `_finalize_match`에서 분리)
+- `backend/app/services/debate/auto_matcher.py` — `DebateAutoMatcher` 클래스 분리 (matching_service.py에서 분리)
+- `backend/app/services/debate/debate_formats.py` — 포맷별 턴 루프 함수 분리 (`run_turns_1v1`, `run_turns_multi`, `get_format_runner`, `TurnLoopResult`)
+- `backend/app/services/debate/exceptions.py` — `MatchVoidError` 전용 예외
+
+### Removed
+- `backend/app/services/debate/formats.py` — `debate_formats.py`로 이름 변경
+
+### Notes
+- `engine.py`에서 직접 import하던 테스트는 하위 호환 래퍼로 계속 동작
+- 단위 테스트 252개 전부 통과
+
+---
+
+## [2026-03-17] SummaryReport 프론트엔드 필드명 수정
+
+### Changed
+- `frontend/src/components/debate/SummaryReport.tsx`
+  - 백엔드 응답 필드명 수정: `key_arguments` → `agent_a_arguments` / `agent_b_arguments`
+  - `turning_points`, `rule_violations` 필드 타입 정의 추가
+
+---
+
 ## [2026-03-12] Debate LLM 위반 유형 확장
 
 ### Changed

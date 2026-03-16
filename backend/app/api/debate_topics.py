@@ -1,3 +1,5 @@
+"""토론 토픽 API 라우터 — 토픽 CRUD, 큐 등록/탈퇴, SSE 대기방."""
+
 import asyncio
 import json
 import logging
@@ -30,7 +32,16 @@ router = APIRouter()
 
 
 async def _require_agent_ownership(db: AsyncSession, agent_id: str, user: User) -> None:
-    """에이전트 소유권 검증. 실패 시 HTTP 403."""
+    """에이전트 소유권 검증. 실패 시 HTTP 403.
+
+    Args:
+        db: 비동기 DB 세션.
+        agent_id: 검증할 에이전트 ID.
+        user: 소유권을 확인할 사용자.
+
+    Raises:
+        HTTPException(403): 사용자가 에이전트 소유자가 아닐 때.
+    """
     agent_result = await db.execute(
         select(DebateAgent).where(DebateAgent.id == agent_id, DebateAgent.owner_id == user.id)
     )
@@ -65,6 +76,19 @@ async def list_topics(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """토픽 목록 조회. 상태 필터와 정렬 기준 지정 가능.
+
+    Args:
+        status_filter: 상태 필터 (scheduled|open|in_progress|closed, 선택).
+        sort: 정렬 기준 (recent|popular_week|queue|matches).
+        page: 페이지 번호.
+        page_size: 페이지당 항목 수.
+        user: 인증된 현재 사용자.
+        db: 비동기 DB 세션.
+
+    Returns:
+        items와 total 필드를 포함한 TopicListResponse.
+    """
     service = DebateTopicService(db)
     items, total = await service.list_topics(status=status_filter, sort=sort, page=page, page_size=page_size)
     return {"items": items, "total": total}
@@ -113,6 +137,19 @@ async def get_topic(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """토픽 상세 조회. 큐 대기 수와 매치 수 포함.
+
+    Args:
+        topic_id: 조회할 토픽 ID.
+        user: 인증된 현재 사용자.
+        db: 비동기 DB 세션.
+
+    Returns:
+        TopicResponse — 큐/매치 카운트가 포함된 토픽 상세 정보.
+
+    Raises:
+        HTTPException(404): 토픽이 존재하지 않을 때.
+    """
     service = DebateTopicService(db)
     topic = await service.get_topic(topic_id)
     if topic is None:
@@ -123,7 +160,11 @@ async def get_topic(
 
 
 async def _run_debate_safe(match_id: str) -> None:
-    """토론 엔진 실행 래퍼. 예외를 로깅하고 삼키지 않음."""
+    """토론 엔진 실행 래퍼. 예외를 로깅하고 삼키지 않음.
+
+    Args:
+        match_id: 실행할 매치 ID.
+    """
     try:
         await run_debate(match_id)
     except Exception:
@@ -134,7 +175,16 @@ _background_tasks: set[asyncio.Task] = set()
 
 
 async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> None:
-    """한 명 준비 완료 후 카운트다운, 양쪽이 아직 큐에 있으면 자동 매치 생성."""
+    """한 명 준비 완료 후 카운트다운, 양쪽이 아직 큐에 있으면 자동 매치 생성.
+
+    카운트다운(debate_ready_countdown_seconds) 후 두 에이전트가 모두 큐에 남아
+    있으면 DebateMatch를 생성하고 토론 엔진을 백그라운드로 실행한다.
+
+    Args:
+        topic_id: 매치가 생성될 토픽 ID.
+        agent_a_id: 준비 완료한 에이전트 ID.
+        agent_b_id: 상대 에이전트 ID.
+    """
     await asyncio.sleep(settings.debate_ready_countdown_seconds)
 
     from app.core.database import async_session
@@ -455,6 +505,16 @@ async def leave_queue(
 
 
 def _topic_response(topic, queue_count: int = 0, match_count: int = 0) -> dict:
+    """DebateTopic 모델을 API 응답 딕셔너리로 직렬화.
+
+    Args:
+        topic: DebateTopic ORM 모델 인스턴스.
+        queue_count: 현재 큐 대기자 수 (기본값 0).
+        match_count: 해당 토픽의 총 매치 수 (기본값 0).
+
+    Returns:
+        API 응답에 사용할 토픽 딕셔너리.
+    """
     return {
         "id": topic.id,
         "title": topic.title,

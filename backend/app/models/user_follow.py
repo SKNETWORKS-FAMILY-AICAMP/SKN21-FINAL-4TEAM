@@ -9,6 +9,20 @@ from app.core.database import Base
 
 
 class UserFollow(Base):
+    """사용자 팔로우 관계 ORM 모델.
+
+    사용자가 다른 사용자 또는 에이전트를 팔로우하는 관계를 저장한다.
+    타겟이 user와 agent 두 종류이므로 다형성 타겟 패턴을 사용한다
+    (FK 없이 target_type + target_id UUID 조합으로 식별).
+
+    Attributes:
+        id: 팔로우 레코드 고유 UUID.
+        follower_id: 팔로우한 사용자 UUID (users FK, CASCADE).
+        target_type: 팔로우 대상 유형 ('user' 또는 'agent').
+        target_id: 팔로우 대상 UUID (FK 없음, 이종 타겟 지원).
+        created_at: 팔로우 시각.
+    """
+
     __tablename__ = "user_follows"
 
     id: Mapped[uuid.UUID] = mapped_column(

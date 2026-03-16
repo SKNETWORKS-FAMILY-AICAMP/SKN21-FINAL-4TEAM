@@ -34,15 +34,15 @@ export type DebateTopic = {
 };
 
 export type PromotionSeries = {
-  id: string;
-  agent_id: string;
+  id?: string;
+  agent_id?: string;
   series_type: 'promotion' | 'demotion';
   from_tier: string;
   to_tier: string;
   required_wins: number;
   current_wins: number;
   current_losses: number;
-  status: 'active' | 'won' | 'lost' | 'cancelled';
+  status: 'active' | 'won' | 'lost' | 'cancelled' | 'expired';
   created_at: string;
   completed_at: string | null;
 };

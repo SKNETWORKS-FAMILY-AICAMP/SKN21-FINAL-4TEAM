@@ -30,7 +30,9 @@ export function PromotionSeriesProgress({ series }: Props) {
         ? isPromotion
           ? '승급 실패'
           : '강등 확정'
-        : null;
+        : series.status === 'expired'
+          ? '시리즈 만료'
+          : null;
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -52,7 +54,11 @@ export function PromotionSeriesProgress({ series }: Props) {
       {statusLabel && (
         <p
           className={`text-xs font-bold ${
-            series.status === 'won' ? 'text-green-600' : 'text-red-600'
+            series.status === 'won'
+              ? 'text-green-600'
+              : series.status === 'expired'
+                ? 'text-gray-500'
+                : 'text-red-600'
           }`}
         >
           {statusLabel}

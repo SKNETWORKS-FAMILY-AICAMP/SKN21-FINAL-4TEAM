@@ -15,20 +15,21 @@ from app.models.debate_turn_log import DebateTurnLog
 from app.schemas.debate_ws import WSTurnRequest
 from app.services.debate.broadcast import publish_event
 from app.services.debate.helpers import (
-    PENALTY_REPETITION,
     _build_messages,
-    detect_repetition,
     validate_response_schema,
 )
 from app.services.debate.tool_executor import AVAILABLE_TOOLS, DebateToolExecutor, ToolContext
 from app.services.debate.ws_manager import WSConnectionManager
 from app.services.llm.inference_client import InferenceClient
+from app.services.debate.exceptions import MatchVoidError
 from app.services.llm.providers.base import APIKeyError
 
 logger = logging.getLogger(__name__)
 
 
 class TurnExecutor:
+    """단일 턴 실행(LLM 스트리밍 or WebSocket) 및 재시도 로직을 담당하는 클래스."""
+
     def __init__(self, client: InferenceClient, db: AsyncSession) -> None:
         self.client = client
         self.db = db
@@ -46,8 +47,32 @@ class TurnExecutor:
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
     ) -> DebateTurnLog:
-        """단일 턴 실행. 벌점 감지 포함."""
-        from app.services.debate.formats import _log_orchestrator_usage
+        """단일 턴을 실행하고 DB에 기록한다.
+
+        로컬 에이전트는 WebSocket 경유, 외부 에이전트는 스트리밍 BYOK 방식으로 처리.
+        실패 시 예외를 그대로 전파 — execute_with_retry()가 재시도를 담당한다.
+
+        Args:
+            match: 진행 중인 매치.
+            topic: 토론 주제.
+            turn_number: 현재 턴 번호.
+            speaker: 발언자 ('agent_a' | 'agent_b').
+            agent: 발언 에이전트.
+            version: 에이전트 버전 스냅샷. 없으면 기본 프롬프트 사용.
+            api_key: LLM BYOK 또는 플랫폼 API 키.
+            my_claims: 본인의 이전 발언 목록.
+            opponent_claims: 상대방의 이전 발언 목록.
+            my_accumulated_penalty: 이번 턴 이전까지 누적 벌점.
+
+        Returns:
+            DB에 저장된 DebateTurnLog 객체.
+
+        Raises:
+            TimeoutError: 턴 타임아웃 초과.
+            APIKeyError: API 키 인증 실패.
+            Exception: 기타 LLM/WebSocket 오류.
+        """
+        from app.services.debate.debate_formats import _log_orchestrator_usage
 
         default_prompt = "당신은 한국어 토론 참가자입니다. 반드시 한국어로만 답변하세요."
         system_prompt = version.system_prompt if version else default_prompt
@@ -184,11 +209,6 @@ class TurnExecutor:
                         "tool_result": parsed.get("tool_result"),
                     }
 
-            # 동어반복 감지
-            if detect_repetition(claim, my_claims):
-                penalties["repetition"] = PENALTY_REPETITION
-                penalty_total += PENALTY_REPETITION
-
         except Exception:
             # TimeoutError 포함 모든 예외를 그대로 전파 — execute_with_retry가 재시도·부전패 처리
             raise
@@ -229,7 +249,29 @@ class TurnExecutor:
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
     ) -> DebateTurnLog | None:
-        """재시도 포함 턴 실행. 모든 재시도 실패 시 None 반환."""
+        """재시도 로직을 포함한 턴 실행. 모든 재시도 실패 시 None을 반환한다.
+
+        APIKeyError는 1회만 재시도 후 MatchVoidError로 변환.
+        그 외 예외는 debate_turn_max_retries 횟수까지 재시도 후 None 반환.
+
+        Args:
+            match: 진행 중인 매치.
+            topic: 토론 주제.
+            turn_number: 현재 턴 번호.
+            speaker: 발언자 ('agent_a' | 'agent_b').
+            agent: 발언 에이전트.
+            version: 에이전트 버전 스냅샷.
+            api_key: LLM API 키.
+            my_claims: 본인의 이전 발언 목록.
+            opponent_claims: 상대방의 이전 발언 목록.
+            my_accumulated_penalty: 누적 벌점.
+
+        Returns:
+            성공 시 DebateTurnLog, 모든 재시도 실패 시 None.
+
+        Raises:
+            MatchVoidError: APIKeyError가 2회 연속 발생한 경우 (기술적 장애).
+        """
         for attempt in range(settings.debate_turn_max_retries + 1):
             try:
                 return await self.execute(
@@ -238,9 +280,15 @@ class TurnExecutor:
                     my_accumulated_penalty=my_accumulated_penalty,
                 )
             except APIKeyError as exc:
-                # 인증 실패는 재시도 없이 즉시 부전패 — 잘못된 키로 반복 호출 방지
-                logger.error("Turn %d %s API key invalid: %s — immediate forfeit", turn_number, speaker, exc)
-                return None
+                if attempt == 0:
+                    # 일시적 인증 오류 가능성 — 1회 재시도
+                    logger.warning("Turn %d %s API key error (attempt 1) — retrying once: %s", turn_number, speaker, exc)
+                    await asyncio.sleep(1.0)
+                    continue
+                # 2회 연속 실패 → 기술적 장애로 매치 무효화
+                raise MatchVoidError(
+                    f"API key authentication failed after retry for agent {getattr(agent, 'id', 'unknown')}: {exc}"
+                )
             except Exception as exc:
                 if attempt < settings.debate_turn_max_retries:
                     logger.warning(

@@ -1,3 +1,5 @@
+"""팔로우 API 라우터 — 팔로우/언팔로우, 팔로우 목록 조회, 상태 확인."""
+
 import logging
 from uuid import UUID
 
@@ -18,7 +20,16 @@ router = APIRouter()
 
 
 def _build_follow_response(follow, target_name: str, target_image_url: str | None) -> FollowResponse:
-    """UserFollow 객체와 조회된 대상 정보를 FollowResponse로 조립."""
+    """UserFollow 객체와 조회된 대상 정보를 FollowResponse로 조립.
+
+    Args:
+        follow: UserFollow ORM 모델 인스턴스.
+        target_name: 팔로우 대상의 이름(닉네임 또는 에이전트명).
+        target_image_url: 팔로우 대상의 이미지 URL (없으면 None).
+
+    Returns:
+        FollowResponse — 클라이언트에 반환할 팔로우 응답 스키마.
+    """
     return FollowResponse(
         id=follow.id,
         target_type=follow.target_type,

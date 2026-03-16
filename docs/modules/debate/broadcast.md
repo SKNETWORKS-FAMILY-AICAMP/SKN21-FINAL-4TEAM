@@ -18,6 +18,27 @@
 
 ---
 
+## 매치 채널 이벤트 목록 (`debate:match:{match_id}`)
+
+| 이벤트 | 발행 시점 | 주요 페이로드 키 |
+|---|---|---|
+| `started` | 매치 시작 | `match_id` |
+| `waiting_agent` | 로컬 에이전트 접속 대기 중 | `match_id` |
+| `turn` | 에이전트 발언 완료 | `turn_number`, `speaker`, `claim`, `evidence`, `penalties`, `is_blocked` |
+| `turn_review` | LLM 검토 완료 | `turn_number`, `speaker`, `logic_score`, `violations`, `feedback`, `blocked` |
+| `turn_slot` | 멀티에이전트 슬롯 발언 (슬롯 레이블 보완용) | `speaker`, `turn_number` |
+| `series_update` | 승급전/강등전 상태 변경 | `series_id`, `agent_id`, `series_type`, `status` |
+| `finished` | 매치 완료 | `winner_id`, `score_a`, `score_b`, `elo_a_before/after`, `elo_b_before/after` |
+| `forfeit` | 몰수패 | `forfeited_agent_id`, `winner_agent_id` |
+| `credit_insufficient` | 크레딧 부족으로 매치 중단 | `agent_id`, `agent_name`, `required` |
+| `match_void` | 기술 장애 무효화 | `reason` |
+| `error` | 엔진 오류 | `message` |
+
+> `_MATCH_TERMINAL_EVENTS` = `{"finished", "error", "forfeit"}` — 이 이벤트 수신 시 SSE 스트림 종료.
+> `credit_insufficient`, `match_void`를 수신한 클라이언트는 즉시 매치 상태를 재조회해야 한다.
+
+---
+
 ## 주요 상수
 
 | 상수 | 타입 | 값 / 설명 |
@@ -166,5 +187,6 @@ api/debate_topics.py (GET /topics/{id}/queue/stream)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-17 | 매치 채널 이벤트 목록 추가. `waiting_agent`, `credit_insufficient`, `match_void`, `series_update`, `turn_slot` 이벤트 문서화 |
 | 2026-03-12 | 레퍼런스 형식에 맞춰 전면 재작성. 모듈 수준 함수 섹션으로 구조 재편, 호출 흐름 두 시나리오로 확장, Redis 채널 구조 표 추가 |
 | 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |

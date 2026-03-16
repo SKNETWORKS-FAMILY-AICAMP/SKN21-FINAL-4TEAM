@@ -9,12 +9,14 @@ type User = {
   id: string;
   login_id: string;
   nickname: string;
+  email: string | null;
   role: 'user' | 'admin' | 'superadmin';
   ageGroup: string;
   adultVerifiedAt: string | null;
   preferredLlmModelId: string | null;
   creditBalance: number;
   subscriptionPlanKey: string | null;
+  createdAt: string;
 };
 
 type UserState = {
@@ -68,24 +70,28 @@ export const useUserStore = create<UserState>((set, get) => ({
             id: string;
             login_id: string;
             nickname: string;
+            email: string | null;
             role: 'user' | 'admin' | 'superadmin';
             age_group: string;
             adult_verified_at: string | null;
             preferred_llm_model_id: string | null;
             credit_balance?: number;
             subscription_plan_key?: string | null;
+            created_at: string;
           }>('/auth/me');
           set({
             user: {
               id: data.id,
               login_id: data.login_id,
               nickname: data.nickname,
+              email: data.email ?? null,
               role: data.role,
               ageGroup: data.age_group,
               adultVerifiedAt: data.adult_verified_at,
               preferredLlmModelId: data.preferred_llm_model_id,
               creditBalance: data.credit_balance ?? 0,
               subscriptionPlanKey: data.subscription_plan_key ?? null,
+              createdAt: data.created_at,
             },
             initialized: true,
           });

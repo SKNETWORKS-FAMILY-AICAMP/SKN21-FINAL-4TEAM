@@ -1,3 +1,5 @@
+"""관리자 LLM 모델 관리 API — 모델 등록/수정/활성화, 사용량 통계."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +19,8 @@ router = APIRouter()
 
 
 class ModelUsageStats(BaseModel):
+    """모델별 총 사용량 통계 응답 스키마."""
+
     llm_model_id: uuid.UUID
     total_requests: int
     total_input_tokens: int
@@ -25,6 +29,8 @@ class ModelUsageStats(BaseModel):
 
 
 class LLMModelListResponse(BaseModel):
+    """LLM 모델 목록 응답 스키마."""
+
     items: list[LLMModelResponse]
     total: int
 

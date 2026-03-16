@@ -1,3 +1,5 @@
+"""관리자 모니터링 API — 시스템 통계, 토큰 사용 로그 조회."""
+
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

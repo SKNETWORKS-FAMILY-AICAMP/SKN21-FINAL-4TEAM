@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.deps import require_admin, require_superadmin
 from app.models.user import User
 from app.schemas.debate_agent import AgentTemplateAdminResponse, AgentTemplateCreate, AgentTemplateUpdate
-from app.services.debate.agent_service import DebateTemplateService
+from app.services.debate.template_service import DebateTemplateService
 
 router = APIRouter()
 

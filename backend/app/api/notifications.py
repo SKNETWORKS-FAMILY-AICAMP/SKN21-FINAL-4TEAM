@@ -1,3 +1,5 @@
+"""알림 API 라우터 — 알림 목록 조회, 읽음 처리, 미읽기 수 조회."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
