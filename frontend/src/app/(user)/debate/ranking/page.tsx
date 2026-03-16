@@ -1,19 +1,13 @@
 'use client';
 
-<<<<<<< Updated upstream
-import { useEffect, useState } from 'react';
-import { TrendingUp, Trophy } from 'lucide-react';
-import { api } from '@/lib/api';
-import { RankingTable } from '@/components/debate/RankingTable';
-import { useDebateStore } from '@/stores/debateStore';
-=======
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   TrendingUp, Trophy, Swords, Cpu, Users, ArrowLeft, 
   Star, MessageSquare, Zap, Clock, DollarSign, Brain,
   ChevronRight, Award, Binary, ChevronDown
 } from 'lucide-react';
->>>>>>> Stashed changes
+import { api } from '@/lib/api';
+import { useDebateStore } from '@/stores/debateStore';
 
 // --- Types ---
 
@@ -158,15 +152,10 @@ const getGradient = (type: RankingType) => {
 // --- Page Component ---
 
 export default function RankingPage() {
-<<<<<<< Updated upstream
-  const [tab, setTab] = useState<'overall' | 'season'>('overall');
-  const [season, setSeason] = useState<Season | null>(null);
-  const ranking = useDebateStore((s) => s.ranking);
-  const [myAgentIds, setMyAgentIds] = useState<string[]>([]);
-=======
   const [selectedCategory, setSelectedCategory] = useState<RankingType | null>(null);
   const [selectedItem, setSelectedItem] = useState<RankingItem | null>(null);
->>>>>>> Stashed changes
+  const [myAgentIds, setMyAgentIds] = useState<string[]>([]);
+  const ranking = useDebateStore((s) => s.ranking);
 
   const activeItems = useMemo(() => {
     if (!selectedCategory) return null;
@@ -175,7 +164,6 @@ export default function RankingPage() {
     return LLM_DATA;
   }, [selectedCategory]);
 
-<<<<<<< Updated upstream
   useEffect(() => {
     api
       .get<{ agents: Array<{ id: string }> }>('/agents/me')
@@ -185,18 +173,10 @@ export default function RankingPage() {
       });
   }, []);
 
-  // 내 에이전트의 랭킹 엔트리 목록 (순위 포함)
-  const myRankEntries = ranking
-    .map((entry, idx) => ({ ...entry, rank: idx + 1 }))
-    .filter((entry) => myAgentIds.includes(entry.id));
-
-  const isSeasonActive = season?.status === 'active';
-=======
   const handleItemSelect = (item: RankingItem) => {
     setSelectedCategory(item.type);
     setSelectedItem(item);
   };
->>>>>>> Stashed changes
 
   const handleBack = () => {
     setSelectedItem(null);
@@ -248,57 +228,11 @@ export default function RankingPage() {
 
   // 2. List + Detail View (SPA)
   return (
-<<<<<<< Updated upstream
-    <div className="max-w-[800px] mx-auto py-6 px-4">
-      <h1 className="page-title flex items-center gap-2 mb-5">
-        <TrendingUp size={24} className="text-primary" />
-        ELO 랭킹
-      </h1>
-
-      {/* 내 에이전트 순위 카드 — 로그인 상태이고 랭킹에 에이전트가 있을 때 표시 */}
-      {myRankEntries.length > 0 && (
-        <div className="mb-5 flex flex-col gap-2">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">내 에이전트</p>
-          {myRankEntries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center gap-3 px-4 py-3 bg-primary/10 border border-primary/30 rounded-xl"
-            >
-              <span className="text-lg font-bold text-primary w-8 text-center shrink-0">
-                #{entry.rank}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-text truncate">{entry.name}</p>
-                <p className="text-xs text-text-muted">
-                  ELO {entry.elo_rating} · {entry.wins}W {entry.losses}L {entry.draws}D
-                </p>
-              </div>
-              <span className="text-xs font-semibold text-primary shrink-0">
-                {entry.wins + entry.losses + entry.draws > 0
-                  ? `${Math.round((entry.wins / (entry.wins + entry.losses + entry.draws)) * 100)}%`
-                  : '-'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 탭 토글 */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setTab('overall')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-            tab === 'overall'
-              ? 'bg-primary text-white'
-              : 'bg-bg-surface border border-border text-text-secondary hover:text-text'
-          }`}
-=======
     <div className="max-w-[1400px] mx-auto py-8 px-6 min-h-screen">
       <div className="flex items-center justify-between mb-8">
         <button 
           onClick={handleBack}
           className="flex items-center gap-2 px-5 py-2.5 bg-white brutal-border brutal-shadow-sm rounded-xl font-black hover:translate-y-[-2px] transition-all cursor-pointer"
->>>>>>> Stashed changes
         >
           <ArrowLeft size={20} />
           다시 전체 보기
@@ -355,12 +289,7 @@ export default function RankingPage() {
           ))}
         </div>
 
-<<<<<<< Updated upstream
-      <RankingTable
-        seasonId={tab === 'season' && isSeasonActive && season ? season.id : undefined}
-        myAgentIds={myAgentIds}
-      />
-=======
+        {/* Center: List of rankings (we'll just use the list-detail logic here) */}
         {/* Right: Rich Detail View (8 cols) */}
         <div className="lg:col-span-8">
           {selectedItem && (
@@ -542,7 +471,6 @@ function SpecRow({ icon, label, value }: { icon: React.ReactNode, label: string,
         <p className="text-base font-black m-0">{value}</p>
       </div>
       <ChevronRight size={14} className="text-gray-300" />
->>>>>>> Stashed changes
     </div>
   );
 }
