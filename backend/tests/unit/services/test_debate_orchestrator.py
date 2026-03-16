@@ -564,6 +564,41 @@ class TestReviewTurn:
         assert result["penalty_total"] == expected_total
         assert result["block"] is True
 
+    @pytest.mark.asyncio
+    async def test_new_fallacy_violations_map_penalties(self):
+        """신규 논리 오류 7종이 벌점 맵에 반영된다."""
+        orch = self._make_orch()
+        new_types = [
+            "hasty_generalization",
+            "accent",
+            "genetic_fallacy",
+            "appeal",
+            "slippery_slope",
+            "division",
+            "composition",
+        ]
+        violations = [
+            {"type": v_type, "severity": "minor", "detail": f"{v_type} 테스트"}
+            for v_type in new_types
+        ]
+        orch.client.generate_byok = AsyncMock(
+            return_value={"content": self._review_json(logic_score=6, violations=violations)}
+        )
+
+        result = await orch.review_turn(
+            topic="테스트",
+            speaker="agent_b",
+            turn_number=5,
+            claim="테스트 주장",
+            evidence=None,
+            action="argue",
+        )
+
+        expected_penalties = {k: LLM_VIOLATION_PENALTIES[k] for k in new_types}
+        assert result["penalties"] == expected_penalties
+        assert result["penalty_total"] == sum(expected_penalties.values())
+        assert result["block"] is False
+
 
 class TestOrchestratorUnification:
     """통합된 단일 DebateOrchestrator 클래스 테스트."""

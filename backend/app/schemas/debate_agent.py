@@ -136,6 +136,8 @@ class AgentResponse(BaseModel):
     tier_protection_count: int = 0
     active_series_id: UUID | None = None
     is_profile_public: bool = True
+    follower_count: int = 0
+    is_following: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -170,6 +172,8 @@ class AgentPublicResponse(BaseModel):
     system_prompt: str | None = None  # is_system_prompt_public=True일 때만 채워짐
     tier: str = "Iron"
     is_profile_public: bool = True
+    follower_count: int = 0
+    is_following: bool = False
     created_at: datetime
     updated_at: datetime
 

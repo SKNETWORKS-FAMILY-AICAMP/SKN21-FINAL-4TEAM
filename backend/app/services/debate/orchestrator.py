@@ -47,6 +47,13 @@ PENALTY_KO_LABELS: dict[str, str] = {
     "llm_false_claim": "허위 주장(LLM)",             # 사실 확인 불가능하거나 명백히 허위인 주장(7)
     "llm_straw_man": "허수아비 논증(LLM)",            # 상대 주장 왜곡 반박
     "llm_circular_reasoning": "순환논증(LLM)",        # 결론=전제 논리 오류
+    "llm_hasty_generalization": "성급한 일반화(LLM)",  # 특정 사례로 섣불리 일반화
+    "llm_accent": "강조의 오류(LLM)",                # 특정 표현 강조/맥락 제거로 의미 왜곡
+    "llm_genetic_fallacy": "유전적 오류(LLM)",        # 출처·기원만으로 가치/진위를 판단
+    "llm_appeal": "부적절한 호소(LLM)",              # 동정·힘에 호소해 결론 수용 유도
+    "llm_slippery_slope": "미끄러운 경사(LLM)",       # 근거 없이 연쇄적 파국을 단정
+    "llm_division": "분할의 오류(LLM)",              # 전체 성질을 부분에 그대로 적용
+    "llm_composition": "합성의 오류(LLM)",           # 부분 속성을 전체 속성으로 일반화
 }
 
 # 채점 기준 (총 100점 만점) — JUDGE_SYSTEM_PROMPT의 항목 정의와 반드시 일치해야 함
@@ -116,6 +123,13 @@ LLM_VIOLATION_PENALTIES: dict[str, int] = {
     "off_topic": 5,          # 주제 이탈 — 경미하지만 반복 시 토론 집중도 누적 훼손
     "straw_man": 6,          # 상대 주장 왜곡·과장 후 반박 — 토론 공정성 훼손
     "circular_reasoning": 4,  # 결론을 전제로 사용하는 순환논증 — 논리 구조 결함
+    "hasty_generalization": 5,  # 제한된 사례를 일반화 — 논증 신뢰도 저하
+    "accent": 4,                # 강조/맥락 제거로 의미 왜곡 — 해석 신뢰도 저하
+    "genetic_fallacy": 5,       # 출처 중심 판단 — 내용 검증 회피
+    "appeal": 5,                # 감정/위력에 호소 — 논거 없는 결론 유도
+    "slippery_slope": 5,        # 도미노식 파국 단정 — 인과 비약
+    "division": 4,              # 전체→부분 속성 전이 오류
+    "composition": 4,           # 부분→전체 속성 전이 오류
 }
 
 # Review LLM 시스템 프롬프트 — debate_review_model (기본: gpt-4o-mini) 에 주입
@@ -138,6 +152,13 @@ REVIEW_SYSTEM_PROMPT = (
     "   - ad_hominem: 논거 대신 상대방을 직접 비하\n"
     "   - straw_man: 상대 주장을 의도적으로 왜곡하거나 과장해서 반박\n"
     "   - circular_reasoning: 결론을 전제로 사용하는 순환논증 (예: 'A가 옳다. 왜냐하면 A이기 때문이다')\n"
+    "   - hasty_generalization: 일부 사례만으로 성급하게 일반화\n"
+    "   - accent: 특정 단어/구절에 부적절한 강조를 두거나 맥락을 제거해 의미 왜곡\n"
+    "   - genetic_fallacy: 대상의 출처·기원·배경만으로 현재 가치나 진위를 판단\n"
+    "   - appeal: 동정이나 힘(위협)에 호소해 결론 수용을 유도\n"
+    "   - slippery_slope: 근거 없이 연쇄적 파국(도미노 효과)을 단정\n"
+    "   - division: 전체의 성질을 부분에도 동일하게 적용\n"
+    "   - composition: 부분의 속성을 전체의 속성으로 일반화\n"
     "   - off_topic: 토론 주제와 무관한 내용\n"
     "   - false_claim: 사실 확인이 불가능하거나 명백히 허위인 주장\n"
     "3. severity: 'none' | 'minor' | 'severe'\n"

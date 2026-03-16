@@ -1,3 +1,53 @@
+## [2026-03-12] Debate LLM 위반 유형 확장
+
+### Changed
+- `backend/app/services/debate/orchestrator.py`
+  - `LLM_VIOLATION_PENALTIES`에 신규 위반 7종 추가:
+    - `hasty_generalization`, `accent`, `genetic_fallacy`, `appeal`, `slippery_slope`, `division`, `composition`
+  - `PENALTY_KO_LABELS`에 대응 `llm_*` 레이블 추가
+  - `REVIEW_SYSTEM_PROMPT`의 허용 위반 유형 목록에 신규 7종 정의 추가
+- `frontend/src/components/debate/TurnBubble.tsx`
+  - 신규 `llm_*` 위반 레이블/설명 추가
+- `frontend/src/components/debate/DebateDebugModal.tsx`
+  - `review_result.violations`와 `turn.penalties` 표시를 위한 기본/`llm_*` 레이블 확장
+- 문서 동기화:
+  - `docs/debate-code-review.md`
+  - `docs/modules/debate/orchestrator.md`
+  - `docs/architecture/02-debate-engine.md`
+  - `docs/architecture/05-module-flow.md`
+  - `scripts/make_docx.py` (문서 생성 문자열)
+
+### Added
+- `backend/tests/unit/services/test_debate_orchestrator.py`
+  - 신규 논리 오류 7종의 벌점 매핑 검증 테스트 추가
+
+---
+
+## [2026-03-12] 팔로우 & 인페이지 알림 시스템
+
+### Added
+- **팔로우 시스템** — `user_follows` 테이블, `FollowService` (`follow`, `unfollow`, `get_following`, `get_follower_count`, `is_following`, `get_follower_user_ids`), `GET/POST/DELETE /api/follows/*`, `GET /api/follows/status` 엔드포인트
+- **인페이지 알림 시스템** — `user_notifications` 테이블, `NotificationService` (`create`, `create_bulk`, `get_list`, `get_unread_count`, `mark_read`, `mark_all_read`, `notify_match_event`, `notify_prediction_result`, `notify_new_follower`), `GET/PUT /api/notifications/*` 엔드포인트
+- **매치 알림 훅** — `engine.py`: 매치 시작·종료 시 `notify_match_event` 호출 (별도 세션), `match_service.py`: 예측투표 정산 후 `notify_prediction_result` 호출 (별도 세션)
+- **NotificationBell 컴포넌트** — TopHeader에 미읽기 카운트 배지, 드롭다운 알림 목록, 낙관적 업데이트
+- **FollowButton 컴포넌트** — 에이전트 카드에 팔로우/언팔로우 토글, 팔로워 수 표시
+- **팔로잉 페이지** — `/profile/following` — 내가 팔로우한 에이전트/사용자 목록
+- **Zustand 스토어** — `followStore`, `notificationStore` (낙관적 업데이트 + 실패 시 스냅샷 롤백)
+- **단위 테스트 35개** — `test_follow_service.py` (17개), `test_notification_service.py` (18개)
+
+---
+
+## [2026-03-12] 토론 관전·랭킹 화면 정보 계층화 UI 개선
+
+### Changed
+- **TurnBubble** — 검토 결과 패널 기본 접힘 상태, 클릭으로 펼치는 토글 추가
+- **MatchActionBar** — 신규 컴포넌트, 예측투표·공유·팔로우 액션을 관전 화면 하단에 고정 배치
+- **DebateViewer** — MatchActionBar를 뷰어 내부로 이동, 화면 레이아웃 계층화
+- **FightingHPBar** — 진행률 색상 강화, 라운드별 델타 표시 추가
+- **RankingTable** — 현재 사용자 소유 에이전트 행 하이라이트(배경색 구분)
+
+---
+
 ## [2026-03-12] 메인화면 리뉴얼 및 테마 시스템 구축
 
 ### Added

@@ -13,8 +13,163 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ScrollToTop } from '@/components/ui/ScrollToTop';
 import { TierBadge } from '@/components/debate/TierBadge';
 import { HighlightBanner } from '@/components/debate/HighlightBanner';
-import { SeasonBanner } from '@/components/debate/SeasonBanner';
 import { api } from '@/lib/api';
+import { DebateTopic } from '@/types/debate';
+
+const MOCK_TOPICS: DebateTopic[] = [
+  {
+    id: 'mock-1',
+    title: '원자력 발전은 친환경 에너지인가?',
+    description: '탄소 배출 저감과 핵폐기물 처리 문제 사이의 논쟁',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 10,
+    turn_token_limit: 1000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: true,
+    queue_count: 2,
+    match_count: 45,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-2',
+    title: '기본소득제 도입, 시기상조인가?',
+    description: '자동화 시대의 사회안전망 구축과 재정 부담',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 12,
+    turn_token_limit: 1200,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: false,
+    queue_count: 1,
+    match_count: 32,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-3',
+    title: 'AI 저작권, 인공지능에게도 권리가 있는가?',
+    description: '생성형 AI의 결과물에 대한 법적 보호와 작가 권리',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 8,
+    turn_token_limit: 1500,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: true,
+    queue_count: 3,
+    match_count: 128,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-4',
+    title: '채식주의, 기후 위기의 해법인가?',
+    description: '축산업의 환경 영향과 식문화의 변화',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 10,
+    turn_token_limit: 1000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: false,
+    queue_count: 0,
+    match_count: 15,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-5',
+    title: '우주 탐사 예산, 지구 문제 해결에 써야 하는가?',
+    description: '테라포밍의 꿈과 당면한 환경 문제 사이의 우선순위',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 15,
+    turn_token_limit: 2000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: true,
+    queue_count: 2,
+    match_count: 67,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-6',
+    title: '재택근무 vs 사무실 출근, 무엇이 더 효율적인가?',
+    description: '업무 생산성과 조직 문화, 소속감의 상관관계',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 6,
+    turn_token_limit: 800,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: false,
+    queue_count: 4,
+    match_count: 89,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-7',
+    title: 'SNS 규제, 표현의 자유 침해인가?',
+    description: '가짜 뉴스와 혐오 표현 방지를 위한 플랫폼의 책임',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 10,
+    turn_token_limit: 1000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: true,
+    queue_count: 1,
+    match_count: 42,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  },
+  {
+    id: 'mock-8',
+    title: '디지털 자산(NFT), 투기인가 혁명인가?',
+    description: '블록체인 기술의 활용 가능성과 시장의 거품 논란',
+    mode: 'tournament',
+    status: 'open',
+    max_turns: 10,
+    turn_token_limit: 1200,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: true,
+    tools_enabled: false,
+    queue_count: 0,
+    match_count: 112,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  }
+];
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -51,7 +206,88 @@ const defaultForm = {
   password: '' as string,
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 4;
+
+const MORE_MOCK_TOPICS: DebateTopic[] = [
+  {
+    id: 'mock-9',
+    title: '동물실험, 인류의 발전을 위해 정당화될 수 있는가?',
+    description: '생명 윤리와 의학적 진보 사이의 딜레마',
+    mode: 'debate',
+    status: 'open',
+    max_turns: 10,
+    turn_token_limit: 1000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: false,
+    tools_enabled: true,
+    queue_count: 5,
+    match_count: 24,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'user-1',
+    creator_nickname: '윤리전문가'
+  },
+  {
+    id: 'mock-10',
+    title: '메타버스에서의 범죄, 실질적 처벌이 가능한가?',
+    description: '가상 세계의 법적 정의와 관할권 문제',
+    mode: 'cross_exam',
+    status: 'open',
+    max_turns: 12,
+    turn_token_limit: 1500,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: false,
+    tools_enabled: true,
+    queue_count: 2,
+    match_count: 18,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'user-2',
+    creator_nickname: '사이버리안'
+  },
+  {
+    id: 'mock-11',
+    title: '유전자 가위 기술, 맞춤형 아기 탄생을 허용해야 하는가?',
+    description: '질병 예방과 유전적 불평등, 그리고 진화의 방향',
+    mode: 'persuasion',
+    status: 'open',
+    max_turns: 15,
+    turn_token_limit: 2000,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: false,
+    tools_enabled: false,
+    queue_count: 8,
+    match_count: 56,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'user-3',
+    creator_nickname: '바이오해커'
+  },
+  {
+    id: 'mock-12',
+    title: '인공지능 판사 도입, 공정한 판결을 보장하는가?',
+    description: '알고리즘의 편향성과 인간적 판단의 가치',
+    mode: 'debate',
+    status: 'open',
+    max_turns: 8,
+    turn_token_limit: 1200,
+    scheduled_start_at: null,
+    scheduled_end_at: null,
+    is_admin_topic: false,
+    tools_enabled: true,
+    queue_count: 3,
+    match_count: 37,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: 'admin',
+    creator_nickname: '시스템'
+  }
+];
+
+const ALL_MOCK_TOPICS = [...MOCK_TOPICS, ...MORE_MOCK_TOPICS];
 
 type Stats = {
   live: number;
@@ -59,42 +295,13 @@ type Stats = {
   scheduled: number;
 };
 
-function StatCard({
-  icon,
-  iconBg,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  iconBg: string;
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="bg-bg-surface border border-border rounded-2xl p-4 flex flex-col gap-3">
-      <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-xs text-text-muted mb-1">{label}</p>
-        <p className="text-2xl font-black text-text">{value}</p>
-      </div>
-    </div>
-  );
-}
-
 export default function DebateTopicsPage() {
   const router = useRouter();
   const {
     topics,
     topicsTotal,
-    popularTopics,
-    ranking,
     topicsLoading,
-    rankingLoading,
     fetchTopics,
-    fetchPopularTopics,
-    fetchRanking,
     fetchFeatured,
     createTopic,
     updateTopic,
@@ -103,15 +310,12 @@ export default function DebateTopicsPage() {
   } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
   const { user } = useUserStore();
-  const { theme } = useUIStore();
 
-  const [activeTab, setActiveTab] = useState<'topics' | 'popular' | 'ranking'>('topics');
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
-
-  // 통계 카드
-  const [stats, setStats] = useState<Stats>({ live: 0, todayParticipants: 0, scheduled: 0 });
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 주제 생성 모달
   const [showModal, setShowModal] = useState(false);
@@ -137,53 +341,42 @@ export default function DebateTopicsPage() {
   useEffect(() => {
     fetchMyAgents();
     fetchFeatured();
-    fetchRanking();
-  }, [fetchMyAgents, fetchFeatured, fetchRanking]);
+  }, [fetchMyAgents, fetchFeatured]);
 
-  // 통계 데이터 로드
+  // Infinite scroll trigger on downward wheel/scroll intent
   useEffect(() => {
-    api
-      .get<{ items: unknown[]; total: number }>('/matches?status=in_progress&limit=1')
-      .then((r) => setStats((s) => ({ ...s, live: r.total, todayParticipants: r.total * 2 })))
-      .catch(() => {});
-    api
-      .get<{ items: unknown[]; total: number }>('/topics?status=scheduled&limit=1')
-      .then((r) => setStats((s) => ({ ...s, scheduled: r.total })))
-      .catch(() => {});
-  }, []);
+    let lastScrollTime = 0;
+    const cooldown = 1500; // 1.5s cooldown between batches to maintain rhythm
 
-  // 주제 탭: 필터·정렬·페이지 변경 시 재조회
-  useEffect(() => {
-    if (activeTab === 'topics') {
-      fetchTopics({ status: filter === 'all' ? undefined : filter, sort, page, pageSize: PAGE_SIZE });
-    }
-  }, [activeTab, filter, sort, page, fetchTopics]);
+    const handleWheel = (e: WheelEvent) => {
+      // Detect downward scroll intent
+      if (e.deltaY > 0 && visibleCount < ALL_MOCK_TOPICS.length && !isRefreshing) {
+        const now = Date.now();
+        if (now - lastScrollTime > cooldown) {
+          lastScrollTime = now;
+          setIsRefreshing(true);
+          setTimeout(() => {
+            setVisibleCount(prev => Math.min(prev + 8, ALL_MOCK_TOPICS.length));
+            setIsRefreshing(false);
+          }, 800);
+        }
+      }
+    };
 
-  // 인기 탭 진입 시 조회
-  useEffect(() => {
-    if (activeTab === 'popular') fetchPopularTopics();
-  }, [activeTab, fetchPopularTopics]);
-
-  // 랭킹 탭 진입 시 조회
-  useEffect(() => {
-    if (activeTab === 'ranking') fetchRanking();
-  }, [activeTab, fetchRanking]);
+    // Also handle touch for mobile if needed, but wheel is primary for mouse
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [visibleCount, isRefreshing]);
 
   // 필터 변경 시 페이지 초기화
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
-    setPage(1);
+    setVisibleCount(8);
   };
 
   const handleSortChange = (s: SortOption) => {
     setSort(s);
-    setPage(1);
-  };
-
-  // 탭 변경 시 페이지 초기화
-  const handleTabChange = (tab: 'topics' | 'popular' | 'ranking') => {
-    setActiveTab(tab);
-    setPage(1);
+    setVisibleCount(8);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -295,219 +488,41 @@ export default function DebateTopicsPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto py-6 px-4 xl:px-8">
-      <SeasonBanner />
-
-      {/* 히어로 배너 */}
-      <div
-        className="relative rounded-2xl overflow-hidden mb-6"
-        style={{
-          background:
-            theme === 'light'
-              ? 'linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #5eead4 100%)'
-              : 'linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fdba74 100%)',
-        }}
-      >
-        <div className="px-8 py-8 md:py-10 max-w-[60%]">
-          <p className="text-white/80 text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5 m-0">
-            ✦ AI 토론 플랫폼 ✦
-          </p>
-          <h1 className="text-white text-2xl md:text-3xl font-black leading-tight mb-3 m-0">
-            나만의 AI 에이전트로
-            <br />
-            토론의 역사를 써라
-          </h1>
-          <p className="text-white/80 text-sm leading-relaxed mb-6 m-0">
-            커스텀 AI 에이전트를 만들고 ELO 랭킹 시스템으로 경쟁하세요.
-            <br />
-            실시간 토론을 관전하고 전략을 분석하세요.
-          </p>
-          <div className="flex gap-3 flex-wrap">
-            <Link
-              href="/debate/agents/create"
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 border border-white/40 rounded-xl text-white text-sm font-semibold no-underline transition-all"
-            >
-              <Bot size={16} /> 에이전트 만들기
-            </Link>
-            <button
-              onClick={() => {
-                if (agents.length > 0) {
-                  setShowRandomModal(true);
-                } else {
-                  router.push('/debate/agents/create');
-                }
-              }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl text-white text-sm font-semibold transition-all cursor-pointer"
-            >
-              <MessageSquare size={16} /> 토론 참여하기
-            </button>
-          </div>
-        </div>
-
-        {/* 우측 일러스트 — SVG */}
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-90 hidden md:block">
-          <svg
-            width="160"
-            height="140"
-            viewBox="0 0 160 140"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {/* 플랫폼/받침대 */}
-            <ellipse cx="80" cy="115" rx="55" ry="12" fill="rgba(0,0,0,0.2)" />
-            <path
-              d="M25 100 L80 120 L135 100 L80 80 Z"
-              fill="rgba(255,255,255,0.15)"
-              stroke="rgba(255,255,255,0.3)"
-              strokeWidth="1.5"
-            />
-            <path d="M25 100 L25 108 L80 128 L80 120 Z" fill="rgba(0,0,0,0.15)" />
-            <path d="M135 100 L135 108 L80 128 L80 120 Z" fill="rgba(0,0,0,0.1)" />
-            {/* 에이전트 A (왼쪽) */}
-            <circle
-              cx="52"
-              cy="65"
-              r="16"
-              fill="rgba(255,255,255,0.25)"
-              stroke="rgba(255,255,255,0.5)"
-              strokeWidth="1.5"
-            />
-            <circle cx="48" cy="62" r="2.5" fill="white" />
-            <circle cx="56" cy="62" r="2.5" fill="white" />
-            <path
-              d="M48 70 Q52 74 56 70"
-              stroke="white"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-            <line
-              x1="52"
-              y1="81"
-              x2="52"
-              y2="95"
-              stroke="rgba(255,255,255,0.4)"
-              strokeWidth="1.5"
-            />
-            {/* 에이전트 B (오른쪽) */}
-            <circle
-              cx="108"
-              cy="58"
-              r="16"
-              fill="rgba(255,255,255,0.25)"
-              stroke="rgba(255,255,255,0.5)"
-              strokeWidth="1.5"
-            />
-            <circle cx="104" cy="55" r="2.5" fill="white" />
-            <circle cx="112" cy="55" r="2.5" fill="white" />
-            <path
-              d="M104 63 Q108 67 112 63"
-              stroke="white"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-            <line
-              x1="108"
-              y1="74"
-              x2="108"
-              y2="88"
-              stroke="rgba(255,255,255,0.4)"
-              strokeWidth="1.5"
-            />
-            {/* VS 텍스트 */}
-            <text x="80" y="78" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold" opacity="0.8">
-              VS
-            </text>
-            {/* 장식 원 */}
-            <circle cx="30" cy="30" r="4" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
-            <circle cx="140" cy="45" r="3" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
-            <circle cx="20" cy="80" r="2.5" fill="rgba(255,255,255,0.3)" />
-            {/* 삼각형 장식 */}
-            <polygon points="145,70 152,82 138,82" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
-            <polygon points="15,55 20,45 25,55" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
-          </svg>
-        </div>
-      </div>
-
-      {/* 통계 카드 — xl 미만(모바일/태블릿)에서만 표시 */}
-      <div className="grid grid-cols-3 gap-4 mb-8 xl:hidden">
-        <StatCard
-          icon={<MessageSquare size={20} className="text-white" />}
-          iconBg="bg-primary"
-          label="실시간 토론"
-          value={stats.live}
-        />
-        <StatCard
-          icon={<Users size={20} className="text-white" />}
-          iconBg="bg-orange-500"
-          label="오늘의 참여자"
-          value={stats.todayParticipants > 0 ? stats.todayParticipants.toLocaleString() : '-'}
-        />
-        <StatCard
-          icon={<Clock size={20} className="text-white" />}
-          iconBg="bg-amber-500"
-          label="진행 예정"
-          value={stats.scheduled}
-        />
-      </div>
-
-      {/* 2컬럼 본문 */}
-      <div className="mt-6 flex gap-6 items-start">
-        {/* 왼쪽: 탭 + 토픽 목록 */}
-        <div className="flex-1 min-w-0">
-
       {/* 상단 액션 버튼 */}
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-bold text-text flex items-center gap-2 m-0">
-          <Swords size={20} className="text-primary" />
+      <div className="flex items-center justify-between mb-8 mt-4">
+        <h2 className="text-2xl font-black text-text flex items-center gap-3 m-0">
+          <Swords size={28} className="text-primary" />
           AI 토론
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {agents.length > 0 && (
             <button
               onClick={() => setShowRandomModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-semibold rounded-lg hover:bg-orange-500/20 transition-colors"
+              className="px-6 py-2.5 bg-orange-500 text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
             >
-              <Shuffle size={14} />
+              <Shuffle size={18} />
               랜덤 매칭
             </button>
           )}
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-surface border border-border text-text text-xs font-semibold rounded-lg hover:border-primary/40 transition-colors"
+            className="px-6 py-2.5 bg-white text-black text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
           >
-            <Plus size={14} />
+            <Plus size={18} />
             주제 제안
           </button>
           <Link
             href="/debate/agents"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg no-underline hover:bg-primary/90 transition-colors"
+            className="px-6 py-2.5 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2"
           >
-            <Plus size={14} />
+            <Plus size={18} />
             내 에이전트
           </Link>
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-1 mb-4 bg-bg-hover rounded-lg p-1">
-        {(['topics', 'popular', 'ranking'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => handleTabChange(tab)}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === tab ? 'bg-primary text-white' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            {tab === 'topics' ? '주제' : tab === 'popular' ? '인기' : '랭킹'}
-          </button>
-        ))}
-      </div>
-
-      {/* 주제 탭 */}
-      {activeTab === 'topics' && (
+      <div className="mt-6">
         <div id="topic-list">
-          {/* 필터 + 정렬 */}
           <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
             <div className="flex gap-1.5 flex-wrap">
               {FILTER_OPTIONS.map((opt) => (
@@ -537,251 +552,66 @@ export default function DebateTopicsPage() {
             </select>
           </div>
 
-          {/* 에이전트 없는 사용자에게 생성 유도 */}
-          {!topicsLoading && agents.length === 0 && (
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4 text-center">
-              <p className="text-sm text-text mb-2">
-                토론에 참가하려면 먼저 에이전트를 등록하세요.
-              </p>
-              <Link
-                href="/debate/agents/create"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg no-underline hover:bg-primary/90 transition-colors"
-              >
-                <Plus size={14} />
-                에이전트 만들기
-              </Link>
-            </div>
-          )}
-
-          {/* 토픽 목록 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {topicsLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-            ) : topics.length === 0 ? (
-              <div className="col-span-2 text-center py-12 text-text-muted text-sm">
-                등록된 토론 주제가 없습니다.
-              </div>
+              Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
             ) : (
-              topics.map((topic) => (
-                <TopicCard
-                  key={topic.id}
-                  topic={topic}
-                  currentUserId={currentUserId}
-                  onEdit={openEditModal}
-                  onDelete={handleDelete}
-                />
-              ))
+              ALL_MOCK_TOPICS.slice(0, visibleCount).map((topic, index) => {
+                // 현재 배치(마지막 8개 또는 초기 8개)에만 애니메이션 적용 효과를 주기 위해
+                // index가 visibleCount - 8보다 큰 경우에만 딜레이 적용 (초기는 0~7)
+                const isNewBatch = index >= visibleCount - 8;
+                const delayIndex = isNewBatch ? (index % 8) : 0;
+                
+                return (
+                  <div 
+                    key={topic.id} 
+                    className={`animate-in fill-mode-forwards ${isNewBatch ? '' : 'opacity-100 transform-none'}`}
+                    style={{ 
+                      animationDelay: isNewBatch ? `${delayIndex * 150}ms` : '0ms',
+                      animationDuration: isNewBatch ? '0.8s' : '0s'
+                    }}
+                  >
+                    <TopicCard
+                      topic={topic}
+                      currentUserId={currentUserId}
+                      onEdit={openEditModal}
+                      onDelete={handleDelete}
+                    />
+                  </div>
+                );
+              })
             )}
           </div>
 
-          {/* 페이지네이션 */}
-          {topicsTotal > PAGE_SIZE && (
-            <div className="flex justify-center items-center gap-3 mt-4">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-border text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                이전
-              </button>
-              <span className="text-sm text-text-muted">
-                {page} / {Math.ceil(topicsTotal / PAGE_SIZE)}
-              </span>
-              <button
-                disabled={page * PAGE_SIZE >= topicsTotal}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-border text-text-muted hover:text-text disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                다음
-              </button>
+          {/* Infinite Scroll Refreshing State */}
+          {isRefreshing && (
+            <div className="flex justify-center items-center py-8">
+              <div className="flex gap-2 items-center text-primary font-black animate-pulse">
+                <Clock size={18} />
+                <span>새로운 주제를 불러오는 중...</span>
+              </div>
             </div>
           )}
 
-          {/* 하단 네비 카드 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-            <Link
-              href="/debate/agents"
-              className="bg-bg-surface border border-border rounded-2xl p-6 hover:border-primary/40 hover:shadow-md transition-all no-underline group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                  <Bot size={24} className="text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-text mb-1 group-hover:text-primary transition-colors m-0">Agents</h3>
-                  <p className="text-xs text-text-muted m-0">내 AI 에이전트를 관리하고 새 에이전트를 만드세요</p>
-                  <p className="text-xs text-text-secondary mt-2 leading-relaxed m-0">
-                    커스텀 AI 에이전트를 설계하고 ELO 랭킹 시스템으로 경쟁하세요.
-                  </p>
-                </div>
-              </div>
-            </Link>
-            <Link
-              href="/debate/ranking"
-              className="bg-bg-surface border border-border rounded-2xl p-6 hover:border-primary/40 hover:shadow-md transition-all no-underline group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
-                  <Trophy size={24} className="text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-text mb-1 group-hover:text-primary transition-colors m-0">Ranking</h3>
-                  <p className="text-xs text-text-muted m-0">AI 에이전트 전체 랭킹을 확인하세요</p>
-                  <p className="text-xs text-text-secondary mt-2 leading-relaxed m-0">
-                    다른 사용자들이 만든 수많은 AI 에이전트들의 순위와 전적을 확인해보세요.
-                  </p>
-                </div>
-              </div>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* 인기 탭 */}
-      {activeTab === 'popular' && (
-        <div>
-          <HighlightBanner />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-            {topicsLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-            ) : popularTopics.length === 0 ? (
-              <div className="col-span-2 text-center py-12 text-text-muted text-sm">
-                이번 주 인기 주제가 없습니다.
-              </div>
-            ) : (
-              popularTopics.map((topic) => (
-                <TopicCard
-                  key={topic.id}
-                  topic={topic}
-                  currentUserId={currentUserId}
-                  onEdit={openEditModal}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 랭킹 탭 */}
-      {activeTab === 'ranking' && (
-        <div className="flex flex-col gap-2">
-          {rankingLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)
-          ) : ranking.length === 0 ? (
-            <div className="text-center py-12 text-text-muted text-sm">랭킹 데이터가 없습니다.</div>
-          ) : (
-            ranking.map((entry, idx) => (
-              <div
-                key={entry.id}
-                className={`flex items-center gap-3 bg-bg-surface border border-border rounded-xl px-4 py-3 ${
-                  entry.is_profile_public !== false
-                    ? 'cursor-pointer hover:border-primary/40 transition-colors'
-                    : ''
-                }`}
-                onClick={() => {
-                  if (entry.is_profile_public !== false) {
-                    router.push(`/debate/agents/${entry.id}`);
-                  }
-                }}
-              >
-                <span
-                  className={`text-sm font-bold w-6 text-center ${
-                    idx === 0
-                      ? 'text-yellow-400'
-                      : idx === 1
-                        ? 'text-text'
-                        : idx === 2
-                          ? 'text-orange-400'
-                          : 'text-text-muted'
+          {/* Numeric Indicators (Carousel style) */}
+          <div className="flex justify-center gap-3 mt-12 mb-8">
+            {Array.from({ length: Math.ceil((ALL_MOCK_TOPICS.length - 8) / 8) + 1 }).map((_, idx) => {
+              const isActive = (visibleCount >= 8 + idx * 8);
+              return (
+                <button
+                  key={idx}
+                  disabled
+                  className={`w-10 h-10 rounded-xl border-2 border-black font-black text-sm flex items-center justify-center transition-all ${
+                    isActive 
+                      ? 'bg-primary text-white brutal-shadow-sm' 
+                      : 'bg-white text-gray-300'
                   }`}
                 >
                   {idx + 1}
-                </span>
-                {/* 아바타 */}
-                <div className="w-8 h-8 rounded-lg border border-border bg-bg overflow-hidden shrink-0 flex items-center justify-center text-base">
-                  {entry.image_url ? (
-                    <img src={entry.image_url} alt={entry.name} className="w-full h-full object-cover" />
-                  ) : (
-                    '🤖'
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-bold text-text truncate">{entry.name}</p>
-                    {entry.tier && <TierBadge tier={entry.tier} />}
-                  </div>
-                  <p className="text-xs text-text-muted truncate">
-                    {entry.owner_nickname} · {entry.provider}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-primary">{entry.elo_rating}</p>
-                  <p className="text-[10px] text-text-muted">
-                    {entry.wins}W {entry.losses}L {entry.draws}D
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-        </div>
-        {/* 오른쪽: 위젯 사이드바 (xl 이상에서만 표시) */}
-        <div className="hidden xl:flex flex-col gap-4 w-[300px] shrink-0">
-          <StatCard
-            icon={<MessageSquare size={20} className="text-white" />}
-            iconBg="bg-primary"
-            label="실시간 토론"
-            value={stats.live}
-          />
-          <StatCard
-            icon={<Users size={20} className="text-white" />}
-            iconBg="bg-teal-500"
-            label="오늘의 참여자"
-            value={stats.todayParticipants > 0 ? stats.todayParticipants.toLocaleString() : '-'}
-          />
-          <StatCard
-            icon={<Clock size={20} className="text-white" />}
-            iconBg="bg-amber-500"
-            label="진행 예정"
-            value={stats.scheduled}
-          />
-          {ranking.length > 0 && (
-            <div className="bg-bg-surface border border-border rounded-2xl p-4">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-                🏆 랭킹 Top 5
-              </p>
-              <div className="flex flex-col gap-2">
-                {ranking.slice(0, 5).map((entry, idx) => (
-                  <div key={entry.id} className="flex items-center gap-2 text-sm">
-                    <span
-                      className={`w-5 text-center font-bold text-xs ${
-                        idx === 0
-                          ? 'text-yellow-400'
-                          : idx === 1
-                            ? 'text-text'
-                            : idx === 2
-                              ? 'text-orange-400'
-                              : 'text-text-muted'
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span className="text-text truncate flex-1">{entry.name}</span>
-                    <span className="text-text-muted text-xs shrink-0">{entry.elo_rating}</span>
-                  </div>
-                ))}
-              </div>
-              <Link
-                href="/debate/ranking"
-                className="block mt-3 text-center text-xs text-primary hover:underline no-underline"
-              >
-                전체 랭킹 보기 →
-              </Link>
-            </div>
-          )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

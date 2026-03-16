@@ -10,6 +10,7 @@ const config: Config = {
           light: 'rgba(249,115,22,0.15)',
           dark: 'var(--color-primary-dark)',
         },
+        nemo: '#10b981',
         secondary: '#9c27b0',
         dark: {
           DEFAULT: '#121212',

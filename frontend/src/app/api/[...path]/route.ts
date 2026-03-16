@@ -26,13 +26,22 @@ async function proxy(req: NextRequest): Promise<Response> {
     body = await req.arrayBuffer();
   }
 
-  const upstream = await fetch(targetUrl, {
-    method: req.method,
-    headers,
-    body: body && body.byteLength > 0 ? body : undefined,
-    // SSE 스트림 버퍼링 방지 — Next.js fetch 캐시가 body를 소비하면 "한번에 출력" 현상 발생
-    cache: 'no-store',
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: body && body.byteLength > 0 ? body : undefined,
+      // SSE 스트림 버퍼링 방지 — Next.js fetch 캐시가 body를 소비하면 "한번에 출력" 현상 발생
+      cache: 'no-store',
+    });
+  } catch {
+    // 백엔드 연결 실패 (ECONNREFUSED 등) — 503으로 반환하여 클라이언트가 graceful하게 처리 가능
+    return new Response(JSON.stringify({ detail: 'Backend unavailable' }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
 
   // 응답 헤더 복사
   const responseHeaders = new Headers(upstream.headers);

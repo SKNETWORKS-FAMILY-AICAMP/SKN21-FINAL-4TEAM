@@ -1,172 +1,335 @@
 'use client';
 
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { Bot, Plus, Zap, Star } from 'lucide-react';
-import { useDebateAgentStore } from '@/stores/debateAgentStore';
-import { useDebateStore } from '@/stores/debateStore';
-import { SkeletonCard } from '@/components/ui/Skeleton';
+import { useState } from 'react';
+import { Bot, Trophy, Users, Zap, Brain, ChevronRight, Star, TrendingUp, Cpu, DollarSign, Clock } from 'lucide-react';
 
-function getTier(elo: number): { name: string; color: string } {
-  if (elo >= 2200) return { name: '그랜드마스터', color: 'text-yellow-500' };
-  if (elo >= 1900) return { name: '마스터', color: 'text-purple-500' };
-  if (elo >= 1600) return { name: '다이아몬드', color: 'text-cyan-400' };
-  if (elo >= 1400) return { name: '골드', color: 'text-yellow-400' };
-  if (elo >= 1200) return { name: '실버', color: 'text-gray-400' };
-  return { name: '브론즈', color: 'text-amber-700' };
-}
+/** 하드코딩 LLM 모델 데이터 — 사용량 순 정렬 */
+type LLMModel = {
+  id: string;
+  name: string;
+  provider: string;
+  providerLogo: string;
+  description: string;
+  usageCount: number;
+  agentCount: number;
+  avgElo: number;
+  winRate: number;
+  maxTokens: number;
+  costPer1k: string;
+  latency: string;
+  strengths: string[];
+  tier: 'S' | 'A' | 'B' | 'C';
+  color: string;
+};
 
-function getInitials(name: string): string {
-  return name.slice(0, 2).toUpperCase();
-}
-
-const AVATAR_COLORS = [
-  'bg-yellow-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500',
-  'bg-pink-500', 'bg-green-500', 'bg-cyan-500', 'bg-red-500',
+const MOCK_LLM_MODELS: LLMModel[] = [
+  {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    provider: 'OpenAI',
+    providerLogo: '🟢',
+    description: '가장 강력한 범용 모델. 논리적 사고와 복잡한 추론에 뛰어나며, 토론에서 높은 승률을 기록합니다.',
+    usageCount: 15420,
+    agentCount: 342,
+    avgElo: 1756,
+    winRate: 72,
+    maxTokens: 128000,
+    costPer1k: '$0.005',
+    latency: '~1.2s',
+    strengths: ['논리적 추론', '복잡한 분석', '다국어 지원', '장문 처리'],
+    tier: 'S',
+    color: 'bg-emerald-500',
+  },
+  {
+    id: 'claude-3.5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    provider: 'Anthropic',
+    providerLogo: '🟠',
+    description: '뛰어난 분석력과 자연스러운 대화 능력을 갖춘 모델. 토론 시 설득력 있는 논거를 제시합니다.',
+    usageCount: 12890,
+    agentCount: 287,
+    avgElo: 1734,
+    winRate: 69,
+    maxTokens: 200000,
+    costPer1k: '$0.003',
+    latency: '~1.0s',
+    strengths: ['설득력', '반박 능력', '문맥 이해', '안전한 응답'],
+    tier: 'S',
+    color: 'bg-orange-500',
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    provider: 'Google',
+    providerLogo: '🔵',
+    description: '빠른 응답 속도와 높은 정확도를 겸비한 모델. 비용 대비 성능이 우수합니다.',
+    usageCount: 9750,
+    agentCount: 198,
+    avgElo: 1698,
+    winRate: 65,
+    maxTokens: 1000000,
+    costPer1k: '$0.001',
+    latency: '~0.6s',
+    strengths: ['빠른 응답', '비용 효율', '멀티모달', '최신 정보'],
+    tier: 'A',
+    color: 'bg-blue-500',
+  },
+  {
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
+    provider: 'OpenAI',
+    providerLogo: '🟢',
+    description: '경량화된 GPT-4o. 빠른 응답과 합리적인 비용으로 가벼운 토론에 적합합니다.',
+    usageCount: 8210,
+    agentCount: 156,
+    avgElo: 1612,
+    winRate: 58,
+    maxTokens: 128000,
+    costPer1k: '$0.0002',
+    latency: '~0.5s',
+    strengths: ['빠른 속도', '낮은 비용', '기본 논리', '일상 대화'],
+    tier: 'A',
+    color: 'bg-emerald-400',
+  },
+  {
+    id: 'claude-3-haiku',
+    name: 'Claude 3 Haiku',
+    provider: 'Anthropic',
+    providerLogo: '🟠',
+    description: '초고속 응답에 특화된 경량 모델. 간단한 토론이나 연습용으로 인기가 많습니다.',
+    usageCount: 6430,
+    agentCount: 134,
+    avgElo: 1545,
+    winRate: 52,
+    maxTokens: 200000,
+    costPer1k: '$0.00025',
+    latency: '~0.3s',
+    strengths: ['초고속', '초저비용', '간결한 응답', '기본 분석'],
+    tier: 'B',
+    color: 'bg-amber-500',
+  },
+  {
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
+    provider: 'Google',
+    providerLogo: '🔵',
+    description: '긴 문맥 처리에 강점이 있는 모델. 장시간 토론이나 복잡한 주제에 적합합니다.',
+    usageCount: 5120,
+    agentCount: 98,
+    avgElo: 1678,
+    winRate: 63,
+    maxTokens: 2000000,
+    costPer1k: '$0.0025',
+    latency: '~1.5s',
+    strengths: ['초장문 처리', '심층 분석', '코드 이해', '복잡한 주제'],
+    tier: 'A',
+    color: 'bg-indigo-500',
+  },
+  {
+    id: 'llama-3.1-70b',
+    name: 'Llama 3.1 70B',
+    provider: 'Meta',
+    providerLogo: '🟣',
+    description: '오픈소스 기반의 강력한 모델. 로컬 에이전트로 연결하여 무료로 사용할 수 있습니다.',
+    usageCount: 3890,
+    agentCount: 76,
+    avgElo: 1589,
+    winRate: 55,
+    maxTokens: 128000,
+    costPer1k: '무료 (로컬)',
+    latency: '~2.0s',
+    strengths: ['무료', '오픈소스', '커스터마이징', '프라이버시'],
+    tier: 'B',
+    color: 'bg-purple-500',
+  },
+  {
+    id: 'deepseek-v3',
+    name: 'DeepSeek V3',
+    provider: 'DeepSeek',
+    providerLogo: '⚫',
+    description: '중국 AI 기업의 최신 모델. 가성비가 뛰어나고 한국어 처리 능력이 점점 향상되고 있습니다.',
+    usageCount: 2340,
+    agentCount: 45,
+    avgElo: 1534,
+    winRate: 51,
+    maxTokens: 64000,
+    costPer1k: '$0.0005',
+    latency: '~1.8s',
+    strengths: ['가성비', '수학/코딩', '빠른 발전', '다양한 지식'],
+    tier: 'B',
+    color: 'bg-gray-700',
+  },
 ];
 
-export default function MyAgentsPage() {
-  const { agents, loading, fetchMyAgents, deleteAgent } = useDebateAgentStore();
-  const { ranking, fetchRanking } = useDebateStore();
+const TIER_COLORS: Record<string, string> = {
+  S: 'bg-yellow-400 text-black',
+  A: 'bg-blue-500 text-white',
+  B: 'bg-green-500 text-white',
+  C: 'bg-gray-400 text-white',
+};
 
-  useEffect(() => {
-    fetchMyAgents();
-    fetchRanking();
-  }, [fetchMyAgents, fetchRanking]);
-
-  const primaryAgent = agents[0];
-  const tier = primaryAgent ? getTier(primaryAgent.elo_rating) : null;
+export default function AIProfilePage() {
+  const [selectedId, setSelectedId] = useState<string>(MOCK_LLM_MODELS[0].id);
+  const selectedModel = MOCK_LLM_MODELS.find((m) => m.id === selectedId) ?? MOCK_LLM_MODELS[0];
 
   return (
-    <div className="max-w-[800px] mx-auto">
-      {/* ─── My Agent Hero Card ─── */}
-      {loading ? (
-        <SkeletonCard />
-      ) : primaryAgent ? (
-        <div className="nemo-gradient-card mb-6">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg font-bold">
-              {getInitials(primaryAgent.name)}
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold">{primaryAgent.name}</h2>
-              <p className="text-white/70 text-sm">{tier?.name} 티어</p>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold">{primaryAgent.elo_rating}</p>
-              <p className="text-white/70 text-xs">ELO</p>
-            </div>
-          </div>
+    <div className="max-w-[1200px] mx-auto">
+      {/* 페이지 타이틀 */}
+      <div className="flex items-center gap-2 mb-5">
+        <Brain size={24} className="text-primary" />
+        <h1 className="text-2xl font-black text-black m-0">AI Profile</h1>
+      </div>
+      <p className="text-sm text-gray-500 mb-6 -mt-2">토론에 사용되는 LLM 모델들의 인기 순위와 상세 정보를 확인하세요.</p>
 
-          {/* W/L Stats */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-white/15 rounded-xl py-3 px-4 text-center">
-              <p className="text-2xl font-bold text-green-300">{primaryAgent.wins}W</p>
-              <p className="text-white/60 text-xs">승리</p>
-            </div>
-            <div className="bg-white/15 rounded-xl py-3 px-4 text-center">
-              <p className="text-2xl font-bold text-red-300">{primaryAgent.losses}L</p>
-              <p className="text-white/60 text-xs">패배</p>
-            </div>
-          </div>
+      {/* 2컬럼 그리드 */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        {/* ─── 왼쪽: LLM 모델 순위 리스트 ─── */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl brutal-border brutal-shadow-sm p-4">
+            <h2 className="text-sm font-black text-black flex items-center gap-2 mb-4">
+              <Trophy size={16} className="text-yellow-500" />
+              LLM 모델 인기 순위
+            </h2>
+            <div className="flex flex-col gap-2">
+              {MOCK_LLM_MODELS.map((model, idx) => {
+                const isSelected = selectedId === model.id;
+                return (
+                  <button
+                    key={model.id}
+                    onClick={() => setSelectedId(model.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border-2 text-left cursor-pointer transition-all ${
+                      isSelected
+                        ? 'border-primary bg-primary/5 shadow-md'
+                        : 'border-transparent bg-gray-50 hover:bg-gray-100 hover:border-gray-200'
+                    }`}
+                  >
+                    {/* 순위 */}
+                    <span className={`text-xs font-black w-6 text-center shrink-0 ${
+                      idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : 'text-gray-400'
+                    }`}>
+                      {idx < 3 ? <Trophy size={14} className="mx-auto" /> : `#${idx + 1}`}
+                    </span>
 
-          {/* CTA */}
-          <Link
-            href="/debate"
-            className="block text-center bg-gray-900/80 text-white py-3 rounded-xl text-sm font-semibold no-underline hover:bg-gray-900 transition-colors"
-          >
-            토론 참가하기
-          </Link>
-        </div>
-      ) : (
-        <div className="nemo-gradient-card mb-6 text-center py-10">
-          <Bot size={48} className="mx-auto mb-4 text-white/80" />
-          <h2 className="text-xl font-bold mb-2">에이전트를 만들어 보세요</h2>
-          <p className="text-white/70 text-sm mb-4">AI 에이전트를 만들고 ELO 랭킹에 도전하세요!</p>
-          <Link
-            href="/debate/agents/create"
-            className="inline-flex items-center gap-2 bg-white text-gray-800 px-6 py-3 rounded-xl text-sm font-semibold no-underline hover:bg-gray-100 transition-colors"
-          >
-            <Plus size={16} />
-            에이전트 만들기
-          </Link>
-        </div>
-      )}
+                    {/* 모델 로고 */}
+                    <div className={`w-9 h-9 rounded-lg ${model.color} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
+                      {model.providerLogo}
+                    </div>
 
-      {/* ─── Additional Agents ─── */}
-      {agents.length > 1 && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-text">내 에이전트 ({agents.length})</h3>
-            <Link
-              href="/debate/agents/create"
-              className="text-xs text-nemo font-semibold no-underline hover:underline"
-            >
-              + 새 에이전트
-            </Link>
-          </div>
-          <div className="flex flex-col gap-2">
-            {agents.slice(1).map((agent) => (
-              <div key={agent.id} className="nemo-rank-card group relative">
-                <div className="w-10 h-10 rounded-xl bg-nemo/10 flex items-center justify-center text-nemo text-xs font-bold">
-                  {getInitials(agent.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <Link href={`/debate/agents/${agent.id}`} className="text-sm font-bold text-text no-underline hover:text-nemo">
-                    {agent.name}
-                  </Link>
-                  <p className="text-xs text-text-muted">{getTier(agent.elo_rating).name}</p>
-                </div>
-                <span className="text-sm font-bold text-text">{agent.elo_rating}</span>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`"${agent.name}" 에이전트를 삭제하시겠습니까?`)) return;
-                    try { await deleteAgent(agent.id); } catch (err: unknown) { alert(err instanceof Error ? err.message : '삭제 실패'); }
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-red-400 hover:text-red-500 bg-transparent border-none cursor-pointer"
-                >
-                  삭제
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+                    {/* 모델 정보 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-black truncate">{model.name}</span>
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${TIER_COLORS[model.tier]}`}>
+                          {model.tier}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-gray-400">{model.provider}</span>
+                        <span className="text-[11px] text-gray-300">·</span>
+                        <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+                          <Users size={10} />
+                          {model.usageCount.toLocaleString()}회
+                        </span>
+                      </div>
+                    </div>
 
-      {/* ─── Top Agents ─── */}
-      <div>
-        <h3 className="text-lg font-bold text-text mb-3">탑 에이전트</h3>
-        <div className="flex flex-col gap-3">
-          {ranking.length === 0 ? (
-            <div className="text-center py-8 text-text-muted text-sm">아직 랭킹 데이터가 없습니다.</div>
-          ) : (
-            ranking.slice(0, 10).map((entry, idx) => {
-              const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-              return (
-                <Link
-                  key={entry.id}
-                  href={`/debate/agents/${entry.id}`}
-                  className="nemo-rank-card no-underline"
-                >
-                  <span className="text-xs text-text-muted font-bold w-6 text-center">#{idx + 1}</span>
-                  <div className={`w-10 h-10 rounded-xl ${avatarColor} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                    {getInitials(entry.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-text truncate">{entry.name}</p>
-                    <p className="text-xs text-text-muted">{entry.owner_nickname}</p>
-                  </div>
-                  <span className="flex items-center gap-1 text-sm font-bold text-text">
-                    <Zap size={14} className="text-nemo" />
-                    {entry.elo_rating.toLocaleString()}
-                  </span>
-                  <button className="text-text-muted hover:text-yellow-400 bg-transparent border-none cursor-pointer p-1">
-                    <Star size={16} />
+                    {/* 화살표 */}
+                    <ChevronRight size={16} className={`shrink-0 ${isSelected ? 'text-primary' : 'text-gray-300'}`} />
                   </button>
-                </Link>
-              );
-            })
-          )}
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── 오른쪽: 선택된 모델 상세 정보 ─── */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl brutal-border brutal-shadow-sm overflow-hidden sticky top-4">
+            {/* 모델 헤더 */}
+            <div className={`${selectedModel.color} px-6 py-5 text-white`}>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-3xl">{selectedModel.providerLogo}</span>
+                <div>
+                  <h2 className="text-xl font-black m-0">{selectedModel.name}</h2>
+                  <p className="text-white/70 text-sm">{selectedModel.provider}</p>
+                </div>
+                <span className={`ml-auto text-sm font-black px-3 py-1 rounded-lg ${TIER_COLORS[selectedModel.tier]}`}>
+                  {selectedModel.tier} Tier
+                </span>
+              </div>
+              <p className="text-white/80 text-sm leading-relaxed m-0">{selectedModel.description}</p>
+            </div>
+
+            {/* 핵심 지표 그리드 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-0 border-b-2 border-black/10">
+              <div className="p-4 text-center border-r border-black/10 last:border-r-0">
+                <div className="flex items-center justify-center gap-1 text-primary mb-1">
+                  <Users size={14} />
+                </div>
+                <p className="text-lg font-black text-black m-0">{selectedModel.usageCount.toLocaleString()}</p>
+                <p className="text-[11px] text-gray-400 m-0">총 사용 횟수</p>
+              </div>
+              <div className="p-4 text-center border-r border-black/10 last:border-r-0">
+                <div className="flex items-center justify-center gap-1 text-blue-500 mb-1">
+                  <Bot size={14} />
+                </div>
+                <p className="text-lg font-black text-black m-0">{selectedModel.agentCount}</p>
+                <p className="text-[11px] text-gray-400 m-0">등록 에이전트</p>
+              </div>
+              <div className="p-4 text-center border-r border-black/10 last:border-r-0">
+                <div className="flex items-center justify-center gap-1 text-yellow-500 mb-1">
+                  <TrendingUp size={14} />
+                </div>
+                <p className="text-lg font-black text-black m-0">{selectedModel.avgElo}</p>
+                <p className="text-[11px] text-gray-400 m-0">평균 ELO</p>
+              </div>
+              <div className="p-4 text-center">
+                <div className="flex items-center justify-center gap-1 text-green-500 mb-1">
+                  <Star size={14} />
+                </div>
+                <p className="text-lg font-black text-black m-0">{selectedModel.winRate}%</p>
+                <p className="text-[11px] text-gray-400 m-0">평균 승률</p>
+              </div>
+            </div>
+
+            {/* 스펙 정보 */}
+            <div className="p-5">
+              <h3 className="text-sm font-black text-black mb-3">📋 모델 스펙</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                  <Cpu size={14} className="text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-[11px] text-gray-400 m-0">최대 토큰</p>
+                    <p className="text-sm font-bold text-black m-0">{selectedModel.maxTokens.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                  <DollarSign size={14} className="text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-[11px] text-gray-400 m-0">비용 (1K 토큰)</p>
+                    <p className="text-sm font-bold text-black m-0">{selectedModel.costPer1k}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                  <Clock size={14} className="text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-[11px] text-gray-400 m-0">응답 속도</p>
+                    <p className="text-sm font-bold text-black m-0">{selectedModel.latency}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 강점 태그 */}
+              <h3 className="text-sm font-black text-black mb-3">💪 주요 강점</h3>
+              <div className="flex flex-wrap gap-2">
+                {selectedModel.strengths.map((s) => (
+                  <span key={s} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

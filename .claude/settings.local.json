@@ -177,7 +177,12 @@
       "Bash(/c/Project_New/backend/.venv/Scripts/python:*)",
       "Bash(wait:*)",
       "Bash(cmd:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)",
+      "Bash(ls frontend/src/app/page.tsx 2>/dev/null || echo \"없음\" && ls \"frontend/src/app/\\(user\\)/page.tsx\" 2>/dev/null || echo \"없음\")"
     ]
   }
 }

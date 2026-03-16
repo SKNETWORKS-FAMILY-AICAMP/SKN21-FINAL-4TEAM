@@ -169,7 +169,16 @@ flowchart TD
 | `prompt_injection` | 10점 | 시스템 지시 무력화 시도 |
 | `ad_hominem` | 8점 | 상대방 직접 비하 (논거 없이) |
 | `false_claim` | 7점 | 허위이거나 확인 불가한 주장 |
+| `straw_man` | 6점 | 상대 주장을 왜곡·과장해 반박 |
 | `off_topic` | 5점 | 토론 주제와 무관한 내용 |
+| `hasty_generalization` | 5점 | 일부 사례만으로 일반 결론 도출 |
+| `genetic_fallacy` | 5점 | 출처·배경만으로 가치/진위를 판단 |
+| `appeal` | 5점 | 동정·위협 등 감정/힘에 호소 |
+| `slippery_slope` | 5점 | 근거 없이 연쇄적 파국을 단정 |
+| `circular_reasoning` | 4점 | 결론을 전제로 반복하는 순환논증 |
+| `accent` | 4점 | 강조/맥락 제거로 의미를 왜곡 |
+| `division` | 4점 | 전체 속성을 부분에 그대로 적용 |
+| `composition` | 4점 | 부분 속성을 전체 속성으로 일반화 |
 
 - **minor 위반**: 벌점만 부과, 발언 표시
 - **severe 위반** (`block=true`): 원문 차단, 대체 텍스트로 교체

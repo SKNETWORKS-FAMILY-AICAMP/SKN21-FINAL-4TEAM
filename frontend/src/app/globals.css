@@ -3,31 +3,31 @@
 @tailwind utilities;
 
 :root {
-  --color-bg: #1a1a1a;
-  --color-bg-surface: #262626;
-  --color-bg-hover: #333333;
-  --color-bg-input: #1e1e1e;
+  --color-bg: #263B6A;
+  --color-bg-surface: #2e4578;
+  --color-bg-hover: #374f86;
+  --color-bg-input: #263B6A;
   --color-text: #e0e0e0;
   --color-text-secondary: #9e9e9e;
-  --color-text-muted: #616161;
-  --color-border: #333333;
-  --color-border-input: #444444;
-  --color-primary: #f97316;
-  --color-primary-dark: #ea6c0a;
+  --color-text-muted: #7a8aaa;
+  --color-border: #3a5188;
+  --color-border-input: #4a6198;
+  --color-primary: #FF5A5A;
+  --color-primary-dark: #e04545;
 }
 
 [data-theme='light'] {
-  --color-bg: #f0fdfb;
+  --color-bg: #FFFBF1;
   --color-bg-surface: #ffffff;
-  --color-bg-hover: #ccfbf1;
+  --color-bg-hover: #f5efe3;
   --color-bg-input: #ffffff;
-  --color-text: #134e4a;
-  --color-text-secondary: #0f766e;
-  --color-text-muted: #5eead4;
-  --color-border: #99f6e4;
-  --color-border-input: #5eead4;
-  --color-primary: #0d9488;
-  --color-primary-dark: #0f766e;
+  --color-text: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #9ca3af;
+  --color-border: #e5e7eb;
+  --color-border-input: #d1d5db;
+  --color-primary: #89D4FF;
+  --color-primary-dark: #6ac0f0;
 }
 
 @layer base {
@@ -121,6 +121,59 @@
     background-color: var(--color-bg-surface);
     color: var(--color-text);
   }
+
+  /* ── NEMO 디자인 시스템 ───────────────────────── */
+  .nemo-hero {
+    @apply p-8 rounded-2xl text-white relative overflow-hidden;
+    /* Background handled in component */
+  }
+
+  .nemo-stat-card {
+    @apply p-[19px] rounded-2xl flex flex-col bg-white;
+    border: 2px solid #000000;
+    box-shadow: 4px 4px 0px #000000;
+  }
+
+  .nemo-topic-card {
+    @apply p-[19px] rounded-2xl transition-all duration-200 bg-white;
+    border: 2px solid #000000;
+    box-shadow: 4px 4px 0px #000000;
+  }
+  .nemo-topic-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px #000000;
+  }
+
+  .nemo-button-white {
+    @apply flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-black cursor-pointer transition-all duration-150 border-none;
+    background-color: #ffffff;
+    color: #000000;
+  }
+  .nemo-button-white:hover { transform: translate(-1px, -1px); }
+
+  .nemo-button-dark {
+    @apply flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-black cursor-pointer transition-all duration-150 border-none;
+    background-color: #000000;
+    color: #ffffff;
+  }
+  .nemo-button-dark:hover { transform: translate(-1px, -1px); }
+
+  .nemo-button-orange {
+    @apply flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-black cursor-pointer transition-all duration-150;
+    background-color: #f97316;
+    color: #ffffff;
+    border: 2px solid #000000;
+    box-shadow: 4px 4px 0px #000000;
+  }
+  .nemo-button-orange:hover { transform: translate(-1px, -1px); }
+
+  .nemo-button-brutal {
+    @apply flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer transition-colors duration-200;
+    background-color: var(--color-bg-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+  .nemo-button-brutal:hover { background-color: var(--color-bg-hover); }
 }
 
 @layer utilities {
@@ -130,6 +183,48 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Neo-Brutalism Utilities */
+  .brutal-border {
+    border: 2px solid #000000 !important;
+  }
+  .brutal-shadow {
+    box-shadow: 4px 4px 0px #000000 !important;
+  }
+  .brutal-shadow-sm {
+    box-shadow: 2px 2px 0px #000000 !important;
+  }
+  .brutal-shadow-lg {
+    box-shadow: 6px 6px 0px #000000 !important;
+  }
+
+  /* Custom Animation Utilities */
+  .fade-in {
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  .slide-in-from-bottom {
+    transform: translateY(20px);
+    animation: slideInFromBottom 0.5s ease-out forwards;
+  }
+  .animate-in {
+    opacity: 0;
+    transform: translateY(40px);
+    animation: animateIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideInFromBottom {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes animateIn {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
 

@@ -11,15 +11,15 @@ export function MobileHeader() {
   const { user } = useUserStore();
 
   return (
-    <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-bg-surface border-b border-border sticky top-0 z-[10]">
+    <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b-2 border-black sticky top-0 z-[10]">
       <button
         onClick={toggleSidebar}
-        className="p-1.5 rounded-lg bg-transparent border-none text-text cursor-pointer hover:bg-bg-hover transition-colors"
+        className="p-1.5 rounded-lg bg-transparent border-none text-black cursor-pointer hover:bg-gray-100 transition-colors"
         aria-label="메뉴 열기"
       >
-        <Menu size={22} />
+        <Menu size={22} strokeWidth={2.5} />
       </button>
-      <span className="text-sm font-bold text-text">Nemo</span>
+      <span className="text-xl font-black text-black tracking-tight italic">NEMO</span>
 
       <div className="flex-1" />
 

@@ -9,6 +9,8 @@ from app.models.debate_turn_log import DebateTurnLog
 from app.models.llm_model import LLMModel
 from app.models.token_usage_log import TokenUsageLog
 from app.models.user import User
+from app.models.user_follow import UserFollow
+from app.models.user_notification import UserNotification
 
 __all__ = [
     "User",
@@ -29,4 +31,6 @@ __all__ = [
     "DebateTournament",
     "DebateTournamentEntry",
     "DebateTurnLog",
+    "UserFollow",
+    "UserNotification",
 ]

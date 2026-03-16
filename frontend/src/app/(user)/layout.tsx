@@ -2,17 +2,19 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+
 import { UserSidebar } from '@/components/layout/UserSidebar';
 import { TopHeader } from '@/components/layout/TopHeader';
+import { Footer } from '@/components/layout/Footer';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { GuideProvider } from '@/components/guide/GuideProvider';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const { initialized, user, initialize } = useUserStore();
   const { theme } = useUIStore();
+  const router = useRouter();
 
   useEffect(() => {
     initialize();
@@ -23,13 +25,18 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  useEffect(() => {
-    if (initialized && !user) {
-      router.push('/');
-    }
-  }, [initialized, user, router]);
+  // 로딩 중에만 스피너 표시
+  if (!initialized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-bg">
+        <span className="inline-block w-6 h-6 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  if (!initialized || !user) {
+  // 비로그인 → 로그인 페이지로 이동
+  if (!user) {
+    router.replace('/login');
     return (
       <div className="flex items-center justify-center min-h-screen bg-bg">
         <span className="inline-block w-6 h-6 border-2 border-text-muted border-t-primary rounded-full animate-spin" />
@@ -42,11 +49,14 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       <UserSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <TopHeader />
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-          <ErrorBoundary>
-            <GuideProvider>{children}</GuideProvider>
-          </ErrorBoundary>
-        </main>
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <main className="flex-1 p-4 md:p-6 pb-0">
+            <ErrorBoundary>
+              <GuideProvider>{children}</GuideProvider>
+            </ErrorBoundary>
+          </main>
+          <Footer />
+        </div>
       </div>
     </div>
   );

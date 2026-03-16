@@ -218,6 +218,9 @@ export type DebateAgent = {
   name_changed_at: string | null;
   template_id: string | null;
   customizations: Record<string, unknown> | null;
+  // 팔로우 시스템 (백엔드 GET /agents/{id} 응답에 포함)
+  follower_count: number;
+  is_following: boolean;
   created_at: string;
   updated_at: string;
 };

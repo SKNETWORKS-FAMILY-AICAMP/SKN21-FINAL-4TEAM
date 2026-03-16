@@ -85,7 +85,7 @@ describe('debateStore', () => {
       },
     ];
 
-    vi.mocked(api.get).mockResolvedValueOnce(mockRanking);
+    vi.mocked(api.get).mockResolvedValueOnce({ items: mockRanking, total: 1 });
 
     await useDebateStore.getState().fetchRanking();
 

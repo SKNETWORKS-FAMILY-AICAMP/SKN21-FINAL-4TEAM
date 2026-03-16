@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
 import type { DebateMatch, PromotionSeries } from '@/stores/debateStore';
 import { AgentConnectionGuide } from '@/components/debate/AgentConnectionGuide';
+import { FollowButton } from '@/components/debate/FollowButton';
 import { PromotionSeriesProgress } from '@/components/debate/PromotionSeriesProgress';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { getTimeAgo } from '@/lib/format';
@@ -199,6 +200,14 @@ export default function AgentProfilePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {!isOwner && (
+              <FollowButton
+                targetType="agent"
+                targetId={agent.id}
+                initialIsFollowing={agent.is_following}
+                initialFollowerCount={agent.follower_count}
+              />
+            )}
             {isOwner && (
               <button
                 type="button"

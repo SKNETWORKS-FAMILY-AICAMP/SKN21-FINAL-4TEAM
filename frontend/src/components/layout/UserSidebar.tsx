@@ -4,40 +4,54 @@
 import { memo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { MessageSquare, Trophy, Bot, User, ShieldCheck, Home, LayoutGrid } from 'lucide-react';
+import {
+  Swords,
+  MessageSquare,
+  Trophy,
+  UserCircle,
+  BookOpen,
+  List,
+  Users,
+  ShieldCheck,
+  LogOut,
+  X,
+  Menu,
+  LayoutGrid,
+} from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 
-type MenuItem = { href: string; label: string; icon: typeof MessageSquare };
+type MenuItem = { href: string; label: string; icon: typeof Swords };
 
 const PLATFORM_ITEMS: MenuItem[] = [
-  { href: '/debate', label: 'Home', icon: Home },
+  { href: '/', label: 'Home', icon: Swords },
+  { href: '/debate', label: 'Debate', icon: MessageSquare },
   { href: '/debate/ranking', label: 'Ranking', icon: Trophy },
-  { href: '/debate/agents', label: 'Agents', icon: Bot },
   { href: '/debate/gallery', label: 'Gallery', icon: LayoutGrid },
+  { href: '/community', label: 'Community', icon: Users },
 ];
 
 const MY_ITEMS: MenuItem[] = [
-  { href: '/mypage', label: '마이페이지', icon: User },
+  { href: '/mypage', label: '마이페이지', icon: UserCircle },
 ];
 
 export const UserSidebar = memo(function UserSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isAdmin } = useUserStore();
-  const { sidebarOpen, closeSidebar } = useUIStore();
+  const { logout, isAdmin } = useUserStore();
+  const { sidebarOpen, closeSidebar, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
 
-  // 경로 변경 시 모바일 사이드바 자동 닫기
   useEffect(() => {
     closeSidebar();
   }, [pathname, closeSidebar]);
 
   const handleLogout = () => {
     logout();
-    router.push('/');
+    router.push('/login');
   };
 
   const isActive = (href: string) => {
+    if (href === '/') return pathname === '/';
     if (href === '/debate') {
       return (
         pathname === '/debate' ||
@@ -51,6 +65,8 @@ export const UserSidebar = memo(function UserSidebar() {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
+  const sidebarWidth = sidebarCollapsed ? 'w-[70px]' : 'w-[200px]';
+
   return (
     <>
       {/* 모바일 백드롭 */}
@@ -59,34 +75,45 @@ export const UserSidebar = memo(function UserSidebar() {
       )}
 
       <aside
-        className={`w-[220px] bg-bg-surface border-r border-border flex flex-col
-          fixed top-0 left-0 h-full z-[80] transition-transform duration-250 ease-out
+        className={`${sidebarWidth} bg-white border-r-2 border-black flex flex-col
+          fixed top-0 left-0 h-full z-[80] transition-all duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:relative md:translate-x-0 md:z-auto md:min-h-screen`}
+          md:sticky md:translate-x-0 md:min-h-screen`}
       >
-        {/* 로고 */}
-        <div className="px-5 py-5 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-              <MessageSquare size={18} className="text-white" />
+        {/* 로고 헤더 */}
+        <div className={`px-4 py-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+          {!sidebarCollapsed && (
+            <div className="flex-1">
+              <p className="text-xl font-bold text-black m-0 leading-tight tracking-tight">NEMo</p>
+              <p className="text-[10px] font-black m-0 text-primary tracking-widest">AI DEBATE</p>
             </div>
-            <div>
-              <p className="text-sm font-bold text-text leading-tight m-0">AI Arena</p>
-              <p className="text-[10px] text-primary font-semibold uppercase tracking-wider m-0">
-                Season 3
-              </p>
-            </div>
-          </div>
+          )}
+          <button
+            onClick={toggleSidebarCollapsed}
+            className={`p-2 rounded-lg bg-transparent border-none text-black hover:bg-gray-100 cursor-pointer hidden md:flex items-center justify-center transition-colors`}
+            aria-label="사이드바 토글"
+          >
+            <Menu size={20} strokeWidth={2.5} />
+          </button>
+          
+          <button
+            onClick={closeSidebar}
+            className="p-1 rounded-lg bg-transparent border-none text-text-muted hover:text-text cursor-pointer md:hidden"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* 네비게이션 */}
-        <nav className="flex-1 flex flex-col py-4 gap-4 px-3 overflow-y-auto">
+        <nav className="flex-1 flex flex-col py-2 px-3 gap-6 overflow-y-auto scrollbar-hide">
           {/* 플랫폼 */}
           <div>
-            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest px-4 mb-1.5">
-              플랫폼
-            </p>
-            <div className="flex flex-col gap-0.5">
+            {!sidebarCollapsed && (
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-3 mb-3">
+                플랫폼
+              </p>
+            )}
+            <div className={`flex flex-col gap-1.5 ${sidebarCollapsed ? 'items-center' : ''}`}>
               {PLATFORM_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
@@ -94,27 +121,31 @@ export const UserSidebar = memo(function UserSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={closeSidebar}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
+                    className={`flex items-center gap-3 no-underline text-sm font-bold transition-all duration-150
+                      ${sidebarCollapsed ? 'justify-center p-2.5 rounded-xl' : 'px-4 py-2.5 rounded-xl'}
                       ${
                         active
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-text-secondary hover:text-text hover:bg-bg-hover'
+                          ? 'bg-primary text-white brutal-border brutal-shadow-sm'
+                          : 'text-gray-500 hover:text-black hover:bg-gray-50'
                       }`}
+                    title={sidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
+                    <Icon size={18} strokeWidth={active ? 2.5 : 2} />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </Link>
                 );
               })}
             </div>
           </div>
+
           {/* 내 계정 */}
           <div>
-            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-widest px-4 mb-1.5">
-              내 계정
-            </p>
-            <div className="flex flex-col gap-0.5">
+            {!sidebarCollapsed && (
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-3 mb-3">
+                내 계정
+              </p>
+            )}
+            <div className={`flex flex-col gap-1.5 ${sidebarCollapsed ? 'items-center' : ''}`}>
               {MY_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
@@ -122,55 +153,80 @@ export const UserSidebar = memo(function UserSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={closeSidebar}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl no-underline text-sm font-medium transition-all duration-200
+                    className={`flex items-center gap-3 no-underline text-sm font-bold transition-all duration-150
+                      ${sidebarCollapsed ? 'justify-center p-2.5 rounded-xl' : 'px-4 py-2.5 rounded-xl'}
                       ${
                         active
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-text-secondary hover:text-text hover:bg-bg-hover'
+                          ? 'bg-primary text-white brutal-border brutal-shadow-sm'
+                          : 'text-gray-500 hover:text-black hover:bg-gray-50'
                       }`}
+                    title={sidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
+                    <Icon size={18} strokeWidth={active ? 2.5 : 2} />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </Link>
                 );
               })}
             </div>
           </div>
+
+          {/* 통계 */}
+          {!sidebarCollapsed && (
+            <div className="px-3 py-3 bg-gray-50 rounded-xl mx-0">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 mb-2">통계</p>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    실시간 토론
+                  </span>
+                  <span className="text-sm font-black text-black">3</span>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
+                    <Users size={10} className="text-gray-400" />
+                    오늘의 참여자
+                  </span>
+                  <span className="text-sm font-black text-black">1,435</span>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
+                    <List size={10} className="text-gray-400" />
+                    진행 예정
+                  </span>
+                  <span className="text-sm font-black text-black">2</span>
+                </div>
+              </div>
+            </div>
+          )}
         </nav>
 
         {/* 관리자 링크 */}
         {isAdmin() && (
-          <div className="px-3 py-2 border-t border-border">
+          <div className={`px-3 py-2 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
             <Link
               href="/admin"
-              onClick={closeSidebar}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-amber-400 hover:bg-amber-500/10 transition-colors no-underline font-medium"
+              className={`flex items-center gap-2 rounded-xl text-sm text-amber-500 hover:bg-amber-50 transition-colors no-underline font-bold
+                ${sidebarCollapsed ? 'p-2.5 justify-center' : 'px-4 py-2.5'}`}
+              title={sidebarCollapsed ? '관리자' : undefined}
             >
-              <ShieldCheck size={16} />
-              <span>관리자</span>
+              <ShieldCheck size={18} />
+              {!sidebarCollapsed && <span>관리자</span>}
             </Link>
           </div>
         )}
 
-        {/* 유저 정보 */}
-        <div className="px-4 py-4 border-t border-border">
-          {user && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold flex-shrink-0">
-                  {user.nickname[0]?.toUpperCase()}
-                </div>
-                <span className="text-sm text-text truncate">{user.nickname}</span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="text-xs text-text-muted hover:text-danger bg-transparent border-none cursor-pointer shrink-0"
-              >
-                로그아웃
-              </button>
-            </div>
-          )}
+        {/* 로그아웃 */}
+        <div className={`px-3 py-4 border-t-2 border-black/5 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-3 rounded-xl text-sm font-bold cursor-pointer border-none transition-all duration-150 bg-red-50 text-red-500 hover:bg-red-100
+              ${sidebarCollapsed ? 'p-2.5 justify-center' : 'px-4 py-3'}`}
+            title={sidebarCollapsed ? '로그아웃' : undefined}
+          >
+            <LogOut size={18} />
+            {!sidebarCollapsed && <span>로그아웃</span>}
+          </button>
         </div>
       </aside>
     </>

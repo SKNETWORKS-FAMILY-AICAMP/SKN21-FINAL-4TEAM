@@ -59,101 +59,81 @@ export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
   return (
     <Link
       href={`/debate/topics/${topic.id}`}
-      className="group block bg-bg-surface border border-border rounded-2xl p-5 hover:border-primary/50 hover:shadow-md transition-all no-underline"
+      className="group block p-4 bg-bg-surface border border-border rounded-xl hover:border-primary/40 hover:shadow-sm transition-all no-underline"
     >
-      {/* 상단: 상태 배지 + 모드 */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {isLive ? (
-            <span className="flex items-center gap-1 text-xs font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-              LIVE
-            </span>
-          ) : (
-            <span
-              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                STATUS_STYLES[topic.status] || STATUS_STYLES.closed
-              }`}
-            >
-              {STATUS_LABELS[topic.status] || topic.status}
-            </span>
-          )}
-          {topic.is_admin_topic && <Shield size={13} className="text-primary" />}
-          {topic.is_password_protected && <Lock size={11} className="text-yellow-500" />}
-        </div>
-        <div className="flex items-center gap-1">
-          {currentUserId && topic.created_by === currentUserId && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onEdit?.(topic);
-                }}
-                className="text-[11px] text-text-muted hover:text-primary px-1.5 py-0.5 rounded transition-colors"
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            {isLive ? (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                LIVE
+              </span>
+            ) : (
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  STATUS_STYLES[topic.status] || STATUS_STYLES.closed
+                }`}
               >
-                수정
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onDelete?.(topic.id);
-                }}
-                className="text-[11px] text-text-muted hover:text-red-400 px-1.5 py-0.5 rounded transition-colors"
-              >
-                삭제
-              </button>
-            </>
-          )}
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary">
-            {MODE_LABELS[topic.mode] || topic.mode}
-          </span>
+                {STATUS_LABELS[topic.status] || topic.status}
+              </span>
+            )}
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary">
+              {MODE_LABELS[topic.mode] || topic.mode}
+            </span>
+            {topic.is_admin_topic && <Shield size={12} className="text-primary" />}
+            {topic.is_password_protected && <Lock size={10} className="text-yellow-500" />}
+          </div>
+
+          <h3 className="text-base font-black text-black m-0 group-hover:text-primary transition-colors leading-snug line-clamp-1">
+            {topic.title}
+          </h3>
         </div>
-      </div>
 
-      {/* 제목 */}
-      <h3 className="text-base font-bold text-text mb-1.5 group-hover:text-primary transition-colors leading-snug line-clamp-2">
-        {topic.title}
-      </h3>
-
-      {/* 설명 */}
-      {topic.description && (
-        <p className="text-xs text-text-secondary mb-3 line-clamp-2 leading-relaxed">
-          {topic.description}
-        </p>
-      )}
-
-      {/* 하단: 대기 인원 + 방장 + 시간 */}
-      <div className="flex items-center justify-between text-xs text-text-muted mt-auto pt-2 border-t border-border">
-        <span className="flex items-center gap-1">
-          <Users size={12} />
-          {topic.queue_count}명 대기
-        </span>
-        <div className="flex items-center gap-3">
-          {topic.creator_nickname && <span>방장: {topic.creator_nickname}</span>}
-          {countdown && (topic.status === 'open' || topic.status === 'in_progress') && (
-            <span className="text-orange-400 font-medium flex items-center gap-1">
-              <CalendarClock size={11} />
-              {countdown}
-            </span>
-          )}
-          {topic.status === 'scheduled' && topic.scheduled_start_at && (
-            <span className="text-blue-400 flex items-center gap-1">
-              <CalendarClock size={11} />
-              {formatScheduleTime(topic.scheduled_start_at)} 시작
-            </span>
-          )}
-          {!countdown && topic.status !== 'scheduled' && (
+        <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+          <div className="flex items-center gap-3 text-[11px] font-bold text-gray-400">
             <span className="flex items-center gap-1">
-              <Clock size={11} />
-              {getTimeAgo(topic.created_at)}
+              <Users size={12} />
+              {topic.queue_count}
             </span>
-          )}
+            <span className="hidden xs:inline">{topic.creator_nickname}</span>
+            {countdown && (topic.status === 'open' || topic.status === 'in_progress') && (
+              <span className="text-orange-500 font-black">{countdown}</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 border-l border-border pl-4">
+            {currentUserId && topic.created_by === currentUserId && (
+              <div className="flex gap-1 mr-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onEdit?.(topic);
+                  }}
+                  className="text-[10px] text-text-muted hover:text-primary px-1.5 py-1 rounded transition-colors bg-transparent border-none cursor-pointer"
+                >
+                  수정
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onDelete?.(topic.id);
+                  }}
+                  className="text-[10px] text-text-muted hover:text-red-400 px-1.5 py-1 rounded transition-colors bg-transparent border-none cursor-pointer"
+                >
+                  삭제
+                </button>
+              </div>
+            )}
+            <div className="px-4 py-1.5 bg-primary text-white text-[11px] font-black rounded-lg brutal-border brutal-shadow-sm group-hover:translate-y-[-1px] transition-all">
+              참가
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 관리자 배지 */}
       {topic.is_admin_topic && (
         <div className="mt-2 pt-2 border-t border-border flex items-center gap-1 text-[10px] text-primary/70">
           <Shield size={10} />

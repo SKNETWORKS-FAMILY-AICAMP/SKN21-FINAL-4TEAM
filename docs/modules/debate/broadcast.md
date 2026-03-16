@@ -1,117 +1,170 @@
-# broadcast.py 모듈 명세
+# broadcast
+
+> Redis Pub/Sub 기반 SSE 브로드캐스트 — 매치 관전 이벤트와 매칭 큐 상태 이벤트를 통합 관리하는 모듈
 
 **파일 경로:** `backend/app/services/debate/broadcast.py`
-**최종 수정:** 2026-03-11
+**최종 수정일:** 2026-03-12
 
 ---
 
 ## 모듈 목적
 
-Redis Pub/Sub 기반 SSE 브로드캐스트를 담당한다. 매치 관전자에게 토론 진행 이벤트를 실시간으로 전달하는 매치 채널과, 매칭 큐 대기자에게 상태 변경을 알리는 큐 채널 두 가지로 구성된다.
+두 종류의 실시간 스트림을 담당한다.
+
+- **매치 관전 채널** — 토론 엔진이 발행하는 턴·판정·종료 이벤트를 관전 중인 사용자에게 SSE로 전달. Redis Set으로 관전자 수를 추적하며 중복 카운트를 방지한다.
+- **매칭 큐 채널** — 큐 대기자에게 상대 입장, 카운트다운 시작, 매칭 완료, 타임아웃 이벤트를 SSE로 전달.
+
+두 채널은 공통 폴링 루프(`_poll_pubsub`)를 공유하므로 heartbeat·terminal event 처리 로직이 단일 코드베이스에 유지된다.
 
 ---
 
 ## 주요 상수
 
-| 상수 | 값 | 설명 |
+| 상수 | 타입 | 값 / 설명 |
 |---|---|---|
-| `_TERMINAL_EVENTS` | `{"matched", "timeout", "cancelled"}` | 큐 채널 스트림 종료 이벤트 |
-| `_MATCH_TERMINAL_EVENTS` | `{"finished", "error", "forfeit"}` | 매치 채널 스트림 종료 이벤트 |
-| `_PRESENCE_PREFIX` (없음) | — | 관전자 수 추적 Redis 키 패턴: `debate:viewers:{match_id}` |
+| `_TERMINAL_EVENTS` | `set[str]` | `{"matched", "timeout", "cancelled"}` — 큐 채널 스트림 종료 트리거 이벤트 |
+| `_MATCH_TERMINAL_EVENTS` | `set[str]` | `{"finished", "error", "forfeit"}` — 매치 채널 스트림 종료 트리거 이벤트 |
 
 ---
 
-## 함수 목록
+## 모듈 수준 함수
 
-### 매치 관전 (SSE)
+### 채널명 생성 (내부)
 
-| 함수 | 시그니처 | 설명 |
-|---|---|---|
-| `publish_event` | `(match_id: str, event_type: str, data: dict) -> None` | 토론 이벤트를 Redis 채널 `debate:match:{match_id}`에 발행. 공유 `redis_client` 사용 |
-| `subscribe` | `(match_id: str, user_id: str, max_wait_seconds: int = 600) -> AsyncGenerator[str, None]` | Redis pub/sub 구독 후 SSE 형식 문자열을 yield. 관전자 수 Redis Set으로 추적. 타임아웃 시 error 이벤트 발행 후 종료 |
+#### `_channel(match_id: str) -> str`
 
-### 매칭 큐 (SSE)
+`"debate:match:{match_id}"` 형태의 Redis 채널명을 반환한다. `publish_event`와 `subscribe`에서 공통으로 사용한다.
 
-| 함수 | 시그니처 | 설명 |
-|---|---|---|
-| `publish_queue_event` | `(topic_id: str, agent_id: str, event_type: str, data: dict) -> None` | 큐 이벤트를 채널 `debate:queue:{topic_id}:{agent_id}`에 발행 |
-| `subscribe_queue` | `(topic_id: str, agent_id: str, max_wait_seconds: int = 120) -> AsyncGenerator[str, None]` | 큐 채널 구독. 종료 이벤트 수신 또는 120초 타임아웃 시 스트림 종료 |
+#### `_queue_channel(topic_id: str, agent_id: str) -> str`
 
-### 내부 함수
-
-| 함수 | 시그니처 | 설명 |
-|---|---|---|
-| `_channel` | `(match_id: str) -> str` | `"debate:match:{match_id}"` 채널명 생성 |
-| `_queue_channel` | `(topic_id: str, agent_id: str) -> str` | `"debate:queue:{topic_id}:{agent_id}"` 채널명 생성 |
-| `_poll_pubsub` | `(pubsub, terminal_events: set, deadline: float) -> AsyncGenerator[str, None]` | 공통 폴링 루프. 0.05s 즉시 폴링 후 없으면 2.0s 블로킹. terminal_events 수신 또는 deadline 초과 시 종료 |
+`"debate:queue:{topic_id}:{agent_id}"` 형태의 Redis 채널명을 반환한다. `publish_queue_event`와 `subscribe_queue`에서 공통으로 사용한다.
 
 ---
 
-## subscribe 관전자 추적 방식
+### 공통 폴링 루프 (내부)
 
-- 구독 시작: `SADD debate:viewers:{match_id} {user_id}` + `EXPIRE 3600`
-- 구독 종료(finally): `SREM debate:viewers:{match_id} {user_id}`
-- Redis Set을 사용하므로 같은 사용자가 새로고침해도 중복 카운트되지 않음
+#### `_poll_pubsub(pubsub, terminal_events: set[str], deadline: float) -> AsyncGenerator[str, None]`
+
+Redis pub/sub 메시지를 SSE 형식(`data: ...\n\n`)으로 yield하는 공통 내부 루프다.
+
+- 0.05s 즉시 폴링 후 메시지 없으면 2.0s 블로킹 대기 순으로 처리해 레이턴시와 CPU 낭비를 함께 억제한다.
+- `terminal_events`에 속한 이벤트를 수신하면 즉시 `return`하여 generator를 종료한다.
+- `deadline`을 초과하면 루프를 빠져나가 호출자에게 타임아웃 처리를 위임한다.
+- 메시지가 없는 슬롯에는 `": heartbeat\n\n"`을 yield하여 연결을 유지한다.
+- JSON 파싱 오류 발생 시 `logger.warning`만 남기고 폴링을 계속한다.
 
 ---
 
-## SSE 이벤트 형식
+### 매치 관전 채널
 
-```
-data: {"event": "<event_type>", "data": {...}}\n\n
-: heartbeat\n\n
+#### `publish_event(match_id: str, event_type: str, data: dict) -> None`
+
+`debate:match:{match_id}` 채널에 이벤트를 발행한다. 공유 `redis_client`를 사용하므로 턴 루프에서 반복 호출해도 연결 생성 오버헤드가 없다.
+
+페이로드 형식:
+```json
+{"event": "<event_type>", "data": {...}}
 ```
 
-heartbeat는 메시지가 없을 때 2.0초마다 발행되어 연결 유지에 사용된다.
+#### `subscribe(match_id: str, user_id: str, max_wait_seconds: int = 600) -> AsyncGenerator[str, None]`
+
+매치 채널을 구독하고 SSE 형식 문자열을 yield한다.
+
+- 구독 시작 시 `SADD debate:viewers:{match_id} {user_id}` + `EXPIRE 3600` 으로 관전자를 등록한다. Redis Set을 사용하므로 동일 사용자가 탭을 새로고침해도 중복 카운트되지 않는다.
+- `_MATCH_TERMINAL_EVENTS`(`finished`, `error`, `forfeit`) 수신 또는 `max_wait_seconds` 초과 시 스트림을 종료한다.
+- 타임아웃 시 `{"event": "error", "data": {"message": "Stream timeout: match may have failed"}}` 이벤트를 발행하여 클라이언트가 `fetchMatch`로 상태를 갱신하도록 유도한다.
+- `finally` 블록에서 `SREM`으로 관전자를 제거하고 pubsub 연결을 정리한다.
 
 ---
 
-## Redis 채널 구조
+### 매칭 큐 채널
 
-| 채널 패턴 | 용도 |
-|---|---|
-| `debate:match:{match_id}` | 매치 관전자용 이벤트 스트림 |
-| `debate:queue:{topic_id}:{agent_id}` | 큐 대기자별 이벤트 스트림 |
-| `debate:viewers:{match_id}` | 관전자 수 추적 (Set) |
+#### `publish_queue_event(topic_id: str, agent_id: str, event_type: str, data: dict) -> None`
+
+`debate:queue:{topic_id}:{agent_id}` 채널에 큐 이벤트를 발행한다. `publish_event`와 동일하게 공유 `redis_client`를 사용한다.
+
+#### `subscribe_queue(topic_id: str, agent_id: str, max_wait_seconds: int = 120) -> AsyncGenerator[str, None]`
+
+큐 채널을 구독하고 SSE 형식 문자열을 yield한다.
+
+- `_TERMINAL_EVENTS`(`matched`, `timeout`, `cancelled`) 수신 또는 `max_wait_seconds`(기본 120초) 초과 시 스트림을 종료한다.
+- 타임아웃 시 `{"event": "timeout", "data": {"reason": "queue_timeout"}}` 이벤트를 발행한다.
+- `finally` 블록에서 pubsub 연결을 정리한다.
 
 ---
 
 ## 의존 모듈
 
-| 모듈 | 용도 |
-|---|---|
-| `app.core.redis` | `redis_client` (발행용), `pubsub_client` (구독용) |
+| 모듈 | 경로 | 용도 |
+|---|---|---|
+| `redis_client` | `app.core.redis` | 이벤트 발행 (PUBLISH) 및 관전자 Set 조작 (SADD·SREM·EXPIRE) |
+| `pubsub_client` | `app.core.redis` | 구독 연결 풀 (pubsub 객체 생성) |
 
 ---
 
 ## 호출 흐름
 
-```
-engine.py
-  → publish_event(match_id, "turn", {...})      # 턴 완료
-  → publish_event(match_id, "finished", {...})  # 매치 종료
+### 매치 관전 흐름
 
-matching_service.py
+```
+services/debate/engine.py
+  → publish_event(match_id, "turn", {...})       # 매 턴 완료 시
+  → publish_event(match_id, "turn_review", {...}) # 턴 검토 결과
+  → publish_event(match_id, "finished", {...})   # 매치 종료
+
+api/debate_matches.py (GET /matches/{id}/stream)
+  → subscribe(match_id, user_id)
+      → pubsub_client.pubsub().subscribe("debate:match:{match_id}")
+      → SADD debate:viewers:{match_id} {user_id}
+      → _poll_pubsub(pubsub, _MATCH_TERMINAL_EVENTS, deadline)
+          → yield "data: {...}\n\n"  (턴/종료 이벤트)
+          → yield ": heartbeat\n\n"  (메시지 없는 슬롯)
+      → [finished 수신] generator 종료
+      → finally: SREM, pubsub.aclose()
+```
+
+### 매칭 큐 흐름
+
+```
+services/debate/matching_service.py
   → publish_queue_event(topic_id, agent_id, "opponent_joined", {...})
+  → publish_queue_event(topic_id, agent_id, "countdown_started", {...})
   → publish_queue_event(topic_id, agent_id, "matched", {...})
 
-API 라우터 (debate_matches.py)
-  → subscribe(match_id, user_id)  # SSE 스트리밍 엔드포인트
-
-API 라우터 (debate_topics.py)
-  → subscribe_queue(topic_id, agent_id)  # 큐 대기 SSE 엔드포인트
+api/debate_topics.py (GET /topics/{id}/queue/stream)
+  → subscribe_queue(topic_id, agent_id)
+      → pubsub_client.pubsub().subscribe("debate:queue:{topic_id}:{agent_id}")
+      → _poll_pubsub(pubsub, _TERMINAL_EVENTS, deadline)
+          → yield "data: {...}\n\n"  (큐 이벤트)
+          → yield ": heartbeat\n\n"
+      → [matched 수신] generator 종료
+      → finally: pubsub.aclose()
 ```
+
+### Redis 채널 구조
+
+| 채널 패턴 | 용도 |
+|---|---|
+| `debate:match:{match_id}` | 매치 관전자용 이벤트 스트림 |
+| `debate:queue:{topic_id}:{agent_id}` | 큐 대기자별 이벤트 스트림 |
+| `debate:viewers:{match_id}` | 관전자 수 추적 (Redis Set, TTL 3600s) |
 
 ---
 
 ## 에러 처리
 
-- 관전자 수 추적 Redis 오류: `logger.warning` 후 계속 진행 (토론 중단 없음)
-- `_poll_pubsub` JSON 파싱 오류: `logger.warning` 후 계속 폴링
-- `max_wait_seconds` 초과: error/timeout 이벤트 발행 후 generator 종료
+| 상황 | 처리 방식 |
+|---|---|
+| 관전자 SADD/SREM Redis 오류 | `logger.warning` 후 토론 중단 없이 계속 진행 |
+| `_poll_pubsub` JSON 파싱 오류 | `logger.warning` 후 다음 메시지 폴링 계속 |
+| `subscribe` 타임아웃 (`max_wait_seconds` 초과) | `error` 이벤트 발행 + `logger.warning` 후 generator 종료 |
+| `subscribe_queue` 타임아웃 | `timeout` 이벤트 발행 + `logger.warning` 후 generator 종료 |
+
+---
 
 ## 변경 이력
 
-| 날짜 | 버전 | 변경 내용 | 작성자 |
-|---|---|---|---|
-| 2026-03-11 | v2.0 | 실제 코드 기반으로 전면 재작성 | Claude |
+| 날짜 | 변경 내용 |
+|---|---|
+| 2026-03-12 | 레퍼런스 형식에 맞춰 전면 재작성. 모듈 수준 함수 섹션으로 구조 재편, 호출 흐름 두 시나리오로 확장, Redis 채널 구조 표 추가 |
+| 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |

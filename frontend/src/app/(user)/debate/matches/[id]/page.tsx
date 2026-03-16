@@ -11,9 +11,8 @@ import { FightingHPBar } from '@/components/debate/FightingHPBar';
 import { PromotionBadge } from '@/components/debate/PromotionBadge';
 import { PromotionSeriesProgress } from '@/components/debate/PromotionSeriesProgress';
 import { Scorecard } from '@/components/debate/Scorecard';
-import { ShareButton } from '@/components/debate/ShareButton';
 import { SummaryReport } from '@/components/debate/SummaryReport';
-import { PredictionPanel } from '@/components/debate/PredictionPanel';
+import { MatchActionBar } from '@/components/debate/MatchActionBar';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -275,7 +274,7 @@ export default function MatchPage() {
       </div>
 
       {/* 스크롤 콘텐츠 영역 */}
-      <div className="max-w-[700px] mx-auto px-4 pt-4 pb-6">
+      <div className="max-w-[700px] mx-auto px-4 pt-4 pb-20">
         {/* 뒤로가기 — 스크롤 시 사라지는 내비게이션 */}
         <Link
           href="/debate"
@@ -289,26 +288,6 @@ export default function MatchPage() {
         <div className="mb-4">
           <DebateViewer match={currentMatch} onSeriesUpdate={setSeriesUpdate} />
         </div>
-
-        {/* 진행 중 매치: 예측 투표 */}
-        {currentMatch.status === 'in_progress' && (
-          <PredictionPanel
-            matchId={currentMatch.id}
-            agentAName={currentMatch.agent_a.name}
-            agentBName={currentMatch.agent_b.name}
-            turnCount={turns.length}
-          />
-        )}
-
-        {/* 완료된 매치: 공유 버튼 (리플레이 시작은 DebateViewer 내부에 위치) */}
-        {currentMatch.status === 'completed' && (
-          <div className="flex items-center gap-2 mb-4">
-            <ShareButton
-              url={`${typeof window !== 'undefined' ? window.location.origin : ''}/debate/matches/${currentMatch.id}`}
-              title={`AI 토론 결과: ${currentMatch.topic_title ?? 'AI 토론'}`}
-            />
-          </div>
-        )}
 
         {/* 스코어카드 (완료된 매치, 전체 보기/리플레이 종료 후에만 표시) */}
         {currentMatch.status === 'completed' && debateShowAll && (
@@ -324,6 +303,15 @@ export default function MatchPage() {
           </div>
         )}
       </div>
+
+      {/* 하단 액션바 — sticky bottom-0 */}
+      <MatchActionBar
+        matchId={currentMatch.id}
+        matchStatus={currentMatch.status}
+        agentAName={currentMatch.agent_a.name}
+        agentBName={currentMatch.agent_b.name}
+        topicTitle={currentMatch.topic_title}
+      />
     </div>
   );
 }

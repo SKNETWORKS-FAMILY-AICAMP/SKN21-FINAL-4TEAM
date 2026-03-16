@@ -60,7 +60,7 @@ export function FightingHPBar({
       {/* 에이전트 정보 */}
       <div className={`flex items-center gap-2 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
         <div
-          className={`w-14 h-14 rounded-xl bg-bg-surface border-2 shrink-0
+          className={`w-16 h-16 rounded-xl bg-bg-surface border-2 shrink-0
             overflow-hidden flex items-center justify-center text-2xl
             ${isWinnerCompleted
               ? 'border-yellow-400 ring-2 ring-yellow-400/60'
@@ -94,12 +94,12 @@ export function FightingHPBar({
       {/* HP 게이지 */}
       <div className={`flex items-center gap-2 w-full ${side === 'right' ? 'flex-row-reverse' : ''}`}>
         <span
-          className={`text-xs font-mono font-bold w-7 tabular-nums shrink-0 text-center
+          className={`text-sm font-mono font-bold w-8 tabular-nums shrink-0 text-center
             ${isCritical ? 'text-red-400 animate-pulse' : 'text-gray-200'}`}
         >
           {clamped}
         </span>
-        <div className="flex-1 h-4 bg-bg rounded border border-border overflow-hidden">
+        <div className="flex-1 h-5 bg-bg rounded border border-border overflow-hidden">
           {side === 'left' ? (
             <div
               className={`h-full ${color} transition-all duration-700 ease-out ${isCritical ? 'animate-pulse' : ''}`}
