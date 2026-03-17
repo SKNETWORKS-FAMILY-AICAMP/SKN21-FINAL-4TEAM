@@ -18,6 +18,7 @@ import {
   X,
   Menu,
   LayoutGrid,
+  Home,
 } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -25,6 +26,7 @@ import { useUIStore } from '@/stores/uiStore';
 type MenuItem = { href: string; label: string; icon: typeof Swords };
 
 const PLATFORM_ITEMS: MenuItem[] = [
+  { href: '/', label: 'Home', icon: Home },
   { href: '/debate', label: 'Debate', icon: MessageSquare },
   { href: '/debate/ranking', label: 'Ranking', icon: Trophy },
   { href: '/debate/gallery', label: 'Gallery', icon: LayoutGrid },

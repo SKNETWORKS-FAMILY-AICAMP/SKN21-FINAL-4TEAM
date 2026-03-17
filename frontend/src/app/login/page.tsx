@@ -93,7 +93,7 @@ export default function LoginPage() {
         if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); return; }
         if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); return; }
 
-        await api.post('/auth/signup', {
+        await api.post('/auth/register', {
           login_id: loginId.trim(),
           password,
           nickname: nickname.trim(),

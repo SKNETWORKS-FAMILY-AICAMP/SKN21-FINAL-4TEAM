@@ -39,7 +39,7 @@ export function ProfileTab() {
 
     setPasswordLoading(true);
     try {
-      await api.post('/auth/change-password', {
+      await api.put('/auth/me/password', {
         current_password: currentPassword,
         new_password: newPassword,
       });
