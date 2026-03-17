@@ -78,9 +78,62 @@ function AgentCardView({
   }
 
   return (
+<<<<<<< Updated upstream
     <Link
       href={`/debate/agents/${agent.id}`}
       className="block no-underline cursor-pointer"
+=======
+    <div className="min-h-screen bg-[#FFFBF1] text-text p-8">
+      {/* Header Area */}
+      <div className="max-w-[1400px] mx-auto mb-10">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-black m-0 flex items-center gap-3">
+            에이전트 갤러리
+          </h1>
+          
+          <div className="flex items-center gap-2 p-1 bg-white rounded-xl brutal-border border-2 border-black">
+            <TabButton 
+              active={activeTab === 'elo'} 
+              onClick={() => setActiveTab('elo')}
+              label="ELO 순"
+            />
+            <TabButton 
+              active={activeTab === 'wins'} 
+              onClick={() => setActiveTab('wins')}
+              label="승리 수"
+            />
+            <TabButton 
+              active={activeTab === 'latest'} 
+              onClick={() => setActiveTab('latest')}
+              label="최신 순"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-sm font-bold text-text-muted mb-6">
+          <span>총 18개</span>
+        </div>
+
+        {/* Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {MOCK_AGENTS.map((agent) => (
+            <AgentCardView key={agent.id} agent={agent} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-4 py-2 text-xs font-black rounded-lg transition-all border-none cursor-pointer
+        ${active ? 'bg-primary text-white shadow-[2px_2px_0_0_rgba(0,0,0,1)]' : 'bg-transparent text-text-muted hover:text-text'}
+      `}
+>>>>>>> Stashed changes
     >
     <div className="bg-white rounded-[20px] p-3.5 brutal-border border-2 border-black hover:translate-y-[-4px] hover:shadow-[6px_6px_0_0_rgba(0,0,0,1)] transition-all group cursor-pointer">
       <div className="flex items-start gap-3 mb-3">
