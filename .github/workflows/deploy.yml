@@ -3,22 +3,28 @@ name: CD
 # ────────────────────────────────────────────────────────────
 # develop 브랜치 push → dev EC2 자동 배포
 # main    브랜치 push → prod EC2 자동 배포
+#
+# CI 워크플로우(lint + test + build)가 모두 통과한 후에만 실행됩니다.
 # ────────────────────────────────────────────────────────────
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches:
       - main
       - develop
 
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: deploy-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true  # 연속 push 시 이전 배포 취소
 
 jobs:
   deploy-staging:
     name: Deploy → Staging
     runs-on: ubuntu-latest
-    if: github.ref_name == 'develop'
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'develop'
     environment: staging
 
     steps:
@@ -50,7 +56,9 @@ jobs:
   deploy-prod:
     name: Deploy → Prod
     runs-on: ubuntu-latest
-    if: github.ref_name == 'main'
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     environment: production     # GitHub 환경 보호 규칙 적용 가능
 
     steps:
