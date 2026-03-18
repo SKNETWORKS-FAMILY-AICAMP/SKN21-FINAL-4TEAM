@@ -38,7 +38,6 @@ export function useDebateStream(
     store.fetchTurns(matchId);
     store.fetchPredictionStats(matchId);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const controller = new AbortController();
     store.setStreaming(true);
     setConnected(true);
@@ -53,9 +52,15 @@ export function useDebateStream(
         if (controller.signal.aborted) break;
         try {
           const response = await fetch(`/api/matches/${matchId}/stream`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            // HttpOnly 쿠키 기반 인증 — credentials: 'include'로 쿠키 자동 전송
+            credentials: 'include',
             signal: controller.signal,
           });
+
+          // 인증 실패 또는 서버 에러 — 재시도해도 해결 안 되므로 즉시 종료
+          if (!response.ok) {
+            if (response.status === 401 || response.status >= 500) break;
+          }
 
           const reader = response.body?.getReader();
           if (!reader) break;
