@@ -399,7 +399,7 @@ export default function DebateTopicsPage() {
         {/* ── Left + Center: 토픽 목록 ── */}
         <div className="lg:col-span-2">
           {/* Topic Carousel (2x2 Grid) */}
-          <div className="relative mb-6 overflow-hidden">
+          <div className="relative mb-6 overflow-x-hidden">
             <div 
               className="flex transition-transform duration-500 ease-in-out"
               style={{ transform: `translateX(-${slideIndex * 100}%)` }}
