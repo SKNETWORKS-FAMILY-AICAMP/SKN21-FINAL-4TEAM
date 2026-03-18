@@ -53,7 +53,6 @@ export default function DebateTopicsPage() {
     topicsTotal,
     topicsLoading,
     fetchTopics,
-    fetchFeatured,
     createTopic,
     updateTopic,
     deleteTopic,
@@ -91,15 +90,12 @@ export default function DebateTopicsPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editShowAdvanced, setEditShowAdvanced] = useState(false);
 
-  // 캐러셀 슬라이드 인덱스
-  const [slideIndex, setSlideIndex] = useState(0);
 
   // 초기 로드
   useEffect(() => {
     fetchMyAgents();
-    fetchFeatured();
     fetchRanking();
-  }, [fetchMyAgents, fetchFeatured, fetchRanking]);
+  }, [fetchMyAgents, fetchRanking]);
 
   // 토픽 로드 (필터/정렬/페이지 변경 시 재조회)
   useEffect(() => {
@@ -256,11 +252,6 @@ export default function DebateTopicsPage() {
 
   const currentUserId = user?.id ?? null;
 
-  // 캐러셀 슬라이드 구성 (페이지당 8개)
-  const topicChunks: (typeof topics)[] = [];
-  for (let i = 0; i < topics.length; i += 8) {
-    topicChunks.push(topics.slice(i, i + 8));
-  }
 
   // 랭킹 색상: 1위=금, 2위=은, 3위=동, 나머지=회색
   const rankColor = (rank: number) => {
@@ -271,7 +262,7 @@ export default function DebateTopicsPage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto py-6 px-4 xl:px-8">
+    <div className="max-w-[1600px] mx-auto py-6 px-4 xl:px-8">
       {/* 상단 액션 버튼 */}
       <div className="flex items-center justify-between mb-8 mt-4">
         <h2 className="text-2xl font-black text-text flex items-center gap-3 m-0">
@@ -305,119 +296,148 @@ export default function DebateTopicsPage() {
         </div>
       </div>
 
-      {/* 주요 토픽 캐러셀 + 랭킹 사이드바 */}
-      <div className="flex gap-6 mt-6 mb-8">
-        {/* 캐러셀 섹션 */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-black text-text-muted uppercase tracking-wider mb-3">
-            주요 토픽
-          </h3>
-          {topicsLoading ? (
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          ) : topicChunks.length === 0 ? (
-            <div className="flex items-center justify-center h-40 rounded-xl border border-border bg-bg-surface">
-              <div className="text-center text-text-muted">
-                <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">등록된 토픽이 없습니다</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                {topicChunks[slideIndex]?.map((topic) => (
-                  <Link
-                    key={topic.id}
-                    href={`/debate/topics/${topic.id}`}
-                    className="block p-4 rounded-xl border border-border bg-bg-surface hover:border-primary hover:translate-y-[-2px] transition-all no-underline"
+      {/* 메인 콘텐츠: 토픽 리스트 + 랭킹 사이드바 가로 배치 */}
+      <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_300px] gap-8 items-start">
+        {/* 토픽 리스트 섹션 */}
+        <div className="min-w-0">
+          <div id="topic-list">
+            <div className="flex items-center justify-between gap-2 mb-6 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap">
+                {FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => handleFilterChange(opt.key)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                      filter === opt.key
+                        ? 'bg-primary text-white brutal-border brutal-shadow-sm'
+                        : 'bg-white text-gray-500 hover:text-black border-2 border-transparent'
+                    }`}
                   >
-                    <div className="flex items-start gap-2 mb-2">
-                      {(topic as any).is_admin_topic && (
-                        <span className="shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                          공식
-                        </span>
-                      )}
-                      <p className="text-sm font-semibold text-text line-clamp-2 leading-snug m-0">
-                        {topic.title}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] text-text-muted">
-                      <span className="flex items-center gap-1">
-                        <Users size={11} />
-                        대기 {topic.queue_count}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Swords size={11} />
-                        {topic.match_count}전
-                      </span>
-                      <span className="ml-auto truncate">
-                        {topic.creator_nickname ?? '관리자'}
-                      </span>
-                    </div>
-                  </Link>
+                    {opt.label}
+                  </button>
                 ))}
               </div>
-              {/* 캐러셀 인디케이터 */}
-              {topicChunks.length > 1 && (
-                <div className="flex justify-center gap-2 mt-3">
-                  {topicChunks.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSlideIndex(idx)}
-                      className={`w-2 h-2 rounded-full transition-all ${
-                        slideIndex === idx ? 'bg-primary w-4' : 'bg-border'
-                      }`}
-                    />
-                  ))}
+              <select
+                value={sort}
+                onChange={(e) => handleSortChange(e.target.value as SortOption)}
+                className="bg-white border-2 border-black rounded-xl px-4 py-2 text-xs font-black text-black focus:outline-none shrink-0 cursor-pointer brutal-shadow-sm"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-2 gap-5">
+              {topicsLoading ? (
+                Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
+              ) : topics.length === 0 ? (
+                <div className="col-span-full border-2 border-black border-dashed rounded-2xl py-20 text-center text-gray-400">
+                  <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
+                  <p className="font-bold">등록된 토론 주제가 없습니다.</p>
                 </div>
+              ) : (
+                topics.map((topic, index) => (
+                  <div
+                    key={topic.id}
+                    className="animate-in fill-mode-forwards opacity-100"
+                    style={{ animationDelay: `${(index % 8) * 80}ms`, animationDuration: '0.5s' }}
+                  >
+                    <TopicCard
+                      topic={topic}
+                      currentUserId={currentUserId}
+                      onEdit={openEditModal}
+                      onDelete={handleDelete}
+                    />
+                  </div>
+                ))
               )}
-            </>
-          )}
+            </div>
+
+            {/* Infinite Scroll Refreshing State */}
+            {isRefreshing && (
+              <div className="flex justify-center items-center py-12">
+                <div className="flex gap-3 items-center text-primary font-black animate-pulse">
+                  <Clock size={20} />
+                  <span>새로운 주제를 불러오는 중...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Numeric Indicators (Carousel style) */}
+            {topicsTotal > 20 && !isRefreshing && (
+              <div className="flex justify-center gap-3 mt-12 mb-8">
+                {Array.from({ length: Math.ceil(topicsTotal / 20) }).map((_, idx) => (
+                  <button
+                    key={idx}
+                    disabled
+                    className={`w-10 h-10 rounded-xl border-2 border-black font-black text-sm flex items-center justify-center transition-all ${
+                      page >= idx + 1
+                        ? 'bg-primary text-white brutal-shadow-sm'
+                        : 'bg-white text-gray-300'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 랭킹 사이드바 */}
-        <div className="w-64 shrink-0">
-          <h3 className="text-sm font-black text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Trophy size={14} className="text-yellow-500" />
-            에이전트 랭킹
-          </h3>
-          <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
+        <aside className="sticky top-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-black text-black flex items-center gap-2 m-0 uppercase tracking-tighter">
+              <Trophy size={18} className="text-yellow-500" />
+              Agent Ranking
+            </h3>
+            <Link
+              href="/debate/ranking"
+              className="text-[10px] font-black text-gray-400 hover:text-primary no-underline transition-colors"
+            >
+              전체보기 →
+            </Link>
+          </div>
+
+          <div className="bg-white brutal-border brutal-shadow-sm overflow-hidden">
             {rankingLoading ? (
-              <div className="p-4 space-y-3">
+              <div className="p-4 space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 animate-pulse">
-                    <div className="w-6 h-4 bg-border rounded" />
-                    <div className="flex-1 h-4 bg-border rounded" />
-                    <div className="w-12 h-4 bg-border rounded" />
+                    <div className="w-6 h-6 bg-gray-100 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-gray-100 rounded w-2/3" />
+                      <div className="h-2 bg-gray-50 rounded w-1/3" />
+                    </div>
                   </div>
                 ))}
               </div>
             ) : ranking.length === 0 ? (
-              <div className="p-6 text-center text-text-muted">
-                <Trophy size={24} className="mx-auto mb-2 opacity-30" />
-                <p className="text-xs">아직 랭킹 데이터가 없습니다</p>
+              <div className="p-10 text-center">
+                <Trophy size={32} className="mx-auto mb-3 text-gray-100" />
+                <p className="text-xs font-bold text-gray-300">데이터 없음</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {ranking.map((r, index) => {
+              <div className="divide-y-2 divide-black/5">
+                {ranking.slice(0, 10).map((r, index) => {
                   const rank = index + 1;
                   return (
-                    <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className={`w-5 text-center text-xs font-black shrink-0 ${rankColor(rank)}`}>
+                    <div key={r.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors">
+                      <span className={`w-6 text-center text-sm font-black italic ${rankColor(rank)}`}>
                         {rank}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-text truncate m-0 leading-tight">
+                        <p className="text-sm font-black text-black truncate m-0 leading-tight">
                           {r.name}
                         </p>
-                        <p className="text-[10px] text-text-muted truncate m-0">
-                          {r.owner_nickname}
+                        <p className="text-[10px] font-bold text-gray-400 truncate m-0">
+                          @{r.owner_nickname}
                         </p>
                       </div>
-                      <span className="text-xs font-black text-primary shrink-0">
+                      <span className="text-xs font-black text-primary bg-primary/5 px-2 py-1 rounded-lg">
                         {r.elo_rating}
                       </span>
                     </div>
@@ -426,101 +446,14 @@ export default function DebateTopicsPage() {
               </div>
             )}
           </div>
-          <Link
-            href="/debate/agents?tab=ranking"
-            className="block text-center text-xs text-text-muted hover:text-primary mt-2 no-underline transition-colors"
-          >
-            전체 랭킹 보기 →
-          </Link>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <div id="topic-list">
-          <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-            <div className="flex gap-1.5 flex-wrap">
-              {FILTER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => handleFilterChange(opt.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors ${
-                    filter === opt.key
-                      ? 'bg-primary text-white'
-                      : 'bg-transparent text-text-muted hover:text-text'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <select
-              value={sort}
-              onChange={(e) => handleSortChange(e.target.value as SortOption)}
-              className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary shrink-0"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+          
+          <div className="mt-6 p-5 bg-[#5B23FF]/5 rounded-2xl border-2 border-[#5B23FF]/10">
+            <h4 className="text-xs font-black text-[#5B23FF] mb-2">Notice</h4>
+            <p className="text-[10px] font-bold text-[#5B23FF]/70 leading-relaxed m-0">
+              실시간 랭킹은 30분마다 자동 업데이트됩니다. 나의 에이전트를 성장시켜 높은 티어에 도전하세요!
+            </p>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {topicsLoading ? (
-              Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
-            ) : topics.length === 0 ? (
-              <div className="col-span-2 text-center py-16 text-text-muted">
-                <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
-                <p className="font-semibold">등록된 토픽이 없습니다</p>
-              </div>
-            ) : (
-              topics.map((topic, index) => (
-                <div
-                  key={topic.id}
-                  className="animate-in fill-mode-forwards opacity-100"
-                  style={{ animationDelay: `${(index % 8) * 80}ms`, animationDuration: '0.5s' }}
-                >
-                  <TopicCard
-                    topic={topic}
-                    currentUserId={currentUserId}
-                    onEdit={openEditModal}
-                    onDelete={handleDelete}
-                  />
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Infinite Scroll Refreshing State */}
-          {isRefreshing && (
-            <div className="flex justify-center items-center py-8">
-              <div className="flex gap-2 items-center text-primary font-black animate-pulse">
-                <Clock size={18} />
-                <span>새로운 주제를 불러오는 중...</span>
-              </div>
-            </div>
-          )}
-
-          {/* Numeric Indicators (Carousel style) */}
-          {topicsTotal > 20 && (
-            <div className="flex justify-center gap-3 mt-12 mb-8">
-              {Array.from({ length: Math.ceil(topicsTotal / 20) }).map((_, idx) => (
-                <button
-                  key={idx}
-                  disabled
-                  className={`w-10 h-10 rounded-xl border-2 border-black font-black text-sm flex items-center justify-center transition-all ${
-                    page >= idx + 1
-                      ? 'bg-primary text-white brutal-shadow-sm'
-                      : 'bg-white text-gray-300'
-                  }`}
-                >
-                  {idx + 1}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        </aside>
       </div>
 
       {/* 주제 제안 모달 */}

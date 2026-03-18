@@ -3,31 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --color-bg: #263B6A;
-  --color-bg-surface: #2e4578;
-  --color-bg-hover: #374f86;
-  --color-bg-input: #263B6A;
-  --color-text: #e0e0e0;
-  --color-text-secondary: #9e9e9e;
-  --color-text-muted: #7a8aaa;
-  --color-border: #3a5188;
-  --color-border-input: #4a6198;
-  --color-primary: #FF5A5A;
-  --color-primary-dark: #e04545;
+  /* 다크 테마 — 딥 슬레이트 */
+  --color-bg: #0f172a;
+  --color-bg-surface: #1e293b;
+  --color-bg-hover: #334155;
+  --color-bg-input: #1e293b;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-border: #334155;
+  --color-border-input: #475569;
+  --color-primary: #818cf8;
+  --color-primary-dark: #6366f1;
 }
 
 [data-theme='light'] {
-  --color-bg: #FFFBF1;
+  /* 라이트 테마 — 클린 화이트 */
+  --color-bg: #f8fafc;
   --color-bg-surface: #ffffff;
-  --color-bg-hover: #f5efe3;
+  --color-bg-hover: #f1f5f9;
   --color-bg-input: #ffffff;
-  --color-text: #111827;
-  --color-text-secondary: #4b5563;
-  --color-text-muted: #9ca3af;
-  --color-border: #e5e7eb;
-  --color-border-input: #d1d5db;
-  --color-primary: #89D4FF;
-  --color-primary-dark: #6ac0f0;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-border-input: #cbd5e1;
+  --color-primary: #6366f1;
+  --color-primary-dark: #4f46e5;
 }
 
 @layer base {

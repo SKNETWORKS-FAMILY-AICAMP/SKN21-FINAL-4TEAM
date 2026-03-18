@@ -7,7 +7,7 @@ const config: Config = {
       colors: {
         primary: {
           DEFAULT: 'var(--color-primary)',
-          light: 'rgba(249,115,22,0.15)',
+          light: 'rgba(99,102,241,0.15)',
           dark: 'var(--color-primary-dark)',
         },
         nemo: '#10b981',
