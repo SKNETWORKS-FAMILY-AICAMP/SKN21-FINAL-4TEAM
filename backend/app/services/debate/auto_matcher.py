@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import async_session
+from app.core.redis import redis_client
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch, DebateMatchQueue
 from app.services.debate.agent_service import get_latest_version
@@ -35,6 +36,7 @@ class DebateAutoMatcher:
     def __init__(self):
         self._task: asyncio.Task | None = None
         self._running = False
+        self._debate_tasks: set[asyncio.Task] = set()
 
     @classmethod
     def get_instance(cls) -> "DebateAutoMatcher":
@@ -63,6 +65,14 @@ class DebateAutoMatcher:
         if self._task:
             self._task.cancel()
         logger.info("DebateAutoMatcher stopped")
+
+    def _on_debate_task_done(self, task: asyncio.Task) -> None:
+        """run_debate 태스크 완료 콜백 — 예외 발생 시 Sentry로 전송."""
+        if task.cancelled() or not (exc := task.exception()):
+            return
+        from app.core.observability import capture_exception
+        logger.error("run_debate task failed: %s", exc, exc_info=exc)
+        capture_exception(exc, source="DebateAutoMatcher.run_debate")
 
     async def _loop(self) -> None:
         """자동 매칭 백그라운드 루프 본체.
@@ -171,13 +181,31 @@ class DebateAutoMatcher:
 
         is_platform=True인 에이전트 중 entry.user_id 소유가 아닌 것을 random()으로 선택.
         매칭 후 큐 항목 삭제 → DebateMatch 생성 → run_debate 백그라운드 태스크 실행.
+
+        동시성 보호: Redis setex 락(주) + DB FOR UPDATE SKIP LOCKED(보조) 이중 안전망.
         """
-        # 엔트리가 아직 큐에 있는지 재확인 (다른 매치로 이미 처리됐을 수 있음)
+        # Redis 보조 락 — 동일 에이전트에 대한 중복 매칭 시도를 최초 진입자만 처리
+        lock_key = f"match_lock:{entry.topic_id}:{entry.agent_id}"
+        acquired = await redis_client.set(lock_key, "1", nx=True, ex=30)
+        if not acquired:
+            return
+
+        try:
+            await self._do_auto_match(db, entry)
+        finally:
+            await redis_client.delete(lock_key)
+
+    async def _do_auto_match(self, db: AsyncSession, entry: DebateMatchQueue) -> None:
+        """실제 매칭 로직. _auto_match_with_platform_agent의 Redis 락 내부에서 호출."""
+        # 엔트리가 아직 큐에 있는지 FOR UPDATE SKIP LOCKED으로 재확인
+        # SKIP LOCKED: 다른 트랜잭션이 이미 잠금 중이면 None 반환 → 중복 매칭 방지
         fresh = await db.execute(
-            select(DebateMatchQueue).where(
+            select(DebateMatchQueue)
+            .where(
                 DebateMatchQueue.topic_id == entry.topic_id,
                 DebateMatchQueue.agent_id == entry.agent_id,
             )
+            .with_for_update(skip_locked=True)
         )
         if fresh.scalar_one_or_none() is None:
             return
@@ -242,5 +270,8 @@ class DebateAutoMatcher:
             "auto_matched": True,
         })
 
-        # 토론 엔진 시작
-        asyncio.create_task(run_debate(match_id))
+        # 토론 엔진 시작 — 태스크 참조 보관 및 예외 Sentry 전송
+        task = asyncio.create_task(run_debate(match_id))
+        self._debate_tasks.add(task)
+        task.add_done_callback(self._debate_tasks.discard)
+        task.add_done_callback(self._on_debate_task_done)

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -7,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm_model import LLMModel
 from app.models.token_usage_log import TokenUsageLog
+
+logger = logging.getLogger(__name__)
+
+# 사용자당 시간당 토큰 버스트 감지 임계값 — 초과 시 Sentry 경고 + error 로그
+BURST_TOKENS_PER_HOUR_THRESHOLD = 100_000
 
 
 class UsageService:
@@ -64,7 +70,33 @@ class UsageService:
         self.db.add(log)
         await self.db.commit()
         await self.db.refresh(log)
+
+        # 시간당 토큰 버스트 감지 — 비용 폭증 조기 경보 (실패해도 로그 기록은 유지)
+        try:
+            await self._check_burst_alert(user_id, input_tokens + output_tokens)
+        except Exception:
+            logger.debug("Burst check failed (non-critical)", exc_info=True)
+
         return log
+
+    async def _check_burst_alert(self, user_id: uuid.UUID, just_used: int) -> None:
+        """최근 1시간 토큰 합산이 임계값을 초과하면 Sentry 경고 + error 로그를 남긴다."""
+        hour_ago = datetime.now(UTC) - timedelta(hours=1)
+        result = await self.db.execute(
+            select(func.sum(TokenUsageLog.input_tokens + TokenUsageLog.output_tokens)).where(
+                TokenUsageLog.user_id == user_id,
+                TokenUsageLog.created_at >= hour_ago,
+            )
+        )
+        hourly_total = result.scalar() or 0
+        if hourly_total >= BURST_TOKENS_PER_HOUR_THRESHOLD:
+            from app.core.observability import capture_exception
+            msg = (
+                f"Token burst detected: user={user_id} used {hourly_total:,} tokens in the last hour "
+                f"(threshold={BURST_TOKENS_PER_HOUR_THRESHOLD:,})"
+            )
+            logger.error(msg)
+            capture_exception(RuntimeError(msg), user_id=str(user_id), hourly_total=hourly_total)
 
     async def get_user_summary(self, user_id: uuid.UUID) -> dict:
         """사용자 사용량 요약을 반환한다 (일/월/총계 + 모델별 분류).

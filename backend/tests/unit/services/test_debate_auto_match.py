@@ -90,9 +90,16 @@ class TestDebateAutoMatcher:
 
         db.execute = AsyncMock(side_effect=[fresh_result, platform_result])
 
-        with patch(
-            "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-        ) as mock_pub:
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=True)
+        mock_redis.delete = AsyncMock()
+
+        with (
+            patch("app.services.debate.auto_matcher.redis_client", mock_redis),
+            patch(
+                "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
+            ) as mock_pub,
+        ):
             await matcher._auto_match_with_platform_agent(db, entry)
 
         # 플랫폼 에이전트가 없으므로 timeout 이벤트 발행
@@ -114,9 +121,16 @@ class TestDebateAutoMatcher:
         fresh_result.scalar_one_or_none = MagicMock(return_value=None)
         db.execute = AsyncMock(return_value=fresh_result)
 
-        with patch(
-            "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-        ) as mock_pub:
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=True)
+        mock_redis.delete = AsyncMock()
+
+        with (
+            patch("app.services.debate.auto_matcher.redis_client", mock_redis),
+            patch(
+                "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
+            ) as mock_pub,
+        ):
             await matcher._auto_match_with_platform_agent(db, entry)
 
         mock_pub.assert_not_called()
@@ -156,7 +170,12 @@ class TestDebateAutoMatcher:
             side_effect=[fresh_result, platform_result, ver_result, ver_result, queue_del_result]
         )
 
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=True)
+        mock_redis.delete = AsyncMock()
+
         with (
+            patch("app.services.debate.auto_matcher.redis_client", mock_redis),
             patch("app.services.debate.auto_matcher.DebateMatch") as MockMatch,
             patch(
                 "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock

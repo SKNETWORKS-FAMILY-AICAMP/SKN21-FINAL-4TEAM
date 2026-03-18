@@ -220,28 +220,36 @@ sequenceDiagram
 
 **턴 감점 체계**
 
+감점은 두 가지 방식으로 탐지된다. 코드 기반 탐지는 엔진이 직접 판단하며, LLM 기반 탐지는 `review_turn()`이 매 턴마다 호출하는 경량 검토 모델이 판단한다.
+
+**코드 기반 탐지 (engine.py)**
+
 | 감점 키 | 사유 | 점수 |
 |---|---|---|
 | `token_limit` | `finish_reason="length"` — turn_token_limit 초과로 응답 절삭 | -3 |
 | `schema_violation` | JSON 파싱 실패 (token_limit 미해당) | -5 |
-| `repetition` | 직전 발언과 동일 내용 반복 | -2 |
 | `timeout` | LLM 응답 시간 초과 | -4 |
-| `false_source` | 허위 출처 인용 | -3 |
-| `llm_straw_man` | 허수아비 논증 (LLM 검토 판정) | 가변 |
-| `llm_circular_reasoning` | 순환논증 (LLM 검토 판정) | 가변 |
-| `llm_hasty_generalization` | 성급한 일반화 (LLM 검토 판정) | 가변 |
-| `llm_accent` | 강조의 오류 (LLM 검토 판정) | 가변 |
-| `llm_genetic_fallacy` | 유전적 오류 (LLM 검토 판정) | 가변 |
-| `llm_appeal` | 부적절한 호소 (LLM 검토 판정) | 가변 |
-| `llm_slippery_slope` | 미끄러운 경사 (LLM 검토 판정) | 가변 |
-| `llm_division` | 분할의 오류 (LLM 검토 판정) | 가변 |
-| `llm_composition` | 합성의 오류 (LLM 검토 판정) | 가변 |
-| `llm_off_topic` | 주제 이탈 (LLM 검토 판정) | 가변 |
-| `llm_false_claim` | 허위 주장 (LLM 검토 판정) | 가변 |
-| `llm_ad_hominem` | 인신공격 (LLM 검토 판정) | 가변 |
-| `llm_prompt_injection` | 프롬프트 인젝션 시도 (LLM 검토 판정) | 가변 |
+| `false_source` | 허위 출처 인용 (tool_result 위조) | -7 |
 
 `token_limit`과 `schema_violation`은 상호 배타적으로 적용된다. `finish_reason="length"`이면 JSON이 잘린 경우라도 `token_limit`만 부과하고 `schema_violation`은 부과하지 않는다.
+
+**LLM 기반 탐지 (orchestrator.py — review_turn)**
+
+| 감점 키 | 사유 | 점수 (severe만) |
+|---|---|---|
+| `prompt_injection` | 시스템 지시 무력화 시도 | -10 |
+| `ad_hominem` | 직접 욕설·인격 모독 (severe) | -8 |
+| `straw_man` | 상대 주장 의도적 왜곡·과장 | -6 |
+| `off_topic` | 토론 주제와 명백히 무관한 내용 | -5 |
+| `repetition` | 이전 발언과 의미적으로 동일한 주장 반복 | -3 |
+
+**severity 분류:**
+- `minor` — 가벼운 조롱·비꼬기 (예: '애송이', '순진한 생각') → **벌점 0**, 차단 없음
+- `severe` — 직접 욕설·인격 모독 → 위 표의 벌점 적용
+
+**차단(block) 기준:**
+- `prompt_injection`: severity 무관 즉시 차단
+- 그 외: `penalty_total ≥ 15` (복합 위반 누적) 시 차단 — 단일 위반으로는 차단 불가
 
 ---
 

@@ -364,20 +364,26 @@ class TestReviewTurn:
 
         assert result["logic_score"] == 6
         assert result["block"] is False
-        assert result["penalties"] == {"off_topic": LLM_VIOLATION_PENALTIES["off_topic"]}
-        assert result["penalty_total"] == LLM_VIOLATION_PENALTIES["off_topic"]
+        # minor 위반은 벌점 0 — AI 토론 맥락에서 허용
+        assert result["penalties"] == {}
+        assert result["penalty_total"] == 0
         assert result["blocked_claim"] is None
 
     @pytest.mark.asyncio
     async def test_block_true_generates_blocked_claim(self):
-        """block:true → blocked_claim 대체 텍스트가 생성되고 block=True가 반환된다."""
+        """penalty_total >= BLOCK_PENALTY_THRESHOLD → blocked_claim 생성 + block=True."""
+        from app.services.debate.orchestrator import BLOCK_PENALTY_THRESHOLD
         orch = self._make_orch()
+        # 단일 severe 위반(ad_hominem -8)은 임계값(15) 미만 → 차단 안 됨
+        # 복합 누적으로 임계값을 넘겨야 차단 발생: ad_hominem(-8) + straw_man(-6) + off_topic(-5) = -19
         violations = [
-            {"type": "ad_hominem", "severity": "severe", "detail": "심각한 인신공격"},
+            {"type": "ad_hominem", "severity": "severe", "detail": "직접 모독"},
+            {"type": "straw_man", "severity": "severe", "detail": "주장 왜곡"},
+            {"type": "off_topic", "severity": "severe", "detail": "주제 이탈"},
         ]
         orch.client.generate_byok = AsyncMock(
             return_value={"content": self._review_json(
-                logic_score=2, violations=violations, severity="severe", block=True
+                logic_score=2, violations=violations, severity="severe", block=False
             )}
         )
 
@@ -385,11 +391,12 @@ class TestReviewTurn:
             topic="AI 윤리",
             speaker="agent_b",
             turn_number=2,
-            claim="상대방은 멍청합니다",
+            claim="상대방은 멍청합니다. 그리고 전혀 다른 얘기를 하고 있다.",
             evidence=None,
             action="rebut",
         )
 
+        assert result["penalty_total"] >= BLOCK_PENALTY_THRESHOLD
         assert result["block"] is True
         assert result["blocked_claim"] is not None
         assert "차단" in result["blocked_claim"]
@@ -453,6 +460,7 @@ class TestReviewTurn:
         orch = self._make_orch()
         violations = [
             {"type": "prompt_injection", "severity": "severe", "detail": "인젝션 시도"},
+            # repetition minor → 벌점 0 (minor 규칙 검증), prompt_injection은 단독 차단
             {"type": "repetition", "severity": "minor", "detail": "의미적 반복 주장"},
         ]
         orch.client.generate_byok = AsyncMock(
@@ -471,11 +479,10 @@ class TestReviewTurn:
         )
 
         assert result["penalties"]["prompt_injection"] == LLM_VIOLATION_PENALTIES["prompt_injection"]
-        assert result["penalties"]["repetition"] == LLM_VIOLATION_PENALTIES["repetition"]
-        expected_total = (
-            LLM_VIOLATION_PENALTIES["prompt_injection"] + LLM_VIOLATION_PENALTIES["repetition"]
-        )
-        assert result["penalty_total"] == expected_total
+        # minor repetition은 벌점 미부과
+        assert "repetition" not in result["penalties"]
+        assert result["penalty_total"] == LLM_VIOLATION_PENALTIES["prompt_injection"]
+        # prompt_injection은 임계값 무관 단독 차단
         assert result["block"] is True
 
     @pytest.mark.asyncio
@@ -504,9 +511,9 @@ class TestReviewTurn:
             action="argue",
         )
 
-        expected_penalties = {k: LLM_VIOLATION_PENALTIES[k] for k in known_types}
-        assert result["penalties"] == expected_penalties
-        assert result["penalty_total"] == sum(expected_penalties.values())
+        # minor 위반은 벌점 미부과 — penalties 딕셔너리가 비어 있어야 함
+        assert result["penalties"] == {}
+        assert result["penalty_total"] == 0
         assert result["block"] is False
 
 
