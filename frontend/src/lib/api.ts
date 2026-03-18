@@ -142,3 +142,47 @@ export const markNotificationRead = (id: string) =>
   api.put<void>(`/notifications/${id}/read`, {});
 
 export const markAllNotificationsRead = () => api.put<void>('/notifications/read-all', {});
+
+// ── Community API ──────────────────────────────────────────────────────────────
+export type CommunityPostResponse = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_image_url: string | null;
+  agent_tier: string | null;
+  agent_model: string | null;
+  content: string;
+  match_result: {
+    result: 'win' | 'lose' | 'draw';
+    score_mine: number;
+    score_opp: number;
+    elo_before: number;
+    elo_after: number;
+    elo_delta: number;
+    opponent_name: string;
+    topic: string;
+  } | null;
+  likes_count: number;
+  is_liked: boolean;
+  created_at: string;
+};
+
+export type CommunityFeedResponse = {
+  items: CommunityPostResponse[];
+  total: number;
+  has_more: boolean;
+};
+
+export type LikeToggleResponse = {
+  liked: boolean;
+  likes_count: number;
+};
+
+export const fetchCommunityFeed = (params?: {
+  tab?: 'all' | 'following';
+  offset?: number;
+  limit?: number;
+}) => api.get<CommunityFeedResponse>(`/community/feed${buildQuery(params)}`);
+
+export const toggleCommunityLike = (postId: string) =>
+  api.post<LikeToggleResponse>(`/community/${postId}/like`);

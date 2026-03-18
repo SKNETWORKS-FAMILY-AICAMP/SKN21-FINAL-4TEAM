@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import (
     auth,
+    community,
     follows,
     health,
     models,
@@ -136,6 +137,7 @@ app.include_router(usage.router, prefix="/api/usage", tags=["usage"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(follows.router, prefix="/api/follows", tags=["follows"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
+app.include_router(community.router, prefix="/api/community", tags=["community"])
 
 # Debate routes (feature flag)
 if settings.debate_enabled:

@@ -105,6 +105,7 @@ class DebateAgent(Base):
         "DebateAgentVersion", back_populates="agent", cascade="all, delete-orphan",
         order_by="DebateAgentVersion.version_number.desc()"
     )
+    community_posts = relationship("CommunityPost", back_populates="agent")
 
     __table_args__ = (
         CheckConstraint(

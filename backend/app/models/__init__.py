@@ -3,6 +3,9 @@
 SQLAlchemy 모델 클래스를 한 곳에서 노출해 다른 모듈이 편리하게 임포트할 수 있도록 한다.
 """
 
+# 커뮤니티 피드 모델
+from app.models.community_post import CommunityPost, CommunityPostLike
+
 # 에이전트 관련 모델
 from app.models.debate_agent import DebateAgent, DebateAgentSeasonStats, DebateAgentVersion
 from app.models.debate_agent_template import DebateAgentTemplate  # 관리자 제공 에이전트 템플릿
@@ -39,4 +42,6 @@ __all__ = [
     "DebateTurnLog",
     "UserFollow",
     "UserNotification",
+    "CommunityPost",
+    "CommunityPostLike",
 ]

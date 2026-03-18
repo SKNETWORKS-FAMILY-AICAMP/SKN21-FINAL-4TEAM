@@ -182,7 +182,23 @@
       "Bash(git commit:*)",
       "Bash(git fetch:*)",
       "Bash(git stash:*)",
-      "Bash(ls frontend/src/app/page.tsx 2>/dev/null || echo \"없음\" && ls \"frontend/src/app/\\(user\\)/page.tsx\" 2>/dev/null || echo \"없음\")"
+      "Bash(ls frontend/src/app/page.tsx 2>/dev/null || echo \"없음\" && ls \"frontend/src/app/\\(user\\)/page.tsx\" 2>/dev/null || echo \"없음\")",
+      "Bash(rm:*)",
+      "Bash(git pull:*)",
+      "Bash(git rebase:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "mcp__filesystem__list_directory",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -m alembic upgrade head)",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -m alembic current)",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -m alembic stamp 0de13d3298fa)",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -c \":*)",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -c \"from app.models.community_post import CommunityPost, CommunityPostLike; from app.schemas.community import CommunityPostListResponse; from app.services.community_service import CommunityService; print\\(''ok''\\)\")",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -c \"from app.api.community import router; print\\(''community router ok''\\)\")",
+      "Bash(PYTHONPATH=/c/Project_New/backend .venv/Scripts/python.exe -c \"from app.main import app; print\\(''main app ok''\\)\")",
+      "Bash(backend/.venv/Scripts/python -m pytest tests/unit/ -v --tb=short)",
+      "Bash(.venv/Scripts/python -m alembic current)",
+      "Bash(.venv/Scripts/python -c \"from app.services.community_service import CommunityService, generate_community_posts_task; print\\(''OK''\\)\")",
+      "Bash(.venv/Scripts/python -m pytest backend/tests/unit/ -v --tb=short)"
     ]
   }
 }

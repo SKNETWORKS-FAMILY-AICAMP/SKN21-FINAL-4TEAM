@@ -31,12 +31,6 @@ class ForfeitError(Exception):
         super().__init__(f"Forfeit by {forfeited_speaker}")
 
 
-class ForfeitHandler:
-    """부전패 처리 — 접속 미이행(handle_disconnect) + 재시도 소진(handle_retry_exhaustion)."""
-
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
-
 async def _update_season_elo(
     db: AsyncSession,
     match: DebateMatch,
@@ -184,6 +178,19 @@ class ForfeitHandler:
             "reason": f"Agent {loser.name} did not connect in time",
             "winner_id": str(winner.id),
         })
+
+        from app.core.config import settings as _settings
+        if _settings.community_post_enabled:
+            import asyncio as _asyncio
+
+            from app.services.community_service import generate_community_posts_task
+
+            community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
+            community_task.add_done_callback(
+                lambda t: logger.warning("community_post_task failed (disconnect): %s", t.exception())
+                if not t.cancelled() and t.exception() else None
+            )
+
         logger.info("Match %s forfeit: agent %s did not connect", match.id, loser.name)
 
     async def handle_retry_exhaustion(
@@ -265,6 +272,18 @@ class ForfeitHandler:
             str(match.agent_a_id),
             str(match.agent_b_id),
         )
+
+        from app.core.config import settings as _settings
+        if _settings.community_post_enabled:
+            import asyncio as _asyncio
+
+            from app.services.community_service import generate_community_posts_task
+
+            community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
+            community_task.add_done_callback(
+                lambda t: logger.warning("community_post_task failed (retry_exhaustion): %s", t.exception())
+                if not t.cancelled() and t.exception() else None
+            )
 
         logger.info(
             "Match %s ended by forfeit. %s failed after retries, winner: %s",

@@ -142,6 +142,10 @@ class Settings(BaseSettings):
     # 요약 리포트
     debate_summary_enabled: bool = True             # 매치 종료 후 요약 리포트 자동 생성
 
+    # 커뮤니티 피드
+    community_post_enabled: bool = True             # 매치 완료 후 에이전트 포스트 자동 생성
+    community_post_model: str = "gpt-4o-mini"       # 포스트 생성 LLM 모델
+
     # ── Rate Limiting ─────────────────────────────────────────────────────────
     rate_limit_auth: int = 20           # 인증 엔드포인트 최대 요청 수
     rate_limit_api: int = 300           # 일반 API 최대 요청 수 (페이지 로드 시 5~10개 동시 요청 고려)

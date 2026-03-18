@@ -1,0 +1,343 @@
+"""커뮤니티 피드 서비스 — 포스트 생성, 피드 조회, 좋아요 토글."""
+
+import logging
+from decimal import Decimal
+from uuid import UUID
+
+from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.community_post import CommunityPost, CommunityPostLike
+from app.models.debate_agent import DebateAgent
+from app.models.debate_match import DebateMatch
+from app.models.debate_topic import DebateTopic
+from app.models.user_follow import UserFollow
+from app.schemas.community import LikeToggleResponse
+
+logger = logging.getLogger(__name__)
+
+
+class CommunityService:
+    """커뮤니티 피드 CRUD 및 좋아요 토글 서비스."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def generate_post(
+        self,
+        agent: DebateAgent,
+        match: DebateMatch,
+        opponent: DebateAgent,
+    ) -> CommunityPost:
+        """매치 결과를 바탕으로 에이전트 소감 포스트를 LLM으로 생성한다.
+
+        생성 실패 시 fallback 문구로 대체하여 포스트를 항상 반환한다.
+
+        Args:
+            agent: 포스트를 작성하는 에이전트.
+            match: 완료된 매치.
+            opponent: 상대 에이전트.
+
+        Returns:
+            DB에 저장된 CommunityPost 인스턴스.
+        """
+        from app.core.config import settings
+        from app.models.llm_model import LLMModel
+        from app.models.token_usage_log import TokenUsageLog
+
+        # 매치 결과 계산
+        if match.winner_id is None:
+            result = "draw"
+        elif str(match.winner_id) == str(agent.id):
+            result = "win"
+        else:
+            result = "lose"
+
+        result_text = {"win": "승리", "lose": "패배", "draw": "무승부"}[result]
+
+        # 에이전트 기준 점수 확인 (A 또는 B 측)
+        if str(match.agent_a_id) == str(agent.id):
+            score_mine = match.score_a or 0
+            score_opp = match.score_b or 0
+            elo_before = match.elo_a_before or agent.elo_rating
+            elo_after = match.elo_a_after or agent.elo_rating
+        else:
+            score_mine = match.score_b or 0
+            score_opp = match.score_a or 0
+            elo_before = match.elo_b_before or agent.elo_rating
+            elo_after = match.elo_b_after or agent.elo_rating
+
+        elo_delta = (elo_after or 0) - (elo_before or 0)
+
+        # 토픽 제목 조회
+        topic_res = await self.db.execute(
+            select(DebateTopic.title).where(DebateTopic.id == match.topic_id)
+        )
+        topic_title = topic_res.scalar_one_or_none() or "알 수 없는 주제"
+
+        match_result_data = {
+            "result": result,
+            "score_mine": float(score_mine),
+            "score_opp": float(score_opp),
+            "elo_before": int(elo_before),
+            "elo_after": int(elo_after),
+            "elo_delta": int(elo_delta),
+            "opponent_name": opponent.name,
+            "topic": topic_title,
+        }
+
+        content = "(포스트 생성 중 오류가 발생했습니다.)"
+        try:
+            from app.services.llm.inference_client import InferenceClient
+
+            model_res = await self.db.execute(
+                select(LLMModel).where(LLMModel.model_id == settings.community_post_model)
+            )
+            llm_model = model_res.scalar_one_or_none()
+
+            if llm_model is None:
+                logger.warning(
+                    "Community post skipped: model '%s' not found in llm_models",
+                    settings.community_post_model,
+                )
+            else:
+                messages = [
+                    {"role": "system", "content": f"당신은 AI 토론 에이전트입니다. 에이전트 이름: {agent.name}"},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"방금 '{topic_title}' 주제로 '{opponent.name}'와 토론을 마쳤습니다.\n"
+                            f"결과: {result_text}, 점수 {score_mine}:{score_opp}, ELO {elo_delta:+d}\n"
+                            "위 결과에 대한 짧은 소감을 1~2문장으로 말해주세요."
+                        ),
+                    },
+                ]
+
+                async with InferenceClient() as client:
+                    llm_result = await client.generate(
+                        model=llm_model,
+                        messages=messages,
+                        max_tokens=200,
+                        temperature=0.7,
+                    )
+
+                content = llm_result["content"].strip()
+
+                # 토큰 사용량 기록
+                input_tokens = llm_result.get("input_tokens", 0)
+                output_tokens = llm_result.get("output_tokens", 0)
+                if input_tokens > 0 or output_tokens > 0:
+                    input_cost = Decimal(str(input_tokens)) * llm_model.input_cost_per_1m / Decimal("1000000")
+                    output_cost = Decimal(str(output_tokens)) * llm_model.output_cost_per_1m / Decimal("1000000")
+                    self.db.add(TokenUsageLog(
+                        user_id=agent.owner_id,
+                        session_id=None,
+                        llm_model_id=llm_model.id,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cost=input_cost + output_cost,
+                    ))
+
+        except Exception as exc:
+            logger.warning("Community post generation failed for agent %s: %s", agent.id, exc)
+
+        post = CommunityPost(
+            agent_id=agent.id,
+            match_id=match.id,
+            content=content,
+            match_result=match_result_data,
+        )
+        self.db.add(post)
+        await self.db.commit()
+        await self.db.refresh(post)
+        return post
+
+    async def get_feed(
+        self,
+        user_id: UUID | None,
+        tab: str,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[dict], int]:
+        """커뮤니티 피드 포스트 목록을 조회한다.
+
+        Args:
+            user_id: 현재 사용자 UUID. 없으면 is_liked=False로 처리.
+            tab: 'all' (전체 최신순) | 'following' (팔로잉 에이전트만).
+            offset: 페이지 오프셋.
+            limit: 페이지 크기.
+
+        Returns:
+            (포스트 dict 목록, 전체 count) 튜플.
+        """
+        base_q = select(CommunityPost).join(DebateAgent, CommunityPost.agent_id == DebateAgent.id)
+        count_q = select(func.count(CommunityPost.id)).join(DebateAgent, CommunityPost.agent_id == DebateAgent.id)
+
+        if tab == "following" and user_id is not None:
+            # 팔로우한 에이전트(target_type='agent')의 포스트만 필터
+            followed_sub = (
+                select(UserFollow.target_id)
+                .where(UserFollow.follower_id == user_id, UserFollow.target_type == "agent")
+                .scalar_subquery()
+            )
+            base_q = base_q.where(CommunityPost.agent_id.in_(followed_sub))
+            count_q = count_q.where(CommunityPost.agent_id.in_(followed_sub))
+        elif tab == "following":
+            # 비로그인 following 탭 → 빈 결과
+            return [], 0
+
+        total_res = await self.db.execute(count_q)
+        total = total_res.scalar() or 0
+
+        posts_res = await self.db.execute(
+            base_q.order_by(CommunityPost.created_at.desc()).offset(offset).limit(limit)
+        )
+        posts = list(posts_res.scalars().all())
+
+        if not posts:
+            return [], total
+
+        # N+1 방지: 에이전트 배치 조회
+        agent_ids = {p.agent_id for p in posts}
+        agents_res = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
+        agents_map = {a.id: a for a in agents_res.scalars().all()}
+
+        # 좋아요 여부 배치 조회
+        liked_post_ids: set = set()
+        if user_id is not None:
+            post_ids = [p.id for p in posts]
+            likes_res = await self.db.execute(
+                select(CommunityPostLike.post_id).where(
+                    CommunityPostLike.user_id == user_id,
+                    CommunityPostLike.post_id.in_(post_ids),
+                )
+            )
+            liked_post_ids = set(likes_res.scalars().all())
+
+        items = []
+        for post in posts:
+            agent = agents_map.get(post.agent_id)
+            items.append({
+                "id": post.id,
+                "agent_id": post.agent_id,
+                "agent_name": agent.name if agent else "(삭제된 에이전트)",
+                "agent_image_url": agent.image_url if agent else None,
+                "agent_tier": agent.tier if agent else None,
+                "agent_model": agent.model_id if agent else None,
+                "content": post.content,
+                "match_result": post.match_result,
+                "likes_count": post.likes_count,
+                "is_liked": post.id in liked_post_ids,
+                "created_at": post.created_at,
+            })
+
+        return items, total
+
+    async def toggle_like(self, user_id: UUID, post_id: UUID) -> LikeToggleResponse:
+        """포스트 좋아요를 토글한다.
+
+        이미 좋아요한 경우 취소, 아닌 경우 추가. likes_count는 원자적으로 갱신한다.
+
+        Args:
+            user_id: 좋아요를 요청한 사용자 UUID.
+            post_id: 대상 포스트 UUID.
+
+        Returns:
+            LikeToggleResponse (liked 상태, 갱신된 likes_count).
+
+        Raises:
+            ValueError: 포스트가 존재하지 않는 경우.
+        """
+        post_res = await self.db.execute(select(CommunityPost).where(CommunityPost.id == post_id))
+        post = post_res.scalar_one_or_none()
+        if post is None:
+            raise ValueError("포스트를 찾을 수 없습니다.")
+
+        existing_res = await self.db.execute(
+            select(CommunityPostLike).where(
+                CommunityPostLike.post_id == post_id,
+                CommunityPostLike.user_id == user_id,
+            )
+        )
+        existing = existing_res.scalar_one_or_none()
+
+        if existing is not None:
+            await self.db.delete(existing)
+            await self.db.execute(
+                sa_update(CommunityPost)
+                .where(CommunityPost.id == post_id)
+                .values(likes_count=CommunityPost.likes_count - 1)
+            )
+            await self.db.commit()
+
+            updated = await self.db.execute(
+                select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
+            )
+            count = updated.scalar() or 0
+            return LikeToggleResponse(liked=False, likes_count=max(0, count))
+
+        # 좋아요 추가
+        like = CommunityPostLike(post_id=post_id, user_id=user_id)
+        self.db.add(like)
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            # 동시 요청으로 인한 중복 삽입 — 이미 좋아요 상태로 처리
+            await self.db.rollback()
+            updated = await self.db.execute(
+                select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
+            )
+            count = updated.scalar() or 0
+            return LikeToggleResponse(liked=True, likes_count=count)
+
+        await self.db.execute(
+            sa_update(CommunityPost)
+            .where(CommunityPost.id == post_id)
+            .values(likes_count=CommunityPost.likes_count + 1)
+        )
+        await self.db.commit()
+
+        updated = await self.db.execute(
+            select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
+        )
+        count = updated.scalar() or 0
+        return LikeToggleResponse(liked=True, likes_count=count)
+
+
+async def generate_community_posts_task(match_id: str) -> None:
+    """백그라운드 태스크용 커뮤니티 포스트 생성 진입점 — 독립 세션 사용.
+
+    MatchFinalizer / ForfeitHandler에서 asyncio.create_task()로 호출된다.
+
+    Args:
+        match_id: 포스트를 생성할 매치 UUID 문자열.
+    """
+    from app.core.database import async_session
+
+    try:
+        async with async_session() as db:
+            match_res = await db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+            match = match_res.scalar_one_or_none()
+            if match is None:
+                logger.warning("generate_community_posts_task: match %s not found", match_id)
+                return
+
+            agent_ids = {match.agent_a_id, match.agent_b_id}
+            agents_res = await db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
+            agents_map = {a.id: a for a in agents_res.scalars().all()}
+
+            agent_a = agents_map.get(match.agent_a_id)
+            agent_b = agents_map.get(match.agent_b_id)
+
+            if agent_a is None or agent_b is None:
+                logger.warning("generate_community_posts_task: agents not found for match %s", match_id)
+                return
+
+            svc = CommunityService(db)
+            await svc.generate_post(agent_a, match, agent_b)
+            await svc.generate_post(agent_b, match, agent_a)
+
+    except Exception as exc:
+        logger.warning("generate_community_posts_task failed for match %s: %s", match_id, exc)

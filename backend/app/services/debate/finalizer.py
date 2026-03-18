@@ -191,4 +191,16 @@ class MatchFinalizer:
 
             task.add_done_callback(_on_summary_done)
 
+        # 10. 커뮤니티 포스트 백그라운드 태스크
+        if settings.community_post_enabled:
+            from app.services.community_service import generate_community_posts_task
+
+            community_task = asyncio.create_task(generate_community_posts_task(str(match.id)))
+
+            def _on_community_done(t: asyncio.Task, mid: str = str(match.id)) -> None:
+                if not t.cancelled() and (exc := t.exception()):
+                    logger.warning("community_post_task failed for match %s: %s", mid, exc)
+
+            community_task.add_done_callback(_on_community_done)
+
         logger.info("Match %s completed. Winner: %s", match.id, judgment["winner_id"])

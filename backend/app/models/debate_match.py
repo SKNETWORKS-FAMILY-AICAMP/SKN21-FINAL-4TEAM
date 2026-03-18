@@ -139,6 +139,7 @@ class DebateMatch(Base):
         "DebateTurnLog", back_populates="match", cascade="all, delete-orphan",
         order_by="DebateTurnLog.turn_number"
     )
+    community_posts = relationship("CommunityPost", back_populates="match")
 
     __table_args__ = (
         CheckConstraint(

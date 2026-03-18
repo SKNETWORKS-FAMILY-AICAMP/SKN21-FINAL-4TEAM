@@ -60,6 +60,7 @@ class User(Base):
 
     # Relationships - only keep relationships to models that exist
     preferred_llm_model = relationship("LLMModel", foreign_keys=[preferred_llm_model_id])
+    community_post_likes = relationship("CommunityPostLike", back_populates="user")
 
     __table_args__ = (
         CheckConstraint("role IN ('user', 'admin', 'superadmin')", name="ck_users_role"),
