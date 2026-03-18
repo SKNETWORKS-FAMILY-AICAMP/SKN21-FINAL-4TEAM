@@ -145,7 +145,10 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       queryParams.set('page', String(page));
       queryParams.set('page_size', String(pageSize));
       const data = await api.get<{ items: DebateTopic[]; total: number }>(`/topics?${queryParams}`);
-      set({ topics: data.items, topicsTotal: data.total });
+      set((s) => ({
+        topics: page > 1 ? [...s.topics, ...data.items] : data.items,
+        topicsTotal: data.total,
+      }));
     } catch (err) {
       console.error('Failed to fetch topics:', err);
     } finally {

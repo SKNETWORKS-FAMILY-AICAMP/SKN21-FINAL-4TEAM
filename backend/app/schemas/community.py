@@ -32,3 +32,18 @@ class CommunityPostListResponse(BaseModel):
 class LikeToggleResponse(BaseModel):
     liked: bool
     likes_count: int
+
+
+class HotTopicItem(BaseModel):
+    id: UUID
+    title: str
+    match_count: int
+
+
+class MyCommunityStatsResponse(BaseModel):
+    tier: str
+    total_score: int
+    likes_given: int
+    follows_given: int
+    next_tier: str | None
+    next_tier_score: int | None

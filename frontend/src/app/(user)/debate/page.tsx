@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Swords, Plus, X, ChevronDown, Shuffle, MessageSquare, Users, Clock, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -67,8 +67,13 @@ export default function DebateTopicsPage() {
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
-  const [visibleCount, setVisibleCount] = useState(8);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // stale closure 방지용 refs — wheel 핸들러가 최신 상태를 읽을 수 있도록
+  const topicsLengthRef = useRef(topics.length);
+  const topicsTotalRef = useRef(topicsTotal);
+  const topicsLoadingRef = useRef(topicsLoading);
+  useEffect(() => { topicsLengthRef.current = topics.length; }, [topics.length]);
+  useEffect(() => { topicsTotalRef.current = topicsTotal; }, [topicsTotal]);
+  useEffect(() => { topicsLoadingRef.current = topicsLoading; }, [topicsLoading]);
 
   // 주제 생성 모달
   const [showModal, setShowModal] = useState(false);
@@ -107,41 +112,33 @@ export default function DebateTopicsPage() {
     });
   }, [fetchTopics, filter, sort, page]);
 
-  // Infinite scroll trigger on downward wheel/scroll intent
+  // 무한 스크롤 — refs로 stale closure 없이 최신 상태 참조, 실제 API 로딩 완료 기준으로 게이팅
   useEffect(() => {
     let lastScrollTime = 0;
-    const cooldown = 1500; // 1.5s cooldown between batches to maintain rhythm
+    const cooldown = 1500;
 
     const handleWheel = (e: WheelEvent) => {
-      // Detect downward scroll intent
-      if (e.deltaY > 0 && topics.length < topicsTotal && !isRefreshing) {
+      if (e.deltaY > 0 && topicsLengthRef.current < topicsTotalRef.current && !topicsLoadingRef.current) {
         const now = Date.now();
         if (now - lastScrollTime > cooldown) {
           lastScrollTime = now;
-          setIsRefreshing(true);
-          setTimeout(() => {
-            setPage(prev => prev + 1);
-            setIsRefreshing(false);
-          }, 800);
+          setPage((prev) => prev + 1);
         }
       }
     };
 
-    // Also handle touch for mobile if needed, but wheel is primary for mouse
     window.addEventListener('wheel', handleWheel, { passive: true });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [visibleCount, isRefreshing]);
+  }, []);
 
   // 필터 변경 시 페이지 초기화
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
-    setVisibleCount(8);
     setPage(1);
   };
 
   const handleSortChange = (s: SortOption) => {
     setSort(s);
-    setVisibleCount(8);
     setPage(1);
   };
 
@@ -356,8 +353,8 @@ export default function DebateTopicsPage() {
               )}
             </div>
 
-            {/* Infinite Scroll Refreshing State */}
-            {isRefreshing && (
+            {/* Infinite Scroll Loading State */}
+            {topicsLoading && page > 1 && (
               <div className="flex justify-center items-center py-12">
                 <div className="flex gap-3 items-center text-primary font-black animate-pulse">
                   <Clock size={20} />
@@ -367,7 +364,7 @@ export default function DebateTopicsPage() {
             )}
 
             {/* Numeric Indicators (Carousel style) */}
-            {topicsTotal > 20 && !isRefreshing && (
+            {topicsTotal > 20 && !topicsLoading && (
               <div className="flex justify-center gap-3 mt-12 mb-8">
                 {Array.from({ length: Math.ceil(topicsTotal / 20) }).map((_, idx) => (
                   <button

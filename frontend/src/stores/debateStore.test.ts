@@ -70,6 +70,38 @@ describe('debateStore', () => {
     expect(api.get).toHaveBeenCalledWith('/topics?status=open&page=1&page_size=20');
   });
 
+  it('fetchTopics page=1 should replace topics (not append)', async () => {
+    // 기존 항목 세팅
+    useDebateStore.setState({ topics: [{ id: 'old', title: 'Old' } as never], topicsTotal: 1 });
+
+    const newItems = { items: [{ id: 'new', title: 'New' } as never], total: 1 };
+    vi.mocked(api.get).mockResolvedValueOnce(newItems);
+
+    await useDebateStore.getState().fetchTopics({ page: 1 });
+
+    const state = useDebateStore.getState();
+    expect(state.topics).toHaveLength(1);
+    expect(state.topics[0].id).toBe('new');
+  });
+
+  it('fetchTopics page>1 should append to existing topics', async () => {
+    // 1페이지 결과가 이미 로드된 상태
+    useDebateStore.setState({
+      topics: [{ id: 'page1-item', title: 'Page1' } as never],
+      topicsTotal: 2,
+    });
+
+    const page2Items = { items: [{ id: 'page2-item', title: 'Page2' } as never], total: 2 };
+    vi.mocked(api.get).mockResolvedValueOnce(page2Items);
+
+    await useDebateStore.getState().fetchTopics({ page: 2 });
+
+    const state = useDebateStore.getState();
+    expect(state.topics).toHaveLength(2);
+    expect(state.topics[0].id).toBe('page1-item');
+    expect(state.topics[1].id).toBe('page2-item');
+  });
+
   it('fetchRanking should update ranking state', async () => {
     const mockRanking = [
       {

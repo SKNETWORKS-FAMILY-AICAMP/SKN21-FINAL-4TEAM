@@ -1,4 +1,4 @@
-"""커뮤니티 피드 서비스 — 포스트 생성, 피드 조회, 좋아요 토글."""
+"""커뮤니티 피드 서비스 — 포스트 생성, 피드 조회, 좋아요 토글, 참여등급."""
 
 import logging
 from decimal import Decimal
@@ -13,8 +13,27 @@ from app.models.community_post import CommunityPost, CommunityPostLike
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
+from app.models.user_community_stats import UserCommunityStats
 from app.models.user_follow import UserFollow
-from app.schemas.community import LikeToggleResponse
+from app.schemas.community import LikeToggleResponse, MyCommunityStatsResponse
+
+# tier 경계값: (상한 점수 미만, tier 이름, 다음 tier)
+_TIER_THRESHOLDS = [
+    (10, "Bronze", "Silver", 10),
+    (30, "Silver", "Gold", 30),
+    (60, "Gold", "Platinum", 60),
+    (100, "Platinum", "Diamond", 100),
+    (None, "Diamond", None, None),
+]
+
+
+def _calc_tier(score: int) -> tuple[str, str | None, int | None]:
+    """점수로 tier, 다음 tier, 다음 tier까지 필요 점수를 반환한다."""
+    for threshold, tier_name, next_tier, next_score in _TIER_THRESHOLDS:
+        if threshold is None or score < threshold:
+            next_score_needed = (next_score - score) if next_score is not None else None
+            return tier_name, next_tier, next_score_needed
+    return "Diamond", None, None
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +254,89 @@ class CommunityService:
 
         return items, total
 
+    async def get_or_create_stats(self, user_id: UUID) -> MyCommunityStatsResponse:
+        """사용자 참여통계를 반환한다. 레코드가 없으면 DB에서 집계 후 생성한다."""
+        res = await self.db.execute(
+            select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
+        )
+        stats = res.scalar_one_or_none()
+
+        if stats is None:
+            # 최초 요청 시 DB 집계로 계산
+            likes_res = await self.db.execute(
+                select(func.count(CommunityPostLike.id)).where(CommunityPostLike.user_id == user_id)
+            )
+            likes_given = likes_res.scalar() or 0
+
+            follows_res = await self.db.execute(
+                select(func.count(UserFollow.id)).where(
+                    UserFollow.follower_id == user_id,
+                    UserFollow.target_type == "agent",
+                )
+            )
+            follows_given = follows_res.scalar() or 0
+
+            total_score = likes_given * 1 + follows_given * 2
+            tier, _, _ = _calc_tier(total_score)
+
+            stats = UserCommunityStats(
+                user_id=user_id,
+                total_score=total_score,
+                tier=tier,
+                likes_given=likes_given,
+                follows_given=follows_given,
+            )
+            self.db.add(stats)
+            try:
+                await self.db.commit()
+                await self.db.refresh(stats)
+            except IntegrityError:
+                # 동시 요청으로 인한 중복 삽입 → 기존 레코드 재조회
+                await self.db.rollback()
+                res2 = await self.db.execute(
+                    select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
+                )
+                stats = res2.scalar_one()
+
+        tier, next_tier, next_tier_score = _calc_tier(stats.total_score)
+        return MyCommunityStatsResponse(
+            tier=tier,
+            total_score=stats.total_score,
+            likes_given=stats.likes_given,
+            follows_given=stats.follows_given,
+            next_tier=next_tier,
+            next_tier_score=next_tier_score,
+        )
+
+    async def _update_stats_delta(
+        self,
+        user_id: UUID,
+        likes_delta: int = 0,
+        follows_delta: int = 0,
+    ) -> None:
+        """참여통계를 증분(delta) 업데이트한다. 레코드가 없으면 생성 후 업데이트한다."""
+        res = await self.db.execute(
+            select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
+        )
+        stats = res.scalar_one_or_none()
+
+        if stats is None:
+            stats = UserCommunityStats(
+                user_id=user_id,
+                total_score=0,
+                tier="Bronze",
+                likes_given=0,
+                follows_given=0,
+            )
+            self.db.add(stats)
+            await self.db.flush()
+
+        stats.likes_given = max(0, stats.likes_given + likes_delta)
+        stats.follows_given = max(0, stats.follows_given + follows_delta)
+        stats.total_score = stats.likes_given * 1 + stats.follows_given * 2
+        stats.tier, _, _ = _calc_tier(stats.total_score)
+        await self.db.commit()
+
     async def toggle_like(self, user_id: UUID, post_id: UUID) -> LikeToggleResponse:
         """포스트 좋아요를 토글한다.
 
@@ -276,6 +378,8 @@ class CommunityService:
                 select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
             )
             count = updated.scalar() or 0
+            # 좋아요 취소 → stats 비동기 업데이트
+            _schedule_stats_update(str(user_id), likes_delta=-1)
             return LikeToggleResponse(liked=False, likes_count=max(0, count))
 
         # 좋아요 추가
@@ -303,6 +407,8 @@ class CommunityService:
             select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
         )
         count = updated.scalar() or 0
+        # 좋아요 추가 → stats 비동기 업데이트
+        _schedule_stats_update(str(user_id), likes_delta=1)
         return LikeToggleResponse(liked=True, likes_count=count)
 
 
@@ -341,3 +447,25 @@ async def generate_community_posts_task(match_id: str) -> None:
 
     except Exception as exc:
         logger.warning("generate_community_posts_task failed for match %s: %s", match_id, exc)
+
+
+def _schedule_stats_update(user_id: str, likes_delta: int = 0, follows_delta: int = 0) -> None:
+    """참여통계 업데이트를 asyncio 백그라운드 태스크로 예약한다.
+
+    toggle_like / follow 완료 후 메인 응답을 블로킹하지 않고 stats를 업데이트한다.
+    """
+    import asyncio
+
+    asyncio.create_task(_update_stats_task(user_id, likes_delta, follows_delta))
+
+
+async def _update_stats_task(user_id: str, likes_delta: int, follows_delta: int) -> None:
+    """독립 세션으로 user_community_stats를 증분 업데이트한다."""
+    from app.core.database import async_session
+
+    try:
+        async with async_session() as db:
+            svc = CommunityService(db)
+            await svc._update_stats_delta(UUID(user_id), likes_delta=likes_delta, follows_delta=follows_delta)
+    except Exception as exc:
+        logger.warning("_update_stats_task failed for user %s: %s", user_id, exc)

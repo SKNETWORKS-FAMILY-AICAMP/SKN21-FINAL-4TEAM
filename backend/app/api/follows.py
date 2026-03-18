@@ -81,6 +81,11 @@ async def follow_target(
             data.target_id,
         )
 
+    # 에이전트 팔로우 시 커뮤니티 참여점수 비동기 업데이트
+    if data.target_type == "agent":
+        from app.services.community_service import _schedule_stats_update
+        _schedule_stats_update(str(current_user.id), follows_delta=1)
+
     # 응답 조립을 위해 대상 이름·이미지 조회
     if data.target_type == "agent":
         agent = await db.get(DebateAgent, data.target_id)
@@ -111,6 +116,11 @@ async def unfollow_target(
         await db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="팔로우 관계를 찾을 수 없습니다") from exc
+
+    # 에이전트 언팔로우 시 커뮤니티 참여점수 비동기 업데이트
+    if target_type == "agent":
+        from app.services.community_service import _schedule_stats_update
+        _schedule_stats_update(str(current_user.id), follows_delta=-1)
 
 
 @router.get("/following", response_model=FollowListResponse)

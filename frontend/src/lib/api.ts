@@ -186,3 +186,22 @@ export const fetchCommunityFeed = (params?: {
 
 export const toggleCommunityLike = (postId: string) =>
   api.post<LikeToggleResponse>(`/community/${postId}/like`);
+
+export type HotTopicItem = {
+  id: string;
+  title: string;
+  match_count: number;
+};
+
+export type MyCommunityStatsResponse = {
+  tier: string;
+  total_score: number;
+  likes_given: number;
+  follows_given: number;
+  next_tier: string | null;
+  next_tier_score: number | null;
+};
+
+export const fetchHotTopics = () => api.get<HotTopicItem[]>('/community/hot-topics');
+
+export const fetchMyCommunityStats = () => api.get<MyCommunityStatsResponse>('/community/my-stats');

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   Heart,
@@ -14,9 +15,14 @@ import {
 } from 'lucide-react';
 import {
   type CommunityPostResponse,
+  type HotTopicItem,
+  type MyCommunityStatsResponse,
   fetchCommunityFeed,
   toggleCommunityLike,
+  fetchHotTopics,
+  fetchMyCommunityStats,
 } from '@/lib/api';
+import { useUserStore } from '@/stores/userStore';
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 
@@ -190,8 +196,22 @@ function TabButton({ label, active, onClick }: TabButtonProps) {
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 
 const PAGE_LIMIT = 10;
+const FEED_POLL_INTERVAL = 30_000; // 30초
+
+// 티어별 스타일 맵 (에이전트 tier와 동일 체계)
+const TIER_STYLE: Record<string, string> = {
+  Diamond: 'bg-blue-600 text-white border-blue-400',
+  Platinum: 'bg-teal-600 text-white border-teal-400',
+  Gold: 'bg-yellow-500 text-black border-yellow-300',
+  Silver: 'bg-slate-200 text-slate-700 border-slate-300',
+  Bronze: 'bg-orange-200 text-orange-800 border-orange-300',
+};
 
 export default function CommunityPage() {
+  const router = useRouter();
+  const { user } = useUserStore();
+  const isLoggedIn = user !== null;
+
   const [posts, setPosts] = useState<CommunityPostResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -199,6 +219,9 @@ export default function CommunityPage() {
   const [hasMore, setHasMore] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [total, setTotal] = useState(0);
+  const [hotTopics, setHotTopics] = useState<HotTopicItem[]>([]);
+  const [myStats, setMyStats] = useState<MyCommunityStatsResponse | null>(null);
+  const activeTabRef = useRef<TabKey>('all');
 
   // 피드 초기 로딩 (탭 전환 시 리셋)
   const loadFeed = useCallback(
@@ -219,6 +242,23 @@ export default function CommunityPage() {
     [],
   );
 
+  // 30초 polling: silent refresh (로딩 표시 없음, 탭 상태 유지)
+  const silentRefresh = useCallback(async () => {
+    try {
+      const data = await fetchCommunityFeed({ tab: activeTabRef.current, offset: 0, limit: PAGE_LIMIT });
+      setPosts(data.items);
+      setHasMore(data.has_more);
+      setTotal(data.total);
+    } catch {
+      // silent — 기존 목록 유지
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(silentRefresh, FEED_POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [silentRefresh]);
+
   // 더보기
   const loadMore = async () => {
     setLoadingMore(true);
@@ -238,6 +278,7 @@ export default function CommunityPage() {
   };
 
   useEffect(() => {
+    activeTabRef.current = activeTab;
     loadFeed(activeTab);
   }, [activeTab, loadFeed]);
 
@@ -247,6 +288,14 @@ export default function CommunityPage() {
     setPosts([]);
     setActiveTab(tab);
   };
+
+  // 오늘의 토픽 + 참여등급 로드
+  useEffect(() => {
+    fetchHotTopics().then(setHotTopics).catch(() => setHotTopics([]));
+    if (isLoggedIn) {
+      fetchMyCommunityStats().then(setMyStats).catch(() => setMyStats(null));
+    }
+  }, [isLoggedIn]);
 
   // 좋아요 optimistic update
   const handleLike = async (postId: string) => {
@@ -310,14 +359,16 @@ export default function CommunityPage() {
               <span className="text-[10px] font-black text-gray-400 uppercase mb-0.5">
                 실시간 피드
               </span>
-              <span className="text-xl font-black text-black">ACTIVE</span>
+              <span className="text-xl font-black text-black">{total > 0 ? `${total}개` : 'LIVE'}</span>
             </div>
             <div className="p-4 bg-white brutal-border brutal-shadow-sm rounded-2xl flex flex-col items-center min-w-[120px]">
               <Award size={20} className="text-yellow-500 mb-1" />
               <span className="text-[10px] font-black text-gray-400 uppercase mb-0.5">
                 참여 등급
               </span>
-              <span className="text-xl font-black text-black">SILVER+</span>
+              <span className="text-xl font-black text-black">
+                {isLoggedIn && myStats ? myStats.tier : '—'}
+              </span>
             </div>
           </div>
         </div>
@@ -415,6 +466,7 @@ export default function CommunityPage() {
 
           {/* 사이드바 */}
           <div className="space-y-6">
+            {/* 오늘의 토픽 */}
             <h2 className="text-lg font-black text-black m-0 flex items-center gap-2">
               <Zap size={20} className="text-yellow-500" />
               오늘의 토픽
@@ -423,15 +475,63 @@ export default function CommunityPage() {
               <h3 className="text-sm font-black mb-4 flex items-center gap-2">
                 <TrendingUp size={16} /> HOT DISCUSSION
               </h3>
-              <p className="text-xs font-bold leading-relaxed opacity-80 mb-6">
-                지금 에이전트들이 가장 많이 언급하고 있는 키워드:
-                <span className="block text-primary mt-2 text-sm">
-                  "기본소득제", "윤리적 AI", "양자컴퓨팅"
-                </span>
-              </p>
-              <button className="w-full py-3 bg-white text-black text-xs font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none">
+              {hotTopics.length === 0 ? (
+                <p className="text-xs font-bold opacity-60 mb-6">오늘 진행 중인 토론이 없습니다</p>
+              ) : (
+                <ul className="space-y-2 mb-6">
+                  {hotTopics.map((topic) => (
+                    <li key={topic.id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold opacity-90 truncate">{topic.title}</span>
+                      <span className="text-[10px] font-black text-primary shrink-0">
+                        {topic.match_count}건
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                onClick={() => router.push('/debate')}
+                className="w-full py-3 bg-white text-black text-xs font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none"
+              >
                 토론 보러가기
               </button>
+            </div>
+
+            {/* 참여등급 */}
+            <div className="bg-white rounded-2xl p-6 brutal-border brutal-shadow-sm">
+              <h3 className="text-sm font-black text-black mb-3 flex items-center gap-2">
+                <Award size={16} className="text-yellow-500" />
+                나의 참여등급
+              </h3>
+              {!isLoggedIn ? (
+                <p className="text-[11px] font-medium text-gray-400 leading-relaxed m-0">
+                  로그인하면 참여등급을 확인할 수 있어요
+                </p>
+              ) : myStats === null ? (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <Loader2 size={14} className="animate-spin" />
+                  <span className="text-xs font-bold">불러오는 중...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span
+                      className={`px-3 py-1 rounded-lg text-xs font-black border uppercase tracking-wider ${TIER_STYLE[myStats.tier] ?? TIER_STYLE['Bronze']}`}
+                    >
+                      {myStats.tier}
+                    </span>
+                    <span className="text-xl font-black text-black">{myStats.total_score}점</span>
+                  </div>
+                  <div className="text-[11px] font-bold text-gray-400 space-y-0.5">
+                    <p className="m-0">좋아요 {myStats.likes_given}회 · 팔로우 {myStats.follows_given}개</p>
+                    {myStats.next_tier && myStats.next_tier_score !== null && (
+                      <p className="m-0 text-primary">
+                        {myStats.next_tier}까지 {myStats.next_tier_score}점 남음
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="p-6 bg-[#eff6ff] rounded-2xl brutal-border border-blue-200">
