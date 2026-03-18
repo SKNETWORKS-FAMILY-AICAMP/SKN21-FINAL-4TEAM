@@ -399,24 +399,24 @@ export default function DebateTopicsPage() {
         {/* ── Left + Center: 토픽 목록 ── */}
         <div className="lg:col-span-2">
           {/* Topic Carousel (2x2 Grid) */}
-          <div className="relative mb-6 overflow-x-hidden">
-            <div 
+          <div className="relative mb-6 overflow-hidden">
+            <div
               className="flex transition-transform duration-500 ease-in-out"
               style={{ transform: `translateX(-${slideIndex * 100}%)` }}
             >
               {topicsLoading ? (
-                <div className="min-w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
+                <div className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-[180px] bg-white rounded-2xl brutal-border border-black/5 animate-pulse" />
                   ))}
                 </div>
               ) : roomChunks.length === 0 ? (
-                <div className="min-w-full flex-shrink-0 py-20 text-center text-sm text-gray-400">
+                <div className="w-full flex-shrink-0 py-20 text-center text-sm text-gray-400">
                   표시할 토론 주제가 없습니다.
                 </div>
               ) : (
                 roomChunks.map((chunk, chunkIdx) => (
-                  <div key={chunkIdx} className="min-w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
+                  <div key={chunkIdx} className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
                     {chunk.map((room) => {
                       const config = STATUS_CONFIG[room.status] || STATUS_CONFIG.closed;
                       // DebateTopic 타입에 맞게 필드 접근 (room.mode, room.title 등)
