@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ChevronUp } from 'lucide-react';
 
 export function Footer() {
@@ -11,7 +12,9 @@ export function Footer() {
     <footer className="w-full border-t border-gray-100 bg-white py-14 px-4 md:px-8 mt-16 pb-20">
       <div className="max-w-[960px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
         <div className="space-y-4">
-          <span className="text-2xl font-black text-black tracking-tighter leading-none">NEMo</span>
+          <Link href="/" className="no-underline group inline-block">
+            <span className="text-2xl font-black text-black tracking-tighter leading-none group-hover:text-primary transition-colors">NEMo</span>
+          </Link>
           <div className="text-[13px] text-gray-400 space-y-1 font-bold">
             <p>서울시 금천구 가산디지털1로 25</p>
             <p>010 - 1234 - 5678</p>

@@ -2,7 +2,8 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Lock, Calendar, Shield, Mail, IdCard, Eye, EyeOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { User, Lock, Calendar, Shield, Mail, IdCard, Eye, EyeOff, UserX } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useToastStore } from '@/stores/toastStore';
 import { api, ApiError } from '@/lib/api';
@@ -20,8 +21,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function ProfileTab() {
-  const { user, setUser } = useUserStore();
+  const { user, setUser, logout } = useUserStore();
   const { addToast } = useToastStore();
+  const router = useRouter();
 
   // 비밀번호 변경 폼 상태
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -31,6 +33,10 @@ export function ProfileTab() {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
+
+  // 회원탈퇴 상태
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +64,22 @@ export function ProfileTab() {
       addToast('error', message);
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    try {
+      await api.delete('/auth/me');
+      addToast('success', '회원탈퇴가 완료되었습니다.');
+      logout();
+      router.push('/login');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '회원탈퇴에 실패했습니다.';
+      addToast('error', message);
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -168,7 +190,7 @@ export function ProfileTab() {
       </div>
 
       {/* 비밀번호 변경 카드 */}
-      <div className="bg-white rounded-xl p-6 brutal-border brutal-shadow-sm">
+      <div className="bg-white rounded-xl p-6 mb-5 brutal-border brutal-shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-black text-black flex items-center gap-2 m-0">
             <Lock size={18} className="text-gray-400" />
@@ -301,6 +323,58 @@ export function ProfileTab() {
           </p>
         )}
       </div>
+
+      {/* 회원탈퇴 카드 */}
+      <div className="bg-white rounded-xl p-6 brutal-border brutal-shadow-sm border-red-200">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-black text-red-500 flex items-center gap-2 m-0">
+            <UserX size={18} />
+            회원탈퇴
+          </h2>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-4 py-2 bg-white text-red-500 text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer"
+          >
+            탈퇴하기
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 m-0">
+          탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다.
+        </p>
+      </div>
+
+      {/* 회원탈퇴 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-white brutal-border brutal-shadow-lg w-full max-w-sm p-8 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 brutal-border border-red-200">
+                <UserX size={32} />
+              </div>
+            </div>
+            <h3 className="text-xl font-black text-center text-black mb-2">정말 탈퇴하시겠습니까?</h3>
+            <p className="text-sm font-bold text-center text-gray-500 mb-8">
+              모든 데이터가 삭제되며 복구할 수 없습니다.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="w-full py-4 bg-red-500 text-white font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+              >
+                {deleteLoading ? '처리 중...' : '회원탈퇴'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleteLoading}
+                className="w-full py-4 bg-white text-black font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

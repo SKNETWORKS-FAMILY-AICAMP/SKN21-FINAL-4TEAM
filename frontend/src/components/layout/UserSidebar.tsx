@@ -47,6 +47,7 @@ export const UserSidebar = memo(function UserSidebar() {
 
   const [liveCount, setLiveCount] = useState<number | null>(null);
   const [scheduledCount, setScheduledCount] = useState<number | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     closeSidebar();
@@ -72,6 +73,10 @@ export const UserSidebar = memo(function UserSidebar() {
   }, []);
 
   const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
     logout();
     router.push('/login');
   };
@@ -108,11 +113,17 @@ export const UserSidebar = memo(function UserSidebar() {
       >
         {/* 로고 헤더 */}
         <div className={`px-4 py-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-          {!sidebarCollapsed && (
-            <div className="flex-1">
-              <p className="text-xl font-bold text-black m-0 leading-tight tracking-tight">NEMo</p>
+          {!sidebarCollapsed ? (
+            <Link href="/" className="flex-1 no-underline group">
+              <p className="text-xl font-bold text-black m-0 leading-tight tracking-tight group-hover:text-primary transition-colors">NEMo</p>
               <p className="text-[10px] font-black m-0 text-primary tracking-widest">AI DEBATE</p>
-            </div>
+            </Link>
+          ) : (
+            <Link href="/" className="no-underline group">
+              <div className="w-8 h-8 bg-black text-white rounded-lg flex items-center justify-center font-black text-xl hover:bg-primary transition-colors">
+                N
+              </div>
+            </Link>
           )}
           <button
             onClick={toggleSidebarCollapsed}
@@ -252,6 +263,37 @@ export const UserSidebar = memo(function UserSidebar() {
           </button>
         </div>
       </aside>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white brutal-border brutal-shadow-lg w-full max-w-sm p-8 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 brutal-border border-red-200">
+                <LogOut size={32} />
+              </div>
+            </div>
+            
+            <h3 className="text-xl font-black text-center text-black mb-2">로그아웃 하시겠습니까?</h3>
+            <p className="text-sm font-bold text-center text-gray-500 mb-8">안전하게 세션이 종료됩니다.</p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={confirmLogout}
+                className="w-full py-4 bg-red-500 text-white font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none"
+              >
+                로그아웃
+              </button>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="w-full py-4 bg-white text-black font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer border-none"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 });

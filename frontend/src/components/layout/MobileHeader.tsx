@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Menu, Search, Sun, Moon, Bell } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useThemeStore } from '@/stores/themeStore';
@@ -19,7 +20,9 @@ export function MobileHeader() {
       >
         <Menu size={22} strokeWidth={2.5} />
       </button>
-      <span className="text-xl font-black text-black tracking-tight italic">NEMO</span>
+      <Link href="/" className="no-underline transition-opacity hover:opacity-80">
+        <span className="text-xl font-black text-black tracking-tight italic">NEMO</span>
+      </Link>
 
       <div className="flex-1" />
 

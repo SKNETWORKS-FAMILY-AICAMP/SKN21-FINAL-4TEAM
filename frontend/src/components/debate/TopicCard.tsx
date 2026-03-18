@@ -85,7 +85,7 @@ export function TopicCard({ topic, currentUserId, onEdit, onDelete }: Props) {
             {topic.is_password_protected && <Lock size={10} className="text-yellow-500" />}
           </div>
 
-          <h3 className="text-base font-black text-black m-0 group-hover:text-primary transition-colors leading-snug line-clamp-1">
+          <h3 className="text-base font-black text-black m-0 group-hover:text-primary transition-colors leading-snug line-clamp-2">
             {topic.title}
           </h3>
         </div>

@@ -198,7 +198,8 @@
       "Bash(backend/.venv/Scripts/python -m pytest tests/unit/ -v --tb=short)",
       "Bash(.venv/Scripts/python -m alembic current)",
       "Bash(.venv/Scripts/python -c \"from app.services.community_service import CommunityService, generate_community_posts_task; print\\(''OK''\\)\")",
-      "Bash(.venv/Scripts/python -m pytest backend/tests/unit/ -v --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest backend/tests/unit/ -v --tb=short)",
+      "Bash(git merge:*)"
     ]
   }
 }
