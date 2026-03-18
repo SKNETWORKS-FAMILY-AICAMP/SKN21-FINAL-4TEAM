@@ -150,7 +150,6 @@ test.describe('인터랙션 / 기능 검증', () => {
         last_credit_grant_at: null,
         created_at: '2026-01-01T00:00:00Z',
         updated_at: null,
-        persona_count: 0,
         session_count: 0,
         message_count: 0,
         subscription_status: null,

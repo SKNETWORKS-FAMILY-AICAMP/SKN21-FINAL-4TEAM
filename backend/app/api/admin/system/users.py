@@ -164,7 +164,6 @@ async def get_user_detail(
         last_credit_grant_at=user.last_credit_grant_at,
         created_at=user.created_at,
         updated_at=user.updated_at,
-        persona_count=0,
         session_count=0,
         message_count=0,
         subscription_status=None,

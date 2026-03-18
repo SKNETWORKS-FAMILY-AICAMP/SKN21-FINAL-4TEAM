@@ -40,7 +40,6 @@ export const handlers = [
   http.get('/api/features', () =>
     HttpResponse.json({
       chat: true,
-      personas: true,
       community: true,
       character_chats: true,
       character_pages: true,
@@ -52,26 +51,6 @@ export const handlers = [
       notifications: true,
     }),
   ),
-
-  // 페르소나
-  http.get('/api/personas', () => HttpResponse.json({ items: [], total: 0 })),
-  http.get('/api/personas/:id', () =>
-    HttpResponse.json({
-      id: 'mock-persona-1',
-      display_name: '루나',
-      description: '테스트 페르소나',
-      age_rating: 'all',
-      visibility: 'public',
-      category: 'romance',
-      tags: [],
-      chat_count: 0,
-      like_count: 0,
-      follower_count: 0,
-    }),
-  ),
-  http.post('/api/personas', () => HttpResponse.json({ id: 'new-persona' }, { status: 201 })),
-  http.put('/api/personas/:id', () => HttpResponse.json({})),
-  http.delete('/api/personas/:id', () => new HttpResponse(null, { status: 204 })),
 
   // 채팅 세션
   http.get('/api/sessions', () => HttpResponse.json({ items: [], total: 0 })),

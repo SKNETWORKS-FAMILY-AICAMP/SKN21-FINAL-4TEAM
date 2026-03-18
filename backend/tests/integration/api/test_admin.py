@@ -115,7 +115,6 @@ async def test_admin_get_user_detail(client: AsyncClient, test_admin, test_user)
     data = response.json()
     assert data["nickname"] == "testuser"
     assert "credit_balance" in data
-    assert data["persona_count"] >= 0
     assert data["session_count"] >= 0
     assert data["message_count"] >= 0
 

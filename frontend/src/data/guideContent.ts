@@ -10,106 +10,6 @@ export type GuideContent = {
 
 /** 사용자 화면 가이드 */
 const userGuides: Record<string, GuideContent> = {
-  '/personas': {
-    banner: '다양한 AI 캐릭터를 탐색하고 대화를 시작해 보세요!',
-    sections: [
-      {
-        title: '챗봇 검색',
-        body: '상단 검색바에 키워드를 입력하면 캐릭터 이름이나 소개에서 일치하는 결과를 찾아줍니다.',
-      },
-      {
-        title: '태그 필터',
-        body: '태그 칩을 클릭하면 해당 장르/성격의 캐릭터만 필터링됩니다. 여러 태그를 조합할 수 있어요.',
-      },
-      {
-        title: '정렬',
-        body: '인기순·최신순·이름순으로 정렬할 수 있습니다. 인기순은 대화 수 기준입니다.',
-      },
-      {
-        title: '즐겨찾기',
-        body: '카드의 하트 아이콘을 누르면 즐겨찾기에 추가됩니다. 사이드바의 "즐겨찾기"에서 모아볼 수 있어요.',
-      },
-      {
-        title: '연령등급 배지',
-        body: '[전체]·[15+]·[18+] 배지로 연령등급을 확인하세요. 18+ 캐릭터는 성인인증 후 이용 가능합니다.',
-      },
-      {
-        title: '대화 시작',
-        body: '카드를 클릭하면 새 대화 세션이 생성되고 채팅 화면으로 이동합니다.',
-      },
-    ],
-  },
-
-  '/personas/create': {
-    banner: '나만의 AI 캐릭터를 만들어 보세요! 성격, 말투, 세계관을 자유롭게 설정할 수 있습니다.',
-    sections: [
-      {
-        title: '기본 정보',
-        body: '캐릭터 이름과 소개를 입력하세요. 소개는 탐색 페이지의 카드에 표시됩니다.',
-      },
-      {
-        title: '시스템 프롬프트',
-        body: '캐릭터의 성격, 말투, 행동 지침을 자유롭게 적어주세요. AI가 이 설정을 따라 대화합니다.',
-      },
-      {
-        title: '인사말',
-        body: '대화 시작 시 캐릭터가 보내는 첫 메시지입니다. 비워두면 사용자의 첫 메시지를 기다립니다.',
-      },
-      {
-        title: '시나리오',
-        body: '대화의 배경 상황을 설정하세요. 예: "조용한 카페에서 우연히 만난 상황"',
-      },
-      {
-        title: '예시 대화',
-        body: '캐릭터의 말투를 보여주는 예시 대화를 추가하면 AI가 더 자연스럽게 대화합니다.',
-      },
-      {
-        title: '태그',
-        body: '캐릭터를 설명하는 태그를 추가하세요. 다른 사용자가 태그로 검색할 수 있습니다.',
-      },
-      {
-        title: 'Live2D & 배경',
-        body: 'Live2D 모델과 배경 이미지를 선택하면 채팅 화면에서 캐릭터가 표정으로 반응합니다.',
-      },
-      {
-        title: '연령등급',
-        body: '콘텐츠 수위에 따라 전체·15+·18+를 선택하세요. 18+는 성인인증이 필요합니다.',
-      },
-    ],
-  },
-
-  '/personas/edit': {
-    banner: '캐릭터 설정을 수정하고 저장하세요.',
-    sections: [
-      {
-        title: '수정 방법',
-        body: '각 필드를 수정한 후 하단의 "저장" 버튼을 누르세요. 변경사항은 새로운 대화부터 적용됩니다.',
-      },
-      {
-        title: '공개 범위',
-        body: 'private(나만), public(전체 공개), unlisted(링크 공유)로 설정할 수 있습니다.',
-      },
-    ],
-  },
-
-  '/personas/lorebook': {
-    banner: '로어북으로 캐릭터의 세계관을 더 풍부하게 만들어 보세요.',
-    sections: [
-      {
-        title: '로어북이란?',
-        body: '캐릭터가 알고 있어야 할 세계관 설정, 인물 관계, 장소 정보 등을 정의하는 항목입니다.',
-      },
-      {
-        title: '항목 추가',
-        body: '"추가" 버튼으로 새 항목을 만드세요. 제목, 키워드, 본문을 입력합니다.',
-      },
-      {
-        title: '키워드 트리거',
-        body: '대화에서 키워드가 언급되면 해당 로어북 항목이 AI에게 자동으로 전달됩니다.',
-      },
-    ],
-  },
-
   '/chat': {
     banner: '캐릭터와 자유롭게 대화해 보세요! 메시지 위에 마우스를 올리면 다양한 액션을 사용할 수 있어요.',
     sections: [
@@ -199,7 +99,7 @@ const userGuides: Record<string, GuideContent> = {
     sections: [
       {
         title: '알림 종류',
-        body: '페르소나 승인/차단, 관계 변화, 시스템 공지 등 다양한 알림을 받을 수 있습니다.',
+        body: '매치 결과, 시즌 변경, 시스템 공지 등 다양한 알림을 받을 수 있습니다.',
       },
       {
         title: '읽음 처리',
@@ -240,10 +140,6 @@ const userGuides: Record<string, GuideContent> = {
       {
         title: '사용량',
         body: '일별·월별 토큰 사용량과 비용을 차트로 확인할 수 있습니다.',
-      },
-      {
-        title: '내 캐릭터',
-        body: '대화에서 사용할 나의 페르소나를 생성하고 관리합니다. 기본 페르소나를 설정할 수 있어요.',
       },
       {
         title: '기억',
@@ -369,11 +265,11 @@ const adminGuides: Record<string, GuideContent> = {
     sections: [
       {
         title: '통계 카드',
-        body: '총 사용자, 활성 세션, 페르소나 수 등 핵심 지표를 실시간으로 확인합니다.',
+        body: '총 사용자, 활성 세션, 진행 중인 매치 등 핵심 지표를 실시간으로 확인합니다.',
       },
       {
         title: '최근 활동',
-        body: '최근 가입한 사용자와 생성된 페르소나를 빠르게 확인할 수 있습니다.',
+        body: '최근 가입한 사용자와 진행된 매치를 빠르게 확인할 수 있습니다.',
       },
     ],
   },
@@ -392,24 +288,6 @@ const adminGuides: Record<string, GuideContent> = {
       {
         title: '계정 상태',
         body: '계정을 활성/비활성 전환하여 접근을 제어합니다.',
-      },
-    ],
-  },
-
-  '/admin/personas': {
-    banner: '사용자가 생성한 페르소나를 검토하고 승인/차단하세요.',
-    sections: [
-      {
-        title: '모더레이션',
-        body: '대기 중인 페르소나를 검토하고 승인 또는 차단할 수 있습니다.',
-      },
-      {
-        title: '연령등급 검수',
-        body: '사용자가 설정한 연령등급이 콘텐츠에 적합한지 확인하세요.',
-      },
-      {
-        title: '상태 필터',
-        body: 'pending/approved/blocked 상태별로 필터링할 수 있습니다.',
       },
     ],
   },
@@ -516,8 +394,6 @@ export function getGuideForPath(pathname: string): GuideContent | null {
 
   // 동적 라우트 패턴 매칭
   if (/^\/chat\/[^/]+$/.test(pathname)) return userGuides['/chat'];
-  if (/^\/personas\/[^/]+\/edit$/.test(pathname)) return userGuides['/personas/edit'];
-  if (/^\/personas\/[^/]+\/lorebook$/.test(pathname)) return userGuides['/personas/lorebook'];
   if (/^\/community\/post\/[^/]+$/.test(pathname)) return userGuides['/community'];
   if (/^\/debate\/agents\/[^/]+$/.test(pathname)) return userGuides['/debate/agents/detail'];
   if (/^\/debate\/topics\/[^/]+$/.test(pathname)) return userGuides['/debate/topics/detail'];

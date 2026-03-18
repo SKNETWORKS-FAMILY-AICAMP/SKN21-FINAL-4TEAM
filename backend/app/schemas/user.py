@@ -224,7 +224,6 @@ class AdminUserDetailResponse(BaseModel):
         last_credit_grant_at: 마지막 크레딧 지급 일시 (선택).
         created_at: 계정 생성 일시.
         updated_at: 마지막 수정 일시 (선택).
-        persona_count: 생성한 에이전트 수.
         session_count: 참여 세션 수.
         message_count: 발송 메시지 수.
         subscription_status: 구독 상태 (선택).
@@ -242,7 +241,6 @@ class AdminUserDetailResponse(BaseModel):
     last_credit_grant_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
-    persona_count: int = 0
     session_count: int = 0
     message_count: int = 0
     subscription_status: str | None = None

@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
-  X, User, Shield, ShieldCheck, CreditCard, MessageSquare, Drama, CalendarDays, Crown, Gem,
+  X, User, Shield, ShieldCheck, CreditCard, MessageSquare, CalendarDays, Crown, Gem,
   ShieldAlert, Check, Pencil, Copy,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -21,7 +21,6 @@ type AdminUserDetail = {
   last_credit_grant_at: string | null;
   created_at: string;
   updated_at: string | null;
-  persona_count: number;
   session_count: number;
   message_count: number;
   subscription_status: string | null;
@@ -346,7 +345,6 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                 활동 통계
               </h4>
               <div className="grid grid-cols-2 gap-2">
-                <StatMini icon={Drama} label="페르소나" value={detail.persona_count} />
                 <StatMini icon={CalendarDays} label="세션" value={detail.session_count} />
                 <StatMini icon={MessageSquare} label="메시지" value={detail.message_count} />
                 <StatMini icon={Crown} label="구독" value={detail.subscription_status ?? '없음'} />
