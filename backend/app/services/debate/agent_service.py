@@ -46,7 +46,7 @@ def get_tier_from_elo(elo: int) -> str:
 
 
 def _build_like_pattern(search: str) -> str:
-    """SQL LIKE 패턴 생성 — 와일드카드 문자(%, _, \) 이스케이프 후 %로 감싸기.
+    """SQL LIKE 패턴 생성 — 와일드카드 문자(%, _, \\) 이스케이프 후 %로 감싸기.
 
     Args:
         search: 사용자 입력 검색어.
@@ -54,7 +54,7 @@ def _build_like_pattern(search: str) -> str:
     Returns:
         SQL LIKE에 안전하게 사용할 수 있는 패턴 문자열.
     """
-    escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    escaped = search.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\\_")
     return f"%{escaped}%"
 
 
@@ -343,7 +343,7 @@ class DebateAgentService:
         )
 
         if search:
-            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            escaped = search.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\\_")
             like = f"%{escaped}%"
             base_query = base_query.where(
                 (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
