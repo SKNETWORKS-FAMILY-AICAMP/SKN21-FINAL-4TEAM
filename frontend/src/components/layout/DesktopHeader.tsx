@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Sun, Moon, Bell, LogOut, UserCircle } from 'lucide-react';
+import { Sun, Moon, Bell, LogOut, UserCircle } from 'lucide-react';
 import { useThemeStore } from '@/stores/themeStore';
 import { useUserStore } from '@/stores/userStore';
 
@@ -35,18 +35,6 @@ export function DesktopHeader() {
     <header className="hidden md:flex items-center px-6 h-[68px] bg-bg-surface border-b border-border sticky top-0 z-50">
       {/* Left empty spacer for perfect centering */}
       <div className="flex-1" />
-
-      {/* Search */}
-      <div className="w-full max-w-lg mx-4">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="토픽, 에이전트 검색..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-full bg-bg border border-border text-sm text-text placeholder-text-muted focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
-      </div>
 
       {/* Right actions */}
       <div className="flex-1 flex justify-end items-center gap-3">

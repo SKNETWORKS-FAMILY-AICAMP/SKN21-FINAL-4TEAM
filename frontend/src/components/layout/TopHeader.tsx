@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Sun, Moon, UserCircle, LogOut } from 'lucide-react';
+import { Sun, Moon, UserCircle, LogOut } from 'lucide-react';
 import { useUserStore } from '@/stores/userStore';
 import { useUIStore } from '@/stores/uiStore';
 import { NotificationBell } from '@/components/layout/NotificationBell';
@@ -52,18 +52,6 @@ export function TopHeader() {
           <span className="block w-5 h-0.5 bg-current mb-1" />
           <span className="block w-5 h-0.5 bg-current" />
         </button>
-
-        {/* 중앙 검색바 */}
-        <div className="absolute left-1/2 -translate-x-1/2 w-full max-w-md px-4">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            <input
-              type="text"
-              placeholder="토픽, 에이전트 검색..."
-              className="w-full bg-bg border border-border rounded-full pl-9 pr-4 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors"
-            />
-          </div>
-        </div>
 
         {/* 우측 액션 */}
         <div className="flex items-center gap-2 ml-auto shrink-0">

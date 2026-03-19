@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Swords, Plus, X, ChevronDown, Shuffle, MessageSquare, Users, Clock, Trophy } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Swords, Plus, X, ChevronDown, Shuffle, MessageSquare, Users, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
@@ -9,7 +9,6 @@ import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { ScrollToTop } from '@/components/ui/ScrollToTop';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -33,6 +32,39 @@ const MODE_OPTIONS = [
   { value: 'persuasion', label: '설득' },
   { value: 'cross_exam', label: '교차 심문' },
 ];
+
+const HARDCODED_RANKING = [
+  { id: 'r-1',  name: '논리왕 GPT',    owner_nickname: 'alpha',   elo_rating: 2340 },
+  { id: 'r-2',  name: '설득의 달인',    owner_nickname: 'beta99',  elo_rating: 2210 },
+  { id: 'r-3',  name: '철학자 클로드',  owner_nickname: 'phil',    elo_rating: 2150 },
+  { id: 'r-4',  name: '데이터 헌터',    owner_nickname: 'data_k',  elo_rating: 2080 },
+  { id: 'r-5',  name: '소크라테스AI',   owner_nickname: 'sokr',    elo_rating: 2010 },
+  { id: 'r-6',  name: '반박 불가',      owner_nickname: 'noreply', elo_rating: 1980 },
+  { id: 'r-7',  name: '팩트체커',       owner_nickname: 'fact7',   elo_rating: 1940 },
+  { id: 'r-8',  name: '감성 설득가',    owner_nickname: 'emo8',    elo_rating: 1900 },
+  { id: 'r-9',  name: '전략가 알파',    owner_nickname: 'strat9',  elo_rating: 1860 },
+  { id: 'r-10', name: '냉철한 분석가',  owner_nickname: 'cool10',  elo_rating: 1820 },
+  { id: 'r-11', name: '언어의 마법사',  owner_nickname: 'magic11', elo_rating: 1780 },
+  { id: 'r-12', name: '논증 전문가',    owner_nickname: 'arg12',   elo_rating: 1740 },
+];
+
+const HARDCODED_TOPICS = [
+  { id: 'room-1', title: 'AI가 인간의 일자리를 대체할 것인가?',    mode: 'debate',    status: 'open',        queue_count: 120, owner: '에이원',   is_admin_topic: true },
+  { id: 'room-2', title: '기본소득제, 과연 실현 가능한가?',         mode: 'persuasion', status: 'in_progress', queue_count: 85,  owner: '경제학자', is_admin_topic: false },
+  { id: 'room-3', title: '동물 실험 금지법안, 찬성인가 반대인가?',  mode: 'debate',    status: 'open',        queue_count: 45,  owner: '윤리위원회', is_admin_topic: false },
+  { id: 'room-4', title: '자유 의지는 실재하는가?',                 mode: 'cross_exam', status: 'scheduled',   queue_count: 310, owner: '칸트',     is_admin_topic: true },
+  { id: 'room-5', title: '우주 탐사, 예산 낭비인가 필수적인가?',    mode: 'debate',    status: 'open',        queue_count: 95,  owner: '스페이스', is_admin_topic: false },
+  { id: 'room-6', title: '플라스틱 사용 전면 금지, 가능한가?',      mode: 'persuasion', status: 'in_progress', queue_count: 60,  owner: '그린피쓰', is_admin_topic: false },
+  { id: 'room-7', title: '사형제도 부활, 찬성 VS 반대',             mode: 'debate',    status: 'closed',      queue_count: 500, owner: '법치주의', is_admin_topic: true },
+  { id: 'room-8', title: '촉법소년 연령 하향 조정',                 mode: 'cross_exam', status: 'open',        queue_count: 220, owner: '시민',     is_admin_topic: false },
+];
+
+const STATUS_CONFIG: Record<string, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
+  open:        { label: 'LIVE',  dotColor: 'bg-red-500', bgColor: 'bg-red-500/10',  textColor: 'text-red-500' },
+  in_progress: { label: '대기중', dotColor: '',           bgColor: 'bg-gray-500/10', textColor: 'text-gray-500' },
+  scheduled:   { label: '예정',  dotColor: '',           bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
+  closed:      { label: '종료',  dotColor: '',           bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
+};
 
 const defaultForm = {
   title: '',
@@ -67,13 +99,8 @@ export default function DebateTopicsPage() {
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
-  // stale closure 방지용 refs — wheel 핸들러가 최신 상태를 읽을 수 있도록
-  const topicsLengthRef = useRef(topics.length);
-  const topicsTotalRef = useRef(topicsTotal);
-  const topicsLoadingRef = useRef(topicsLoading);
-  useEffect(() => { topicsLengthRef.current = topics.length; }, [topics.length]);
-  useEffect(() => { topicsTotalRef.current = topicsTotal; }, [topicsTotal]);
-  useEffect(() => { topicsLoadingRef.current = topicsLoading; }, [topicsLoading]);
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 주제 생성 모달
   const [showModal, setShowModal] = useState(false);
@@ -112,33 +139,41 @@ export default function DebateTopicsPage() {
     });
   }, [fetchTopics, filter, sort, page]);
 
-  // 무한 스크롤 — refs로 stale closure 없이 최신 상태 참조, 실제 API 로딩 완료 기준으로 게이팅
+  // Infinite scroll trigger on downward wheel/scroll intent
   useEffect(() => {
     let lastScrollTime = 0;
-    const cooldown = 1500;
+    const cooldown = 1500; // 1.5s cooldown between batches to maintain rhythm
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY > 0 && topicsLengthRef.current < topicsTotalRef.current && !topicsLoadingRef.current) {
+      // Detect downward scroll intent
+      if (e.deltaY > 0 && topics.length < topicsTotal && !isRefreshing) {
         const now = Date.now();
         if (now - lastScrollTime > cooldown) {
           lastScrollTime = now;
-          setPage((prev) => prev + 1);
+          setIsRefreshing(true);
+          setTimeout(() => {
+            setPage(prev => prev + 1);
+            setIsRefreshing(false);
+          }, 800);
         }
       }
     };
 
+    // Also handle touch for mobile if needed, but wheel is primary for mouse
     window.addEventListener('wheel', handleWheel, { passive: true });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [visibleCount, isRefreshing]);
 
   // 필터 변경 시 페이지 초기화
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
+    setVisibleCount(8);
     setPage(1);
   };
 
   const handleSortChange = (s: SortOption) => {
     setSort(s);
+    setVisibleCount(8);
     setPage(1);
   };
 
@@ -259,13 +294,20 @@ export default function DebateTopicsPage() {
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto py-6 px-4 xl:px-8">
+    <div className="max-w-[1600px] mx-auto py-12 px-4 xl:px-8">
+      {/* 제목 */}
+      <div className="flex flex-col gap-2 mb-8">
+        <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
+          <Swords size={20} className="text-primary" />
+          토픽 목록
+        </h1>
+        <p className="text-xs text-text-muted font-medium ml-1">
+          실시간으로 진행 중인 토론에 참여하고 AI 에이전트의 대결을 관전하세요.
+        </p>
+      </div>
+
       {/* 상단 액션 버튼 */}
-      <div className="flex items-center justify-between mb-8 mt-4">
-        <h2 className="text-2xl font-black text-text flex items-center gap-3 m-0">
-          <Swords size={28} className="text-primary" />
-          AI 토론
-        </h2>
+      <div className="flex items-center justify-end mb-8">
         <div className="flex items-center gap-3">
           {agents.length > 0 && (
             <button
@@ -293,164 +335,116 @@ export default function DebateTopicsPage() {
         </div>
       </div>
 
+      {/* 헤더 행 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
+        <div className="lg:col-span-2 flex items-center justify-end">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1.5">
+              {FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => handleFilterChange(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    filter === opt.key
+                      ? 'bg-primary text-white brutal-border brutal-shadow-sm'
+                      : 'bg-bg-surface text-text-secondary hover:text-text border-2 border-transparent'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => handleSortChange(e.target.value as SortOption)}
+              className="bg-bg-surface border-2 border-black rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none shrink-0 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="lg:col-span-1" />
+      </div>
+
       {/* 메인 콘텐츠: 토픽 리스트 + 랭킹 사이드바 가로 배치 */}
-      <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_300px] gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         {/* 토픽 리스트 섹션 */}
-        <div className="min-w-0">
+        <div className="lg:col-span-2">
           <div id="topic-list">
-            <div className="flex items-center justify-between gap-2 mb-6 flex-wrap">
-              <div className="flex gap-1.5 flex-wrap">
-                {FILTER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => handleFilterChange(opt.key)}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      filter === opt.key
-                        ? 'bg-primary text-white brutal-border brutal-shadow-sm'
-                        : 'bg-white text-gray-500 hover:text-black border-2 border-transparent'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <select
-                value={sort}
-                onChange={(e) => handleSortChange(e.target.value as SortOption)}
-                className="bg-white border-2 border-black rounded-xl px-4 py-2 text-xs font-black text-black focus:outline-none shrink-0 cursor-pointer brutal-shadow-sm"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-2 gap-5">
-              {topicsLoading ? (
-                Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
-              ) : topics.length === 0 ? (
-                <div className="col-span-full border-2 border-black border-dashed rounded-2xl py-20 text-center text-gray-400">
-                  <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
-                  <p className="font-bold">등록된 토론 주제가 없습니다.</p>
-                </div>
-              ) : (
-                topics.map((topic, index) => (
-                  <div
+            <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-4 gap-5">
+              {HARDCODED_TOPICS.map((topic) => {
+                const config = STATUS_CONFIG[topic.status] || STATUS_CONFIG.closed;
+                const categoryLabel = MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
+                return (
+                  <Link
                     key={topic.id}
-                    className="animate-in fill-mode-forwards opacity-100"
-                    style={{ animationDelay: `${(index % 8) * 80}ms`, animationDuration: '0.5s' }}
+                    href={`/debate/topics/${topic.id}`}
+                    className="flex flex-col no-underline brutal-border brutal-shadow-sm bg-bg-surface p-5 rounded-2xl hover:translate-y-[-1px] transition-all group"
                   >
-                    <TopicCard
-                      topic={topic}
-                      currentUserId={currentUserId}
-                      onEdit={openEditModal}
-                      onDelete={handleDelete}
-                    />
-                  </div>
-                ))
-              )}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
+                          {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
+                          {config.label}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
+                    </div>
+                    <h3 className="text-[15px] font-black text-text m-0 leading-tight mb-4 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors">
+                      {topic.title}
+                    </h3>
+                    <div className="flex items-center justify-between mt-auto">
+                      <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                        <span className="flex items-center gap-1">
+                          <Users size={12} />
+                          {topic.queue_count}명
+                        </span>
+                        <span>@{topic.owner}</span>
+                      </div>
+                      <div className="px-3 py-1 rounded-lg bg-primary text-white text-[10px] font-black brutal-border brutal-shadow-sm">
+                        참여
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
-
-            {/* Infinite Scroll Loading State */}
-            {topicsLoading && page > 1 && (
-              <div className="flex justify-center items-center py-12">
-                <div className="flex gap-3 items-center text-primary font-black animate-pulse">
-                  <Clock size={20} />
-                  <span>새로운 주제를 불러오는 중...</span>
-                </div>
-              </div>
-            )}
-
-            {/* Numeric Indicators (Carousel style) */}
-            {topicsTotal > 20 && !topicsLoading && (
-              <div className="flex justify-center gap-3 mt-12 mb-8">
-                {Array.from({ length: Math.ceil(topicsTotal / 20) }).map((_, idx) => (
-                  <button
-                    key={idx}
-                    disabled
-                    className={`w-10 h-10 rounded-xl border-2 border-black font-black text-sm flex items-center justify-center transition-all ${
-                      page >= idx + 1
-                        ? 'bg-primary text-white brutal-shadow-sm'
-                        : 'bg-white text-gray-300'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* 랭킹 사이드바 */}
-        <aside className="sticky top-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black text-black flex items-center gap-2 m-0 uppercase tracking-tighter">
-              <Trophy size={18} className="text-yellow-500" />
-              Agent Ranking
-            </h3>
-            <Link
-              href="/debate/ranking"
-              className="text-[10px] font-black text-gray-400 hover:text-primary no-underline transition-colors"
-            >
-              전체보기 →
-            </Link>
-          </div>
-
-          <div className="bg-white brutal-border brutal-shadow-sm overflow-hidden">
-            {rankingLoading ? (
-              <div className="p-4 space-y-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 animate-pulse">
-                    <div className="w-6 h-6 bg-gray-100 rounded-lg" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-3 bg-gray-100 rounded w-2/3" />
-                      <div className="h-2 bg-gray-50 rounded w-1/3" />
+        {/* 랭킹 */}
+        <div className="lg:col-span-1 h-full">
+          <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4 h-full">
+            <div className="flex flex-col gap-2">
+              {HARDCODED_RANKING.map((r, idx) => {
+                const rank = idx + 1;
+                const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                const bgColor = rank === 1 ? 'bg-[#f0fdf4]/20' : rank === 2 ? 'bg-bg' : rank === 3 ? 'bg-[#dcfce7]/20' : 'bg-bg';
+                return (
+                  <Link
+                    key={r.id}
+                    href={`/debate/agents/${r.id}`}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
+                  >
+                    <span className={`text-sm font-black w-5 text-center shrink-0 ${rankColor}`}>
+                      {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
+                    </span>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-sm font-black text-text m-0 truncate leading-tight">{r.name}</p>
+                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : ranking.length === 0 ? (
-              <div className="p-10 text-center">
-                <Trophy size={32} className="mx-auto mb-3 text-gray-100" />
-                <p className="text-xs font-bold text-gray-300">데이터 없음</p>
-              </div>
-            ) : (
-              <div className="divide-y-2 divide-black/5">
-                {ranking.slice(0, 10).map((r, index) => {
-                  const rank = index + 1;
-                  return (
-                    <div key={r.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors">
-                      <span className={`w-6 text-center text-sm font-black italic ${rankColor(rank)}`}>
-                        {rank}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black text-black truncate m-0 leading-tight">
-                          {r.name}
-                        </p>
-                        <p className="text-[10px] font-bold text-gray-400 truncate m-0">
-                          @{r.owner_nickname}
-                        </p>
-                      </div>
-                      <span className="text-xs font-black text-primary bg-primary/5 px-2 py-1 rounded-lg">
-                        {r.elo_rating}
-                      </span>
+                    <div className="flex items-center shrink-0">
+                      <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          
-          <div className="mt-6 p-5 bg-[#5B23FF]/5 rounded-2xl border-2 border-[#5B23FF]/10">
-            <h4 className="text-xs font-black text-[#5B23FF] mb-2">Notice</h4>
-            <p className="text-[10px] font-bold text-[#5B23FF]/70 leading-relaxed m-0">
-              실시간 랭킹은 30분마다 자동 업데이트됩니다. 나의 에이전트를 성장시켜 높은 티어에 도전하세요!
-            </p>
-          </div>
-        </aside>
+        </div>
       </div>
 
       {/* 주제 제안 모달 */}
@@ -695,8 +689,6 @@ export default function DebateTopicsPage() {
           </div>
         </div>
       )}
-
-      <ScrollToTop />
 
       {/* 주제 수정 모달 */}
       {editTopic && (

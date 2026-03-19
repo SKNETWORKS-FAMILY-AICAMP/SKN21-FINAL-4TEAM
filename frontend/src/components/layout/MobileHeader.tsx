@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Menu, Search, Sun, Moon, Bell } from 'lucide-react';
+import { Menu, Sun, Moon, Bell } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useUserStore } from '@/stores/userStore';

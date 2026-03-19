@@ -9,7 +9,6 @@ import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
 import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { ScrollToTop } from '@/components/ui/ScrollToTop';
 import { TierBadge } from '@/components/debate/TierBadge';
 import { HighlightBanner } from '@/components/debate/HighlightBanner';
 import { SeasonBanner } from '@/components/debate/SeasonBanner';
@@ -57,6 +56,19 @@ const defaultForm = {
 };
 
 const PAGE_SIZE = 8;
+
+const HARDCODED_RANKING = [
+  { id: 'r-1',  name: '논리왕 GPT',    owner_nickname: 'alpha',   elo_rating: 2340 },
+  { id: 'r-2',  name: '설득의 달인',    owner_nickname: 'beta99',  elo_rating: 2210 },
+  { id: 'r-3',  name: '철학자 클로드',  owner_nickname: 'phil',    elo_rating: 2150 },
+  { id: 'r-4',  name: '데이터 헌터',    owner_nickname: 'data_k',  elo_rating: 2080 },
+  { id: 'r-5',  name: '소크라테스AI',   owner_nickname: 'sokr',    elo_rating: 2010 },
+  { id: 'r-6',  name: '반박 불가',      owner_nickname: 'noreply', elo_rating: 1980 },
+  { id: 'r-7',  name: '팩트체커',       owner_nickname: 'fact7',   elo_rating: 1940 },
+  { id: 'r-8',  name: '감성 설득가',    owner_nickname: 'emo8',    elo_rating: 1900 },
+  { id: 'r-9',  name: '전략가 알파',    owner_nickname: 'strat9',  elo_rating: 1860 },
+  { id: 'r-10', name: '냉철한 분석가',  owner_nickname: 'cool10',  elo_rating: 1820 },
+];
 
 const HARDCODED_ROOMS = [
   {
@@ -184,14 +196,6 @@ export default function DebateTopicsPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editShowAdvanced, setEditShowAdvanced] = useState(false);
-
-  // 슬라이더 상태 및 방 목록 분할 (8개씩 2x4 그리드)
-  const [slideIndex, setSlideIndex] = useState(0);
-  const displayTopics = topics.length > 0 ? topics : [];
-  const roomChunks = [];
-  for (let i = 0; i < displayTopics.length; i += 8) {
-    roomChunks.push(displayTopics.slice(i, i + 8));
-  }
 
   // 초기 로드
   useEffect(() => {
@@ -331,9 +335,9 @@ export default function DebateTopicsPage() {
   return (
     <div className="max-w-[1200px] mx-auto">
       {/* ─── Hero Banner ─── */}
-      <div className="nemo-hero mb-8 border-2 border-black brutal-shadow-lg py-[2px] md:py-[8px] px-8 md:px-12 relative overflow-hidden bg-primary">
+      <div className="nemo-hero mb-8 border-2 border-black brutal-shadow-lg py-[2px] md:py-[8px] px-8 md:px-12 relative overflow-hidden bg-primary cursor-default select-none">
         <div className="relative z-10">
-          <span className="inline-flex items-center gap-1.5 bg-black/10 text-white text-[11px] font-black px-4 py-1.5 rounded-full mb-6 brutal-border">
+          <span className="inline-flex items-center gap-1.5 bg-black/10 text-white text-[11px] font-black px-4 py-1.5 rounded-full mb-6 brutal-border" style={{ marginTop: '15px' }}>
             ✨ AI 토론 플랫폼 ✨
           </span>
           <h1 className="text-xl md:text-4xl font-black mb-4 leading-[1.1] tracking-tighter text-white">
@@ -371,11 +375,14 @@ export default function DebateTopicsPage() {
       {/* ─── Headers Row ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
         <div className="lg:col-span-2 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-text m-0">토픽 목록</h2>
+          <h2 className="text-lg font-black text-text m-0 flex items-center gap-2">
+            <Swords size={20} className="text-primary" />
+            토픽 목록
+          </h2>
           <select
             value={sort}
             onChange={(e) => handleSortChange(e.target.value as SortOption)}
-            className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none focus:border-nemo shrink-0"
+            className="bg-bg-surface border-2 border-black rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -385,7 +392,7 @@ export default function DebateTopicsPage() {
           </select>
         </div>
         <div className="lg:col-span-1 flex items-center justify-between">
-          <h2 className="text-lg font-black text-black m-0 flex items-center gap-2">
+          <h2 className="text-lg font-black text-text m-0 flex items-center gap-2">
             <Trophy size={20} className="text-yellow-500" />
             Ranking
           </h2>
@@ -395,158 +402,105 @@ export default function DebateTopicsPage() {
       </div>
 
       {/* ─── Cards Row ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-11">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-11 items-stretch">
         {/* ── Left + Center: 토픽 목록 ── */}
-        <div className="lg:col-span-2">
-          {/* Topic Carousel (2x2 Grid) */}
-          <div className="relative mb-6 overflow-hidden">
-            <div
-              className="flex transition-transform duration-500 ease-in-out"
-              style={{ transform: `translateX(-${slideIndex * 100}%)` }}
-            >
-              {topicsLoading ? (
-                <div className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-[180px] bg-white rounded-2xl brutal-border border-black/5 animate-pulse" />
-                  ))}
-                </div>
-              ) : roomChunks.length === 0 ? (
-                <div className="w-full flex-shrink-0 py-20 text-center text-sm text-gray-400">
-                  표시할 토론 주제가 없습니다.
-                </div>
-              ) : (
-                roomChunks.map((chunk, chunkIdx) => (
-                  <div key={chunkIdx} className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-                    {chunk.map((room) => {
-                      const config = STATUS_CONFIG[room.status] || STATUS_CONFIG.closed;
-                      // DebateTopic 타입에 맞게 필드 접근 (room.mode, room.title 등)
-                      // DebateTopic에는 is_admin_topic이 없을 수 있으므로 체크 필요
-                      const categoryLabel = MODE_OPTIONS.find((m) => m.value === room.mode)?.label || '기타';
+        <div className="lg:col-span-2 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-3 gap-6 h-full">
+              {HARDCODED_ROOMS.slice(0, 6).map((room) => {
+                const config = STATUS_CONFIG[room.status] || STATUS_CONFIG.closed;
+                const categoryLabel = MODE_OPTIONS.find((m) => m.value === room.mode)?.label || '기타';
 
-                      return (
-                        <Link
-                          key={room.id}
-                          href={`/debate/topics/${room.id}`}
-                          className="nemo-topic-card block no-underline brutal-border brutal-shadow-sm bg-white p-5 hover:translate-y-[-1px] transition-all h-full group"
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
-                                {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
-                                {config.label}
-                              </span>
-                              {/* room.is_admin_topic 이 있으면 표시 */}
-                              {(room as any).is_admin_topic && (
-                                <Shield size={12} className="text-primary" />
-                              )}
-                            </div>
-                            <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
-                          </div>
+                return (
+                  <Link
+                    key={room.id}
+                    href={`/debate/topics/${room.id}`}
+                    className="nemo-topic-card flex flex-col no-underline brutal-border brutal-shadow-sm bg-bg-surface p-4 hover:translate-y-[-1px] transition-all h-full group"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
+                          {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
+                          {config.label}
+                        </span>
+                        {room.is_admin_topic && (
+                          <Shield size={12} className="text-primary" />
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
+                    </div>
 
-                          <h3 className="text-base font-black text-black m-0 leading-tight mb-4 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors">
-                            {room.title}
-                          </h3>
-                          
-                          <div className="flex items-center justify-between mt-auto">
-                            <div className="flex items-center gap-3 text-[10px] font-bold text-gray-400">
-                              <span className="flex items-center gap-1">
-                                <Users size={12} />
-                                {room.queue_count}명
-                              </span>
-                              {/* room.owner 대신 DebateTopic의 필드 사용 (id 또는 owner_id) */}
-                              <span>@{room.creator_nickname || '익명'}</span>
-                            </div>
-                            <div className="px-3 py-1.5 rounded-lg bg-primary text-white text-[10px] font-black brutal-border brutal-shadow-sm">
-                              참여
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                    <h3 className="text-[18px] font-black text-text m-4 leading-tight mb-3 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors text-center">
+                      {room.title}
+                    </h3>
 
-          {/* Carousel Indicators */}
-          <div className="flex justify-center items-center gap-2">
-            {roomChunks.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setSlideIndex(idx)}
-                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 border-none cursor-pointer p-0 focus:outline-none ${
-                  slideIndex === idx ? 'bg-primary' : 'bg-gray-300 hover:bg-gray-400'
-                }`}
-                aria-label={`Slide ${idx + 1}`}
-              />
-            ))}
+                    <div className="flex items-center justify-between mt-auto">
+                      <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                        <span className="flex items-center gap-1">
+                          <Users size={12} />
+                          {room.queue_count}명
+                        </span>
+                        <span>@{room.owner}</span>
+                      </div>
+                      <div className="px-3 py-1 rounded-lg bg-primary text-white text-[15px] font-black brutal-border brutal-shadow-sm">
+                        참여
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
           </div>
         </div>
 
         {/* ── Right: 랭킹 ── */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl brutal-border brutal-shadow-sm p-4 sticky top-4">
+        <div className="lg:col-span-1 h-full">
+          <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4 h-full">
             <div className="flex flex-col gap-2">
-              {rankingLoading ? (
-                Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-50 animate-pulse">
-                    <div className="w-5 h-5 bg-gray-200 rounded shrink-0" />
-                    <div className="flex-1">
-                      <div className="h-3 w-20 bg-gray-200 rounded mb-1" />
-                      <div className="h-2 w-12 bg-gray-100 rounded" />
+              {HARDCODED_RANKING.map((r, idx) => {
+                const rank = idx + 1;
+                const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                const bgColor = rank === 1 ? 'bg-[#f0fdf4]/60' : rank === 2 ? 'bg-bg' : rank === 3 ? 'bg-[#dcfce7]/60' : 'bg-bg';
+
+                return (
+                  <Link
+                    key={r.id}
+                    href={`/debate/agents/${r.id}`}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
+                  >
+                    <span className={`text-sm font-black w-5 text-center shrink-0 ${rankColor}`}>
+                      {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
+                    </span>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-sm font-black text-text m-0 truncate leading-tight">{r.name}</p>
+                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
                     </div>
-                    <div className="w-8 h-3 bg-gray-200 rounded" />
-                  </div>
-                ))
-              ) : ranking.length === 0 ? (
-                <div className="py-10 text-center text-xs text-gray-300">
-                  랭킹 데이터가 없습니다.
-                </div>
-              ) : (
-                ranking.slice(0, 12).map((r, idx) => {
-                  const rank = idx + 1;
-                  const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
-                  const bgColor = rank === 1 ? 'bg-yellow-50' : rank === 2 ? 'bg-slate-50' : rank === 3 ? 'bg-orange-50' : 'bg-gray-50';
-                  
-                  return (
-                    <div key={r.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${bgColor}`}>
-                      <span className={`text-[18px] font-black w-5 text-center shrink-0 ${rankColor}`}>
-                        {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
-                      </span>
-                      <div className="flex-1 min-w-0 flex flex-col justify-center">
-                        <p className="text-sm font-black text-black m-0 truncate leading-tight">{r.name}</p>
-                        <p className="text-[10px] font-medium text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
-                      </div>
-                      <div className="flex items-center shrink-0">
-                        <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
-                      </div>
+                    <div className="flex items-center shrink-0">
+                      <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
                     </div>
-                  );
-                })
-              )}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       {/* ─── Community & Topics Sections ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-11">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-11">
         <div>
-          <h2 className="text-lg font-black text-black mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-black text-text mb-4 flex items-center gap-2">
             <Users size={20} className="text-primary" />
             Community
           </h2>
           <Link
             href="/community"
-            className="block p-[27px] bg-white brutal-border brutal-shadow-sm rounded-2xl hover:translate-y-[-2px] transition-all no-underline"
+            className="block p-[27px] bg-bg-surface brutal-border brutal-shadow-sm rounded-2xl hover:translate-y-[-2px] transition-all no-underline"
           >
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 rounded-2xl bg-[#eafee0] flex items-center justify-center shrink-0 brutal-border border-black/10">
               <Users size={24} className="text-[#10b981]" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-black m-0">Community</h2>
+              <h2 className="text-lg font-black text-text m-0">Community</h2>
               <p className="text-[11px] font-bold text-gray-400 m-0 tracking-tight">사용자들과 자유롭게 소통하세요</p>
             </div>
           </div>
@@ -557,20 +511,20 @@ export default function DebateTopicsPage() {
         </div>
 
         <div>
-          <h2 className="text-lg font-black text-black mb-4 flex items-center gap-2">
-            <MessageSquare size={20} className="text-blue-500" />
+          <h2 className="text-lg font-black text-text mb-4 flex items-center gap-2">
+            <MessageSquare size={20} className="text-[#1db865]" />
             Topics
           </h2>
           <Link
             href="/topics"
-            className="block p-[27px] bg-white brutal-border brutal-shadow-sm rounded-2xl hover:translate-y-[-2px] transition-all no-underline"
+            className="block p-[27px] bg-bg-surface brutal-border brutal-shadow-sm rounded-2xl hover:translate-y-[-2px] transition-all no-underline"
           >
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#eff6ff] flex items-center justify-center shrink-0 brutal-border border-black/10">
-                <MessageSquare size={24} className="text-blue-500" />
+              <div className="w-12 h-12 rounded-2xl bg-[#f0fdf4] flex items-center justify-center shrink-0 brutal-border border-black/10">
+                <MessageSquare size={24} className="text-[#1db865]" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-black m-0">Topics</h2>
+                <h2 className="text-lg font-black text-text m-0">Topics</h2>
                 <p className="text-[11px] font-bold text-gray-400 m-0 tracking-tight">제안된 모든 토론 주제 보기</p>
               </div>
             </div>
@@ -796,7 +750,6 @@ export default function DebateTopicsPage() {
         </div>
       )}
 
-      <ScrollToTop />
 
       {/* ─── 주제 수정 모달 ─── */}
       {editTopic && (

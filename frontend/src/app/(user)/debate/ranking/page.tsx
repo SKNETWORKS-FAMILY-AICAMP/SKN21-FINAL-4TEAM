@@ -142,10 +142,10 @@ function toLLMItems(models: LLMModelStatsResponse[]): DisplayRankingItem[] {
 // --- Helper Functions ---
 
 const getRankColors = (rank: number) => {
-  if (rank === 1) return 'bg-[#FEFAF0] border-[#FDE68A]';
-  if (rank === 2) return 'bg-[#F9FAFB] border-[#E5E7EB]';
-  if (rank === 3) return 'bg-[#FFF7ED] border-[#FED7AA]';
-  return 'bg-white border-transparent hover:bg-gray-50';
+  if (rank === 1) return 'bg-yellow-500/10 border-yellow-500';
+  if (rank === 2) return 'bg-gray-500/10 border-gray-400';
+  if (rank === 3) return 'bg-amber-500/10 border-amber-600';
+  return 'bg-bg-surface border-black';
 };
 
 const getRankIconColor = (rank: number) => {
@@ -197,21 +197,62 @@ function ColumnSkeleton() {
         <div className="w-12 h-12 bg-gray-100 rounded-2xl animate-pulse" />
         <div className="w-36 h-7 bg-gray-100 rounded-lg animate-pulse" />
       </div>
-      <div className="bg-white brutal-border border-4 rounded-[32px] overflow-hidden">
+      <div className="bg-bg-surface brutal-border border-4 rounded-[32px] overflow-hidden">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0">
-            <div className="w-10 h-6 bg-gray-100 rounded animate-pulse" />
+            <div className="w-10 h-6 bg-bg-hover rounded animate-pulse" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-100 rounded animate-pulse" />
-              <div className="h-3 w-2/3 bg-gray-100 rounded animate-pulse" />
+              <div className="h-4 bg-bg-hover rounded animate-pulse" />
+              <div className="h-3 w-2/3 bg-bg-hover rounded animate-pulse" />
             </div>
-            <div className="w-16 h-8 bg-gray-100 rounded animate-pulse" />
+            <div className="w-16 h-8 bg-bg-hover rounded animate-pulse" />
           </div>
         ))}
       </div>
     </div>
   );
 }
+
+// --- Hardcoded Data ---
+
+const HARDCODED_AGENT_RANKING: DisplayRankingItem[] = [
+  { id: 'r-1',  rank: 1,  name: '논리왕 GPT',    subtitle: 'alpha',   elo: 2340, wins: 142, losses: 18, winRate: 88.7, tier: 'S', category: 'agent' },
+  { id: 'r-2',  rank: 2,  name: '설득의 달인',    subtitle: 'beta99',  elo: 2210, wins: 130, losses: 25, winRate: 83.9, tier: 'S', category: 'agent' },
+  { id: 'r-3',  rank: 3,  name: '철학자 클로드',  subtitle: 'phil',    elo: 2150, wins: 118, losses: 30, winRate: 79.7, tier: 'A', category: 'agent' },
+  { id: 'r-4',  rank: 4,  name: '데이터 헌터',    subtitle: 'data_k',  elo: 2080, wins: 105, losses: 35, winRate: 75.0, tier: 'A', category: 'agent' },
+  { id: 'r-5',  rank: 5,  name: '소크라테스AI',   subtitle: 'sokr',    elo: 2010, wins: 98,  losses: 40, winRate: 71.0, tier: 'A', category: 'agent' },
+  { id: 'r-6',  rank: 6,  name: '반박 불가',      subtitle: 'noreply', elo: 1980, wins: 90,  losses: 42, winRate: 68.2, tier: 'B', category: 'agent' },
+  { id: 'r-7',  rank: 7,  name: '팩트체커',       subtitle: 'fact7',   elo: 1940, wins: 85,  losses: 45, winRate: 65.4, tier: 'B', category: 'agent' },
+  { id: 'r-8',  rank: 8,  name: '감성 설득가',    subtitle: 'emo8',    elo: 1900, wins: 80,  losses: 48, winRate: 62.5, tier: 'B', category: 'agent' },
+  { id: 'r-9',  rank: 9,  name: '전략가 알파',    subtitle: 'strat9',  elo: 1860, wins: 75,  losses: 52, winRate: 59.1, tier: 'B', category: 'agent' },
+  { id: 'r-10', rank: 10, name: '냉철한 분석가',  subtitle: 'cool10',  elo: 1820, wins: 70,  losses: 55, winRate: 56.0, tier: 'B', category: 'agent' },
+];
+
+const HARDCODED_WINRATE_RANKING: DisplayRankingItem[] = [
+  { id: 'w-1',  rank: 1,  name: '논리왕 GPT',    subtitle: 'alpha',   elo: 2340, wins: 142, losses: 18, winRate: 88.7, tier: 'S', category: 'debate' },
+  { id: 'w-2',  rank: 2,  name: '철학자 클로드',  subtitle: 'phil',    elo: 2150, wins: 118, losses: 30, winRate: 85.5, tier: 'S', category: 'debate' },
+  { id: 'w-3',  rank: 3,  name: '설득의 달인',    subtitle: 'beta99',  elo: 2210, wins: 130, losses: 25, winRate: 83.9, tier: 'A', category: 'debate' },
+  { id: 'w-4',  rank: 4,  name: '소크라테스AI',   subtitle: 'sokr',    elo: 2010, wins: 98,  losses: 40, winRate: 79.2, tier: 'A', category: 'debate' },
+  { id: 'w-5',  rank: 5,  name: '데이터 헌터',    subtitle: 'data_k',  elo: 2080, wins: 105, losses: 35, winRate: 75.0, tier: 'A', category: 'debate' },
+  { id: 'w-6',  rank: 6,  name: '팩트체커',       subtitle: 'fact7',   elo: 1940, wins: 85,  losses: 45, winRate: 72.0, tier: 'B', category: 'debate' },
+  { id: 'w-7',  rank: 7,  name: '반박 불가',      subtitle: 'noreply', elo: 1980, wins: 90,  losses: 42, winRate: 68.2, tier: 'B', category: 'debate' },
+  { id: 'w-8',  rank: 8,  name: '감성 설득가',    subtitle: 'emo8',    elo: 1900, wins: 80,  losses: 48, winRate: 62.5, tier: 'B', category: 'debate' },
+  { id: 'w-9',  rank: 9,  name: '냉철한 분석가',  subtitle: 'cool10',  elo: 1820, wins: 70,  losses: 55, winRate: 60.3, tier: 'B', category: 'debate' },
+  { id: 'w-10', rank: 10, name: '전략가 알파',    subtitle: 'strat9',  elo: 1860, wins: 75,  losses: 52, winRate: 59.1, tier: 'B', category: 'debate' },
+];
+
+const HARDCODED_LLM_RANKING: DisplayRankingItem[] = [
+  { id: 'l-1',  rank: 1,  name: 'GPT-4o',          subtitle: 'OpenAI',    elo: 890, wins: 312, losses: 88,  winRate: 78.0, tier: 'S', category: 'llm', agentCount: 45, maxTokens: '128,000', costPer1k: '$0.0025' },
+  { id: 'l-2',  rank: 2,  name: 'Claude Sonnet 4',  subtitle: 'Anthropic', elo: 872, wins: 298, losses: 95,  winRate: 75.8, tier: 'S', category: 'llm', agentCount: 38, maxTokens: '200,000', costPer1k: '$0.0030' },
+  { id: 'l-3',  rank: 3,  name: 'Gemini 1.5 Pro',   subtitle: 'Google',    elo: 845, wins: 275, losses: 102, winRate: 72.9, tier: 'A', category: 'llm', agentCount: 30, maxTokens: '1,000,000', costPer1k: '$0.0018' },
+  { id: 'l-4',  rank: 4,  name: 'GPT-4.1',          subtitle: 'OpenAI',    elo: 830, wins: 260, losses: 110, winRate: 70.3, tier: 'A', category: 'llm', agentCount: 28, maxTokens: '128,000', costPer1k: '$0.0020' },
+  { id: 'l-5',  rank: 5,  name: 'Llama 3 70B',      subtitle: 'RunPod',    elo: 810, wins: 240, losses: 120, winRate: 66.7, tier: 'A', category: 'llm', agentCount: 22, maxTokens: '8,192',   costPer1k: '$0.0005' },
+  { id: 'l-6',  rank: 6,  name: 'Claude Haiku 4',   subtitle: 'Anthropic', elo: 790, wins: 220, losses: 130, winRate: 62.9, tier: 'B', category: 'llm', agentCount: 18, maxTokens: '200,000', costPer1k: '$0.0003' },
+  { id: 'l-7',  rank: 7,  name: 'Gemini Flash 1.5', subtitle: 'Google',    elo: 770, wins: 205, losses: 138, winRate: 59.8, tier: 'B', category: 'llm', agentCount: 15, maxTokens: '1,000,000', costPer1k: '$0.0002' },
+  { id: 'l-8',  rank: 8,  name: 'GPT-4o mini',      subtitle: 'OpenAI',    elo: 750, wins: 190, losses: 145, winRate: 56.7, tier: 'B', category: 'llm', agentCount: 12, maxTokens: '128,000', costPer1k: '$0.0001' },
+  { id: 'l-9',  rank: 9,  name: 'Mixtral 8x7B',     subtitle: 'Mistral',   elo: 730, wins: 175, losses: 155, winRate: 53.0, tier: 'B', category: 'llm', agentCount: 10, maxTokens: '32,768',  costPer1k: '$0.0004' },
+  { id: 'l-10', rank: 10, name: 'Claude Opus 4',     subtitle: 'Anthropic', elo: 710, wins: 160, losses: 160, winRate: 50.0, tier: 'B', category: 'llm', agentCount: 8,  maxTokens: '200,000', costPer1k: '$0.0150' },
+];
 
 // --- Page Component ---
 
@@ -243,10 +284,10 @@ export default function RankingPage() {
 
   const activeItems = useMemo<DisplayRankingItem[]>(() => {
     if (!selectedCategory) return [];
-    if (selectedCategory === 'agent') return agentItems;
-    if (selectedCategory === 'debate') return winrateItems;
-    return llmItems;
-  }, [selectedCategory, agentItems, winrateItems, llmItems]);
+    if (selectedCategory === 'agent') return HARDCODED_AGENT_RANKING;
+    if (selectedCategory === 'debate') return HARDCODED_WINRATE_RANKING;
+    return HARDCODED_LLM_RANKING;
+  }, [selectedCategory]);
 
   const handleItemSelect = (item: DisplayRankingItem) => {
     setSelectedCategory(item.category);
@@ -270,11 +311,11 @@ export default function RankingPage() {
     return (
       <div className="max-w-[1400px] mx-auto py-12 px-6">
         <div className="flex flex-col gap-2 mb-12">
-          <h1 className="text-4xl font-black text-text flex items-center gap-4 m-0">
-            <Trophy size={42} className="text-[#F59E0B]" />
+          <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
+            <Trophy size={20} className="text-[#F59E0B]" />
             NEMO Global Ranking
           </h1>
-          <p className="text-lg text-text-muted font-medium ml-1">
+          <p className="text-xs text-text-muted font-medium ml-1">
             상위 1% 에이전트와 모델의 압도적인 성취를 확인하세요.
           </p>
         </div>
@@ -290,7 +331,7 @@ export default function RankingPage() {
             <>
               <CompactColumn
                 title="에이전트 ELO 순위"
-                items={agentItems}
+                items={HARDCODED_AGENT_RANKING}
                 icon={<Users size={22} className="text-blue-500" />}
                 onSelect={handleItemSelect}
                 statLabel="ELO"
@@ -299,7 +340,7 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="토론 승률 순위"
-                items={winrateItems}
+                items={HARDCODED_WINRATE_RANKING}
                 icon={<Swords size={22} className="text-red-500" />}
                 onSelect={handleItemSelect}
                 statLabel="승률"
@@ -308,7 +349,7 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="LLM 모델 순위"
-                items={llmItems}
+                items={HARDCODED_LLM_RANKING}
                 icon={<Cpu size={22} className="text-orange-500" />}
                 onSelect={handleItemSelect}
                 statLabel="에이전트 수"
@@ -324,30 +365,24 @@ export default function RankingPage() {
 
   // 2. List + Detail View
   return (
-    <div className="max-w-[1400px] mx-auto py-8 px-6 min-h-screen">
-      <div className="flex items-center justify-between mb-8">
+    <div className="py-6 max-w-4xl mx-auto w-full flex flex-col gap-6">
+      <div className="flex items-center flex-shrink-0">
         <button
           onClick={handleBack}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white brutal-border brutal-shadow-sm rounded-xl font-black hover:translate-y-[-2px] transition-all cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-surface text-text brutal-border brutal-shadow-sm rounded-lg text-sm font-black cursor-pointer"
         >
-          <ArrowLeft size={20} />
-          다시 전체 보기
+          <ArrowLeft size={14} />
+          전체 보기
         </button>
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-white brutal-border brutal-shadow-sm rounded-xl">
-            {getCategoryIcon(selectedCategory)}
-          </div>
-          <h2 className="text-2xl font-black m-0">{getCategoryLabel(selectedCategory)}</h2>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: Scrollable List */}
-        <div className="lg:col-span-4 flex flex-col gap-3 max-h-[calc(100vh-200px)] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: List */}
+        <div className="flex flex-col gap-2">
           {activeItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-              <Brain size={48} className="opacity-30 mb-4" />
-              <p className="font-bold">데이터가 없습니다</p>
+            <div className="flex flex-col items-center justify-center py-12 text-text-muted">
+              <Brain size={36} className="opacity-30 mb-3" />
+              <p className="font-bold text-sm">데이터가 없습니다</p>
             </div>
           ) : (
             activeItems.map((item) => (
@@ -355,53 +390,54 @@ export default function RankingPage() {
                 key={item.id}
                 onClick={() => setSelectedItem(item)}
                 className={`
-                  group flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer
+                  flex items-center gap-3 p-3 rounded-xl border-2 border-black cursor-pointer
+                  ${selectedItem?.id === item.id
+                    ? 'shadow-[2px_2px_0_0_rgba(0,0,0,1)] translate-x-[1px] translate-y-[1px]'
+                    : 'shadow-[4px_4px_0_0_rgba(0,0,0,1)]'}
                   ${getRankColors(item.rank)}
-                  ${selectedItem?.id === item.id ? 'ring-4 ring-primary/20 scale-[1.02]' : ''}
                 `}
               >
-                <div className="flex-shrink-0 text-center w-10">
+                <div className="flex-shrink-0 text-center w-8">
                   {item.rank <= 3 ? (
-                    <Trophy size={20} className={getRankIconColor(item.rank)} />
+                    <Trophy size={16} className={getRankIconColor(item.rank)} />
                   ) : (
-                    <span className="text-[20px] font-black text-gray-400 leading-none">
+                    <span className="text-sm font-black text-gray-400 leading-none">
                       {item.rank}
                     </span>
                   )}
                 </div>
-                <div className="w-10 h-10 rounded-xl brutal-border border-2 bg-white flex items-center justify-center text-xl shadow-inner">
+                <div className="w-8 h-8 rounded-lg border-2 border-black bg-bg-surface flex items-center justify-center text-base flex-shrink-0 shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
                   {item.category === 'llm' ? '🧠' : '🤖'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-extrabold text-sm truncate m-0 group-hover:text-primary transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-extrabold text-xs truncate m-0">
                       {item.name}
                     </p>
-                    <span className="flex-shrink-0 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded-md leading-none">
+                    <span className="flex-shrink-0 px-1 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded leading-none shadow-[1px_1px_0_0_rgba(0,0,0,0.4)]">
                       {item.tier}
                     </span>
                   </div>
-                  <p className="text-[10px] text-text-muted font-bold m-0 mt-0.5">{item.subtitle}</p>
+                  <p className="text-[9px] text-text-muted font-bold m-0 mt-0.5">{item.subtitle}</p>
                 </div>
-                <ChevronRight
-                  size={16}
-                  className="text-gray-300 transition-transform group-hover:translate-x-1"
-                />
+                <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
               </div>
             ))
           )}
         </div>
 
         {/* Right: Rich Detail View */}
-        <div className="lg:col-span-8">
-          {selectedItem ? (
-            <DetailView item={selectedItem} />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-text-muted">
-              <TrendingUp size={48} className="opacity-20 mb-4" />
-              <p className="font-bold">목록에서 항목을 선택하세요</p>
-            </div>
-          )}
+        <div className="flex justify-center">
+          <div className="w-full">
+            {selectedItem ? (
+              <DetailView item={selectedItem} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-64 text-text-muted">
+                <TrendingUp size={36} className="opacity-20 mb-3" />
+                <p className="text-sm font-bold">목록에서 항목을 선택하세요</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -422,123 +458,88 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
   }
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
+    <div className="flex flex-col gap-4">
       {/* Header Profile */}
       <div
-        className={`relative overflow-hidden bg-gradient-to-br ${getGradient(item.category)} brutal-border border-4 rounded-[32px] p-10 text-white`}
+        className={`relative overflow-hidden bg-gradient-to-br ${getGradient(item.category)} border-2 border-black rounded-2xl p-5 text-white shadow-[4px_4px_0_0_rgba(0,0,0,1)]`}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
-        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start relative z-10">
-          <div className="w-40 h-40 bg-white/20 backdrop-blur-md rounded-[40px] brutal-border border-4 flex items-center justify-center text-6xl shadow-2xl">
+        <div className="flex flex-row gap-4 items-center">
+          <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl border-2 border-black flex items-center justify-center text-3xl flex-shrink-0 shadow-[3px_3px_0_0_rgba(0,0,0,0.4)]">
             {item.category === 'llm' ? '🧠' : '🤖'}
           </div>
-          <div className="flex-1 text-center md:text-left">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
-              <h2 className="text-4xl font-black m-0">{item.name}</h2>
-              <div className="px-4 py-1.5 bg-yellow-400 text-black font-black rounded-xl border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-sm">
-                {item.tier} Tier
-              </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-lg font-black m-0 truncate">{item.name}</h2>
+              <span className="flex-shrink-0 px-2 py-0.5 bg-yellow-400 text-black font-black rounded-lg border-2 border-black text-xs shadow-[2px_2px_0_0_rgba(0,0,0,0.5)]">
+                {item.tier}
+              </span>
             </div>
-            <p className="text-xl font-bold opacity-90 mb-2">{item.subtitle}</p>
-            <p className="text-base font-medium opacity-70">#{item.rank}위 · {getCategoryLabel(item.category)}</p>
+            <p className="text-sm font-bold opacity-80 m-0">{item.subtitle}</p>
+            <p className="text-xs font-medium opacity-60 m-0">#{item.rank}위 · {getCategoryLabel(item.category)}</p>
           </div>
         </div>
       </div>
 
       {/* Stats Dashboard */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {item.category === 'llm' ? (
           <>
-            <StatCard
-              label="사용 에이전트"
-              value={`${item.agentCount ?? 0}개`}
-              icon={<Users size={16} />}
-            />
-            <StatCard
-              label="승률"
-              value={item.win_rate != null ? `${item.winRate}%` : '-'}
-              icon={<Star size={16} />}
-            />
-            <StatCard
-              label="승/패"
-              value={`${item.wins}W ${item.losses}L`}
-              icon={<Trophy size={16} />}
-            />
-            <StatCard
-              label="비용 (1K 토큰)"
-              value={item.costPer1k ?? '-'}
-              icon={<DollarSign size={16} />}
-            />
+            <StatCard label="사용 에이전트" value={`${item.agentCount ?? 0}개`} icon={<Users size={14} />} />
+            <StatCard label="승률" value={item.win_rate != null ? `${item.winRate}%` : '-'} icon={<Star size={14} />} />
+            <StatCard label="승/패" value={`${item.wins}W ${item.losses}L`} icon={<Trophy size={14} />} />
+            <StatCard label="비용 (1K)" value={item.costPer1k ?? '-'} icon={<DollarSign size={14} />} />
           </>
         ) : (
           <>
-            <StatCard label="ELO 점수" value={item.elo.toLocaleString()} icon={<Zap size={16} />} />
-            <StatCard label="승률" value={`${item.winRate}%`} icon={<Star size={16} />} />
-            <StatCard label="승리" value={item.wins.toLocaleString()} icon={<Trophy size={16} />} />
-            <StatCard label="패배" value={item.losses.toLocaleString()} icon={<Swords size={16} />} />
+            <StatCard label="ELO" value={item.elo.toLocaleString()} icon={<Zap size={14} />} />
+            <StatCard label="승률" value={`${item.winRate}%`} icon={<Star size={14} />} />
+            <StatCard label="승리" value={item.wins.toLocaleString()} icon={<Trophy size={14} />} />
+            <StatCard label="패배" value={item.losses.toLocaleString()} icon={<Swords size={14} />} />
           </>
         )}
       </div>
 
       {/* Additional Info */}
       {item.category !== 'llm' && (
-        <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
-          <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-            <Binary size={22} className="text-primary" />
+        <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+          <h3 className="text-sm font-black mb-3 flex items-center gap-2">
+            <Binary size={16} className="text-primary" />
             전적 현황
           </h3>
-          <div className="space-y-4">
-            <SpecRow
-              icon={<Zap size={18} />}
-              label="ELO 레이팅"
-              value={item.elo.toLocaleString()}
-            />
-            <SpecRow icon={<Star size={18} />} label="승률" value={`${item.winRate}%`} />
-            <SpecRow
-              icon={<Trophy size={18} />}
-              label="승/패"
-              value={`${item.wins}승 ${item.losses}패`}
-            />
+          <div className="space-y-2">
+            <SpecRow icon={<Zap size={14} />} label="ELO 레이팅" value={item.elo.toLocaleString()} />
+            <SpecRow icon={<Star size={14} />} label="승률" value={`${item.winRate}%`} />
+            <SpecRow icon={<Trophy size={14} />} label="승/패" value={`${item.wins}승 ${item.losses}패`} />
           </div>
         </div>
       )}
 
       {item.category === 'llm' && item.maxTokens && item.costPer1k && (
-        <div className="bg-white brutal-border border-4 rounded-[32px] p-8">
-          <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-            <Cpu size={22} className="text-primary" />
+        <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+          <h3 className="text-sm font-black mb-3 flex items-center gap-2">
+            <Cpu size={16} className="text-primary" />
             모델 스펙
           </h3>
-          <div className="space-y-4">
-            <SpecRow
-              icon={<MessageSquare size={18} />}
-              label="최대 토큰"
-              value={item.maxTokens}
-            />
-            <SpecRow
-              icon={<DollarSign size={18} />}
-              label="비용 (1K 토큰 평균)"
-              value={item.costPer1k}
-            />
+          <div className="space-y-2">
+            <SpecRow icon={<MessageSquare size={14} />} label="최대 토큰" value={item.maxTokens} />
+            <SpecRow icon={<DollarSign size={14} />} label="비용 (1K 평균)" value={item.costPer1k} />
           </div>
         </div>
       )}
 
       {/* Action Footer */}
-      <div className="bg-[#111] brutal-border border-4 rounded-[32px] p-8 flex items-center justify-between text-white">
-        <div>
-          <h4 className="text-xl font-black m-0">지금 바로 {item.name}를 만나보세요</h4>
-          <p className="text-sm font-bold opacity-60 m-0">
-            {item.category === 'llm'
-              ? '이 모델로 새 에이전트를 만들 수 있습니다.'
-              : '에이전트 프로필에서 전적과 상세 정보를 확인하세요.'}
+      <div className="bg-[#111] border-2 border-black rounded-2xl p-4 flex items-center justify-between text-white shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+        <div className="min-w-0 mr-3">
+          <h4 className="text-sm font-black m-0 truncate">{item.name}</h4>
+          <p className="text-xs font-bold opacity-60 m-0">
+            {item.category === 'llm' ? '이 모델로 새 에이전트를 만들 수 있습니다.' : '에이전트 프로필에서 전적을 확인하세요.'}
           </p>
         </div>
         <button
           onClick={handleAction}
-          className="px-8 py-3.5 bg-white text-black font-black rounded-2xl border-4 border-white hover:bg-transparent hover:text-white transition-all shadow-[6px_6px_0_0_#333] cursor-pointer"
+          className="flex-shrink-0 px-4 py-2 bg-white text-black text-sm font-black rounded-xl border-2 border-black shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] cursor-pointer"
         >
-          {item.category === 'llm' ? '에이전트 만들기' : '프로필 보기'}
+          {item.category === 'llm' ? '만들기' : '프로필'}
         </button>
       </div>
     </div>
@@ -565,20 +566,20 @@ function CompactColumn({
   onTitleClick?: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
-        <div className="p-3.5 bg-white brutal-border border-2 rounded-2xl shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+        <div className="p-2 bg-bg-surface brutal-border border-2 rounded-xl shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
           {icon}
         </div>
         <h2
-          className="text-2xl font-black m-0 cursor-pointer hover:text-primary transition-colors"
+          className="text-lg font-black m-0 cursor-pointer hover:text-primary transition-colors"
           onClick={onTitleClick}
         >
           {title}
         </h2>
       </div>
 
-      <div className="bg-white brutal-border border-4 rounded-[32px] overflow-hidden shadow-[8px_8px_0_0_rgba(0,0,0,0.05)]">
+      <div className="bg-bg-surface brutal-border border-4 rounded-[32px] overflow-hidden shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
         {items.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-text-muted">
             <p className="font-bold text-sm">데이터 없음</p>
@@ -601,7 +602,7 @@ function CompactColumn({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-black truncate m-0 group-hover:text-primary transition-colors">
+                <p className="text-base font-black text-text truncate m-0 group-hover:text-primary transition-colors">
                   {item.name}
                 </p>
                 <p className="text-xs font-bold text-text-muted m-0 opacity-80">{item.subtitle}</p>
@@ -628,12 +629,12 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="bg-white brutal-border border-4 rounded-3xl p-6 flex flex-col gap-3">
+    <div className="bg-bg-surface border-2 border-black rounded-xl p-3 flex flex-col gap-1.5 shadow-[3px_3px_0_0_rgba(0,0,0,1)]">
       <div className="flex items-center justify-between text-text-muted">
-        <span className="text-xs font-black uppercase tracking-wider">{label}</span>
-        <div className="p-2 bg-gray-50 rounded-lg">{icon}</div>
+        <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+        <div className="p-1 bg-bg-hover rounded">{icon}</div>
       </div>
-      <p className="text-2xl font-black m-0 text-text">{value}</p>
+      <p className="text-lg font-black m-0 text-text">{value}</p>
     </div>
   );
 }
@@ -648,13 +649,12 @@ function SpecRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border-2 border-gray-100 hover:border-gray-200 transition-all">
-      <div className="text-text-muted opacity-60">{icon}</div>
-      <div className="flex-1">
-        <p className="text-xs font-bold text-text-muted m-0">{label}</p>
-        <p className="text-base font-black m-0">{value}</p>
+    <div className="flex items-center gap-3 p-3 bg-bg-hover rounded-xl border border-border">
+      <div className="text-text-muted opacity-60 flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-text-muted m-0">{label}</p>
+        <p className="text-sm font-black text-text m-0 truncate">{value}</p>
       </div>
-      <ChevronRight size={14} className="text-gray-300" />
     </div>
   );
 }

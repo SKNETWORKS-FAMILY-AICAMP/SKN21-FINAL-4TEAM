@@ -8,13 +8,13 @@
   --color-bg-surface: #1e293b;
   --color-bg-hover: #334155;
   --color-bg-input: #1e293b;
-  --color-text: #f1f5f9;
+  --color-text: #cbd5e1;
   --color-text-secondary: #94a3b8;
   --color-text-muted: #64748b;
   --color-border: #334155;
   --color-border-input: #475569;
-  --color-primary: #818cf8;
-  --color-primary-dark: #6366f1;
+  --color-primary: #1db865;
+  --color-primary-dark: #0d5c38;
 }
 
 [data-theme='light'] {
@@ -28,8 +28,8 @@
   --color-text-muted: #94a3b8;
   --color-border: #e2e8f0;
   --color-border-input: #cbd5e1;
-  --color-primary: #6366f1;
-  --color-primary-dark: #4f46e5;
+  --color-primary: #1db865;
+  --color-primary-dark: #0d5c38;
 }
 
 @layer base {
@@ -137,7 +137,8 @@
   }
 
   .nemo-topic-card {
-    @apply p-[19px] rounded-2xl transition-all duration-200 bg-white;
+    @apply p-[19px] rounded-2xl transition-all duration-200;
+    background-color: var(--color-bg-surface);
     border: 2px solid #000000;
     box-shadow: 4px 4px 0px #000000;
   }
