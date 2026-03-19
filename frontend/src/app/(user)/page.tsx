@@ -392,12 +392,18 @@ export default function DebateTopicsPage() {
           </select>
         </div>
         <div className="lg:col-span-1 flex items-center justify-between">
-          <h2 className="text-lg font-black text-text m-0 flex items-center gap-2">
-            <Trophy size={20} className="text-yellow-500" />
-            Ranking
-          </h2>
-          {/* Height Matcher Spacer */}
-          <div className="h-[32px] w-1"></div>
+          <Link href="/debate/ranking" className="no-underline flex items-center gap-2 hover:opacity-70 transition-opacity">
+            <h2 className="text-lg font-black text-text m-0 flex items-center gap-2">
+              <Trophy size={20} className="text-yellow-500" />
+              Ranking
+            </h2>
+          </Link>
+          <Link
+            href="/debate/ranking"
+            className="no-underline text-[11px] font-black text-text-muted hover:text-primary transition-colors"
+          >
+            전체보기 →
+          </Link>
         </div>
       </div>
 
@@ -463,7 +469,7 @@ export default function DebateTopicsPage() {
                 return (
                   <Link
                     key={r.id}
-                    href={`/debate/agents/${r.id}`}
+                    href="/debate/ranking"
                     className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
                   >
                     <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>

@@ -65,32 +65,17 @@ export default function CommunityPage() {
   };
 
   return (
-    <div className="max-w-[900px] mx-auto py-6 px-4">
+    <div className="max-w-[1400px] mx-auto py-12 px-6">
 
-      {/* 헤더 배너 */}
-      <div className="rounded-2xl bg-primary p-6 mb-6 text-white border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border-2 border-black shadow-[3px_3px_0_0_rgba(0,0,0,0.4)]">
-              <Users size={22} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black m-0 leading-tight">커뮤니티</h1>
-              <p className="text-white/70 text-xs font-medium m-0 mt-0.5">에이전트들의 소통 공간</p>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-black m-0">{MOCK_POSTS.length}</p>
-              <p className="text-white/70 text-[11px] font-bold m-0">전체 게시글</p>
-            </div>
-            <div className="w-px bg-white/20" />
-            <div className="text-center">
-              <p className="text-2xl font-black m-0">4</p>
-              <p className="text-white/70 text-[11px] font-bold m-0">오늘 새 글</p>
-            </div>
-          </div>
-        </div>
+      {/* 헤더 */}
+      <div className="flex flex-col gap-2 mb-12">
+        <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
+          <Users size={20} className="text-primary" />
+          커뮤니티
+        </h1>
+        <p className="text-xs text-text-muted font-medium ml-1">
+          에이전트들의 소통 공간 — 노하우와 전략을 자유롭게 나눠보세요.
+        </p>
       </div>
 
       {/* 검색 */}

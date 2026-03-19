@@ -13,7 +13,6 @@ import {
   Zap,
   DollarSign,
   Brain,
-  ChevronRight,
   Binary,
   MessageSquare,
 } from 'lucide-react';
@@ -380,52 +379,49 @@ export default function RankingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: List */}
-        <div className="flex flex-col gap-2">
-          {activeItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-              <Brain size={36} className="opacity-30 mb-3" />
-              <p className="font-bold text-sm">데이터가 없습니다</p>
-            </div>
-          ) : (
-            activeItems.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => setSelectedItem(item)}
-                className={`
-                  flex items-center gap-3 p-3 rounded-xl border-2 border-black cursor-pointer
-                  ${selectedItem?.id === item.id
-                    ? 'shadow-[2px_2px_0_0_rgba(0,0,0,1)] translate-x-[1px] translate-y-[1px]'
-                    : 'shadow-[4px_4px_0_0_rgba(0,0,0,1)]'}
-                  ${getRankColors(item.rank)}
-                `}
-              >
-                <div className="flex-shrink-0 text-center w-8">
-                  {item.rank <= 3 ? (
-                    <Trophy size={16} className={getRankIconColor(item.rank)} />
-                  ) : (
-                    <span className="text-sm font-black text-gray-400 leading-none">
-                      {item.rank}
-                    </span>
-                  )}
-                </div>
-                <div className="w-8 h-8 rounded-lg border-2 border-black bg-bg-surface flex items-center justify-center text-base flex-shrink-0 shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
-                  {item.category === 'llm' ? '🧠' : '🤖'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-extrabold text-xs truncate m-0">
-                      {item.name}
-                    </p>
-                    <span className="flex-shrink-0 px-1 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded leading-none shadow-[1px_1px_0_0_rgba(0,0,0,0.4)]">
-                      {item.tier}
-                    </span>
-                  </div>
-                  <p className="text-[9px] text-text-muted font-bold m-0 mt-0.5">{item.subtitle}</p>
-                </div>
-                <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+        <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4">
+          <div className="flex flex-col gap-2">
+            {activeItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-text-muted">
+                <Brain size={36} className="opacity-30 mb-3" />
+                <p className="font-bold text-sm">데이터가 없습니다</p>
               </div>
-            ))
-          )}
+            ) : (
+              activeItems.map((item, idx) => {
+                const bgColor =
+                  item.rank === 1 ? 'bg-yellow-500/15' :
+                  item.rank === 2 ? 'bg-slate-400/15' :
+                  item.rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+                const rankColor =
+                  item.rank === 1 ? 'text-yellow-500' :
+                  item.rank === 2 ? 'text-gray-400' :
+                  item.rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                const isSelected = selectedItem?.id === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setSelectedItem(item)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-opacity cursor-pointer ${bgColor} ${isSelected ? 'ring-2 ring-primary' : 'hover:opacity-80'}`}
+                  >
+                    <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
+                      {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
+                    </span>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-sm font-black text-text m-0 truncate leading-tight">{item.name}</p>
+                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
+                    </div>
+                    <div className="flex items-center shrink-0">
+                      <span className="text-sm font-black text-primary tracking-tighter">
+                        {item.category === 'agent' ? item.elo.toLocaleString() :
+                         item.category === 'debate' ? `${item.winRate}%` :
+                         `${item.agentCount ?? 0}개`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {/* Right: Rich Detail View */}
