@@ -53,7 +53,7 @@ export default function CommunityPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchCommunityFeed({ limit: 200 });
+        const data = await fetchCommunityFeed({ limit: 100 });
         if (!cancelled) setPosts(data.items);
       } catch {
         if (!cancelled) setError('피드를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.');
