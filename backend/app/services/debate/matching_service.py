@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,17 +29,20 @@ class DebateMatchingService:
         self.db = db
 
     async def _purge_expired_entries(self) -> None:
-        """만료된 큐 항목을 일괄 삭제한다.
+        """만료된 큐 항목을 bulk DELETE로 정리한다.
 
         join_queue() 진입 시 호출되어 데드 엔트리를 정리한다.
+        예외는 내부에서 처리하며 상위로 전파하지 않는다.
         """
-        now = datetime.now(UTC)
-        result = await self.db.execute(
-            select(DebateMatchQueue).where(DebateMatchQueue.expires_at <= now)
-        )
-        for entry in result.scalars().all():
-            await self.db.delete(entry)
-        await self.db.flush()
+        try:
+            await self.db.execute(
+                delete(DebateMatchQueue)
+                .where(DebateMatchQueue.expires_at <= datetime.now(UTC))
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.flush()
+        except Exception:
+            logger.warning("만료 항목 purge 실패 — 큐 등록 계속 진행", exc_info=True)
 
     async def join_queue(self, user: User, topic_id: str, agent_id: str, password: str | None = None) -> dict:
         """에이전트를 매칭 큐에 등록한다.
@@ -116,7 +119,7 @@ class DebateMatchingService:
         await self._purge_expired_entries()
 
         # 유저당 1개 큐만 허용 (admin 제외)
-        if user.role not in ("admin", "superadmin"):
+        if not is_admin:
             user_existing = await self.db.execute(
                 select(DebateMatchQueue).where(DebateMatchQueue.user_id == user.id)
             )
@@ -224,6 +227,7 @@ class DebateMatchingService:
 
         # 이미 준비 완료 상태이면 멱등 처리 — 중복 요청에도 안전
         if my_entry.is_ready:
+            await self.db.commit()  # FOR UPDATE 락 즉시 해제
             return {"status": "already_ready"}
 
         my_entry.is_ready = True
@@ -271,15 +275,20 @@ class DebateMatchingService:
         if active_season:
             match.season_id = active_season.id
 
+        # commit 전 ID를 로컬 변수에 복사 — commit 후 detached 객체 접근 방어
+        my_agent_id = str(my_entry.agent_id)
+        opp_agent_id = str(opponent_entry.agent_id)
+
         # 시리즈 소속 매치인 경우 match_type / series_id 태깅
         # 두 에이전트 모두 활성 시리즈가 있을 수 있으므로 양쪽 확인 (첫 번째 우선)
         promo_svc = DebatePromotionService(self.db)
-        for agent_id in [str(my_entry.agent_id), str(opponent_entry.agent_id)]:
-            series = await promo_svc.get_active_series(agent_id)
+        for entry_agent_id in [my_agent_id, opp_agent_id]:
+            series = await promo_svc.get_active_series(entry_agent_id)
             # match.series_id가 None인 경우에만 태깅 — 두 에이전트 모두 시리즈 중이면 첫 번째만 연결
             if series and match.series_id is None:
                 match.match_type = series.series_type
                 match.series_id = series.id
+                break  # 첫 번째 우선 — 불필요한 두 번째 DB 쿼리 방지
 
         self.db.add(match)
         await self.db.delete(my_entry)
@@ -289,14 +298,14 @@ class DebateMatchingService:
 
         logger.info("Match created (ready-up): %s (topic=%s)", match.id, topic_id)
 
-        await publish_queue_event(topic_id, str(my_entry.agent_id), "matched", {
+        await publish_queue_event(topic_id, my_agent_id, "matched", {
             "match_id": str(match.id),
-            "opponent_agent_id": str(opponent_entry.agent_id),
+            "opponent_agent_id": opp_agent_id,
             "auto_matched": False,
         })
-        await publish_queue_event(topic_id, str(opponent_entry.agent_id), "matched", {
+        await publish_queue_event(topic_id, opp_agent_id, "matched", {
             "match_id": str(match.id),
-            "opponent_agent_id": str(my_entry.agent_id),
+            "opponent_agent_id": my_agent_id,
             "auto_matched": False,
         })
 

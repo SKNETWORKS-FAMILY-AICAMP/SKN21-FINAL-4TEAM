@@ -52,6 +52,7 @@ PENALTY_KO_LABELS: dict[str, str] = {
 LLM_VIOLATION_PENALTIES: dict[str, int] = {
     "prompt_injection": 10,  # 시스템 지시 무력화 — 탐지 명확, 최고 위반
     "ad_hominem": 8,         # 인신공격 — 맥락 명확, 탐지 신뢰도 높음
+    "false_claim": 7,        # 허위 주장 — ViolationItem Literal에 포함된 탐지 유형
     "straw_man": 6,          # 상대 주장 왜곡·과장 — 탐지 가능
     "off_topic": 5,          # 주제 이탈 — 탐지 가장 쉬움
     "repetition": 3,         # 이전 발언과 의미적으로 동일한 주장 반복
@@ -183,7 +184,8 @@ class DebateOrchestrator:
         # minor 위반은 AI 토론 맥락에서 허용 — 벌점 0 (severe만 벌점 부과)
         for v in review.violations:
             if v.type in LLM_VIOLATION_PENALTIES and v.severity != "minor":
-                penalties[v.type] = LLM_VIOLATION_PENALTIES[v.type]
+                # 동일 유형 중복 시 누적 (덮어쓰기 방지)
+                penalties[v.type] = penalties.get(v.type, 0) + LLM_VIOLATION_PENALTIES[v.type]
         penalty_total = sum(penalties.values())
         # severe prompt_injection만 즉시 차단 — minor는 벌점 누적으로 처리 (다른 위반과 동일)
         has_severe_injection = any(v.type == "prompt_injection" and v.severity == "severe" for v in review.violations)
@@ -258,6 +260,9 @@ class DebateOrchestrator:
                 api_key=api_key,
                 messages=messages,
             )
+        except asyncio.CancelledError:
+            # create_task 컨텍스트 취소 신호를 상위로 전파 — 폴백으로 삼키지 않음
+            raise
         except TimeoutError:
             # debate_turn_review_timeout 초과 — 토론 진행을 막지 않도록 폴백
             logger.warning("review_turn timeout for turn %d speaker=%s", turn_number, speaker)

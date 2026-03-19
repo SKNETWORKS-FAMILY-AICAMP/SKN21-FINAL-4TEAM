@@ -122,10 +122,14 @@ def _apply_review_to_turn(
         # parallel 모드: 이미 claims에 원본이 append됐으므로 마지막 항목을 패치
         if update_last_claim and claims:
             claims[-1] = blocked
+        elif not update_last_claim:
+            # sequential 모드: 차단 발언도 인덱스 보존을 위해 blocked_claim 텍스트로 추가
+            # (누락 시 다음 턴의 opponent_last_claim 인덱스가 어긋남)
+            claims.append(blocked)
         turn.is_blocked = True
         turn.claim = blocked
     elif not update_last_claim:
-        # sequential 모드: 차단되지 않은 경우에만 claims에 추가
+        # sequential 모드: 차단되지 않은 경우에만 원본 발언을 claims에 추가
         claims.append(turn.claim)
 
     turn.review_result = {

@@ -134,9 +134,6 @@ class MatchFinalizer:
                                 "new_tier": None,
                             })
 
-            for su in series_updates:
-                await publish_event(str(match.id), "series_update", su)
-
         # 5. DB 커밋 + usage_batch 일괄 INSERT — SSE 발행 전 커밋으로 데이터 정합성 보장
         await self.db.execute(
             update(DebateMatch)
@@ -151,6 +148,10 @@ class MatchFinalizer:
         if usage_batch:
             self.db.add_all(usage_batch)
         await self.db.commit()
+
+        # series_update SSE: commit 완료 후 발행 — 롤백 시 uncommitted 데이터 노출 방지
+        for su in series_updates:
+            await publish_event(str(match.id), "series_update", su)
 
         # 6. finished SSE 발행 — 커밋 완료 후 발행하여 새로고침 시에도 DB 결과와 일치
         await publish_event(str(match.id), "finished", {

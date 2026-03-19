@@ -151,6 +151,11 @@ class DebateJudge:
     ) -> dict:
         """LLM으로 토론 판정. 스코어카드 dict 반환."""
         model_id = settings.debate_judge_model or settings.debate_orchestrator_model
+        if not model_id:
+            raise ValueError(
+                "judge 모델 미설정: DEBATE_JUDGE_MODEL 또는 DEBATE_ORCHESTRATOR_MODEL "
+                "환경 변수를 설정하세요. 모델 미설정 시 silent draw가 발생해 ELO 변동이 누락됩니다."
+            )
         return await self._judge_with_model(
             match, turns, topic, agent_a_name, agent_b_name, model_id=model_id,
         )
@@ -231,6 +236,16 @@ class DebateJudge:
                 "agent_a": half_scores,
                 "agent_b": half_scores,
                 "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
+            }
+        except Exception as exc:
+            # httpx.HTTPError, ConnectionError, asyncio.TimeoutError 등 네트워크 오류
+            # 파싱 오류와 동일하게 무승부 폴백 처리 — 완료된 매치를 error로 전환하지 않음
+            logger.error("Judge request error: %s", exc, exc_info=True)
+            half_scores = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
+            scorecard = {
+                "agent_a": half_scores,
+                "agent_b": half_scores,
+                "reasoning": "판정 요청 오류로 인해 동점 처리되었습니다.",
             }
         # Judge 반환 점수를 SCORING_CRITERIA 범위로 클램핑 — LLM 오버슈팅 방어
         for key, max_val in SCORING_CRITERIA.items():

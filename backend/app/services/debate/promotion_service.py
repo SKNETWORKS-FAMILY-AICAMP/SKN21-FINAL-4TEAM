@@ -39,10 +39,13 @@ class DebatePromotionService:
             활성(status='active') DebatePromotionSeries. 없으면 None.
         """
         result = await self.db.execute(
-            select(DebatePromotionSeries).where(
+            select(DebatePromotionSeries)
+            .where(
                 DebatePromotionSeries.agent_id == agent_id,
                 DebatePromotionSeries.status == "active",
             )
+            .order_by(DebatePromotionSeries.created_at.desc())
+            .limit(1)  # MultipleResultsFound 방어 — active 시리즈가 2개 이상이면 최신 반환
         )
         return result.scalar_one_or_none()
 

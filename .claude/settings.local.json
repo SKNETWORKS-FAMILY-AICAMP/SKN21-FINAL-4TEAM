@@ -183,13 +183,20 @@
       "Bash(git fetch:*)",
       "Bash(git stash:*)",
       "Bash(ls frontend/src/app/page.tsx 2>/dev/null || echo \"없음\" && ls \"frontend/src/app/\\(user\\)/page.tsx\" 2>/dev/null || echo \"없음\")",
-      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzA2MDRkYy0zY2IzLTRjYTYtYjkzZC0xZmIyZDZjYTRhODQiLCJyb2xlIjoidXNlciIsImp0aSI6ImFhZDc3N2IxLTkyODItNGFlYS1iOTQ2LWQ3MzliYzA3ZmZmOCIsImV4cCI6MTc3MzcxMzQyNX0.AzZPoJZh5b9ejeb-GKSGY0tDDEsFqFJ3vxfqxpHH8QY\"\npython3 -c \"\nimport urllib.request, json\ntoken = '$TOKEN'\nreq = urllib.request.Request\\('http://localhost:8000/api/agents/gallery?sort=elo&skip=0&limit=5', headers={'Authorization': 'Bearer ' + token}\\)\nwith urllib.request.urlopen\\(req\\) as r:\n    print\\(r.read\\(\\).decode\\(\\)[:300]\\)\n\")",
-      "Bash(ls frontend/src/app/\\\\\\(user\\\\\\)/ 2>/dev/null && curl -s http://localhost:3000/ -o /dev/null -w \"%{http_code}\")",
-      "Bash(kill %2 2>/dev/null; curl -s http://localhost:3000/ -o /dev/null -w \"%{http_code}\" && echo && curl -s \"http://localhost:3000/debate\" -o /dev/null -w \"%{http_code}\" && echo && curl -s \"http://localhost:3000/debate/agents\" -o /dev/null -w \"%{http_code}\")",
-      "Bash(head -100 frontend/src/app/\\\\\\(user\\\\\\)/debate/page.tsx)",
-      "Bash(ls \"frontend/src/app/\\(user\\)/debate/agents/\")",
-      "Bash(head -30 \"C:/Users/Playdata/Desktop/Project_New/frontend/src/app/\\(user\\)/debate/agents/create/page.tsx\")",
-      "Bash(ls frontend/src/app/\\\\\\(user\\\\\\)/community/ frontend/src/app/\\\\\\(user\\\\\\)/topics/ frontend/src/app/\\\\\\(user\\\\\\)/debate/profile/ frontend/src/app/debate/ 2>/dev/null)"
+      "Bash(rm:*)",
+      "Bash(git pull:*)",
+      "Bash(git rebase:*)",
+      "Bash(git merge:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__directory_tree",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npx skills:*)",
+      "mcp__claude_ai_Figma__generate_diagram",
+      "mcp__claude_ai_Figma__whoami",
+      "mcp__github__get_me",
+      "mcp__github__create_repository",
+      "mcp__github__create_or_update_file"
     ]
   }
 }

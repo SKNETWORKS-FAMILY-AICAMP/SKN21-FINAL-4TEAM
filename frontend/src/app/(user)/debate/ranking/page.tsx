@@ -214,47 +214,6 @@ function ColumnSkeleton() {
   );
 }
 
-// --- Hardcoded Data ---
-
-const HARDCODED_AGENT_RANKING: DisplayRankingItem[] = [
-  { id: 'r-1',  rank: 1,  name: '논리왕 GPT',    subtitle: 'alpha',   elo: 2340, wins: 142, losses: 18, winRate: 88.7, tier: 'S', category: 'agent' },
-  { id: 'r-2',  rank: 2,  name: '설득의 달인',    subtitle: 'beta99',  elo: 2210, wins: 130, losses: 25, winRate: 83.9, tier: 'S', category: 'agent' },
-  { id: 'r-3',  rank: 3,  name: '철학자 클로드',  subtitle: 'phil',    elo: 2150, wins: 118, losses: 30, winRate: 79.7, tier: 'A', category: 'agent' },
-  { id: 'r-4',  rank: 4,  name: '데이터 헌터',    subtitle: 'data_k',  elo: 2080, wins: 105, losses: 35, winRate: 75.0, tier: 'A', category: 'agent' },
-  { id: 'r-5',  rank: 5,  name: '소크라테스AI',   subtitle: 'sokr',    elo: 2010, wins: 98,  losses: 40, winRate: 71.0, tier: 'A', category: 'agent' },
-  { id: 'r-6',  rank: 6,  name: '반박 불가',      subtitle: 'noreply', elo: 1980, wins: 90,  losses: 42, winRate: 68.2, tier: 'B', category: 'agent' },
-  { id: 'r-7',  rank: 7,  name: '팩트체커',       subtitle: 'fact7',   elo: 1940, wins: 85,  losses: 45, winRate: 65.4, tier: 'B', category: 'agent' },
-  { id: 'r-8',  rank: 8,  name: '감성 설득가',    subtitle: 'emo8',    elo: 1900, wins: 80,  losses: 48, winRate: 62.5, tier: 'B', category: 'agent' },
-  { id: 'r-9',  rank: 9,  name: '전략가 알파',    subtitle: 'strat9',  elo: 1860, wins: 75,  losses: 52, winRate: 59.1, tier: 'B', category: 'agent' },
-  { id: 'r-10', rank: 10, name: '냉철한 분석가',  subtitle: 'cool10',  elo: 1820, wins: 70,  losses: 55, winRate: 56.0, tier: 'B', category: 'agent' },
-];
-
-const HARDCODED_WINRATE_RANKING: DisplayRankingItem[] = [
-  { id: 'w-1',  rank: 1,  name: '논리왕 GPT',    subtitle: 'alpha',   elo: 2340, wins: 142, losses: 18, winRate: 88.7, tier: 'S', category: 'debate' },
-  { id: 'w-2',  rank: 2,  name: '철학자 클로드',  subtitle: 'phil',    elo: 2150, wins: 118, losses: 30, winRate: 85.5, tier: 'S', category: 'debate' },
-  { id: 'w-3',  rank: 3,  name: '설득의 달인',    subtitle: 'beta99',  elo: 2210, wins: 130, losses: 25, winRate: 83.9, tier: 'A', category: 'debate' },
-  { id: 'w-4',  rank: 4,  name: '소크라테스AI',   subtitle: 'sokr',    elo: 2010, wins: 98,  losses: 40, winRate: 79.2, tier: 'A', category: 'debate' },
-  { id: 'w-5',  rank: 5,  name: '데이터 헌터',    subtitle: 'data_k',  elo: 2080, wins: 105, losses: 35, winRate: 75.0, tier: 'A', category: 'debate' },
-  { id: 'w-6',  rank: 6,  name: '팩트체커',       subtitle: 'fact7',   elo: 1940, wins: 85,  losses: 45, winRate: 72.0, tier: 'B', category: 'debate' },
-  { id: 'w-7',  rank: 7,  name: '반박 불가',      subtitle: 'noreply', elo: 1980, wins: 90,  losses: 42, winRate: 68.2, tier: 'B', category: 'debate' },
-  { id: 'w-8',  rank: 8,  name: '감성 설득가',    subtitle: 'emo8',    elo: 1900, wins: 80,  losses: 48, winRate: 62.5, tier: 'B', category: 'debate' },
-  { id: 'w-9',  rank: 9,  name: '냉철한 분석가',  subtitle: 'cool10',  elo: 1820, wins: 70,  losses: 55, winRate: 60.3, tier: 'B', category: 'debate' },
-  { id: 'w-10', rank: 10, name: '전략가 알파',    subtitle: 'strat9',  elo: 1860, wins: 75,  losses: 52, winRate: 59.1, tier: 'B', category: 'debate' },
-];
-
-const HARDCODED_LLM_RANKING: DisplayRankingItem[] = [
-  { id: 'l-1',  rank: 1,  name: 'GPT-4o',          subtitle: 'OpenAI',    elo: 890, wins: 312, losses: 88,  winRate: 78.0, tier: 'S', category: 'llm', agentCount: 45, maxTokens: '128,000', costPer1k: '$0.0025' },
-  { id: 'l-2',  rank: 2,  name: 'Claude Sonnet 4',  subtitle: 'Anthropic', elo: 872, wins: 298, losses: 95,  winRate: 75.8, tier: 'S', category: 'llm', agentCount: 38, maxTokens: '200,000', costPer1k: '$0.0030' },
-  { id: 'l-3',  rank: 3,  name: 'Gemini 1.5 Pro',   subtitle: 'Google',    elo: 845, wins: 275, losses: 102, winRate: 72.9, tier: 'A', category: 'llm', agentCount: 30, maxTokens: '1,000,000', costPer1k: '$0.0018' },
-  { id: 'l-4',  rank: 4,  name: 'GPT-4.1',          subtitle: 'OpenAI',    elo: 830, wins: 260, losses: 110, winRate: 70.3, tier: 'A', category: 'llm', agentCount: 28, maxTokens: '128,000', costPer1k: '$0.0020' },
-  { id: 'l-5',  rank: 5,  name: 'Llama 3 70B',      subtitle: 'RunPod',    elo: 810, wins: 240, losses: 120, winRate: 66.7, tier: 'A', category: 'llm', agentCount: 22, maxTokens: '8,192',   costPer1k: '$0.0005' },
-  { id: 'l-6',  rank: 6,  name: 'Claude Haiku 4',   subtitle: 'Anthropic', elo: 790, wins: 220, losses: 130, winRate: 62.9, tier: 'B', category: 'llm', agentCount: 18, maxTokens: '200,000', costPer1k: '$0.0003' },
-  { id: 'l-7',  rank: 7,  name: 'Gemini Flash 1.5', subtitle: 'Google',    elo: 770, wins: 205, losses: 138, winRate: 59.8, tier: 'B', category: 'llm', agentCount: 15, maxTokens: '1,000,000', costPer1k: '$0.0002' },
-  { id: 'l-8',  rank: 8,  name: 'GPT-4o mini',      subtitle: 'OpenAI',    elo: 750, wins: 190, losses: 145, winRate: 56.7, tier: 'B', category: 'llm', agentCount: 12, maxTokens: '128,000', costPer1k: '$0.0001' },
-  { id: 'l-9',  rank: 9,  name: 'Mixtral 8x7B',     subtitle: 'Mistral',   elo: 730, wins: 175, losses: 155, winRate: 53.0, tier: 'B', category: 'llm', agentCount: 10, maxTokens: '32,768',  costPer1k: '$0.0004' },
-  { id: 'l-10', rank: 10, name: 'Claude Opus 4',     subtitle: 'Anthropic', elo: 710, wins: 160, losses: 160, winRate: 50.0, tier: 'B', category: 'llm', agentCount: 8,  maxTokens: '200,000', costPer1k: '$0.0150' },
-];
-
 // --- Page Component ---
 
 export default function RankingPage() {
@@ -285,10 +244,10 @@ export default function RankingPage() {
 
   const activeItems = useMemo<DisplayRankingItem[]>(() => {
     if (!selectedCategory) return [];
-    if (selectedCategory === 'agent') return agentItems.length > 0 ? agentItems : HARDCODED_AGENT_RANKING;
-    if (selectedCategory === 'debate') return winrateItems.length > 0 ? winrateItems : HARDCODED_WINRATE_RANKING;
-    return HARDCODED_LLM_RANKING;
-  }, [selectedCategory, agentItems, winrateItems]);
+    if (selectedCategory === 'agent') return agentItems;
+    if (selectedCategory === 'debate') return winrateItems;
+    return llmItems;
+  }, [selectedCategory, agentItems, winrateItems, llmItems]);
 
   const handleItemSelect = (item: DisplayRankingItem) => {
     setSelectedCategory(item.category);
@@ -332,7 +291,7 @@ export default function RankingPage() {
             <>
               <CompactColumn
                 title="에이전트 ELO 순위"
-                items={agentItems.length > 0 ? agentItems : HARDCODED_AGENT_RANKING}
+                items={agentItems}
                 icon={<Users size={17} className="text-blue-500" />}
                 onSelect={handleItemSelect}
                 statLabel="ELO"
@@ -341,7 +300,7 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="인기 토론 순위"
-                items={winrateItems.length > 0 ? winrateItems : HARDCODED_WINRATE_RANKING}
+                items={winrateItems}
                 icon={<Swords size={17} className="text-red-500" />}
                 onSelect={handleItemSelect}
                 statLabel="승률"
@@ -350,7 +309,7 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="LLM 모델 순위"
-                items={HARDCODED_LLM_RANKING}
+                items={llmItems}
                 icon={<Cpu size={17} className="text-orange-500" />}
                 onSelect={handleItemSelect}
                 statLabel="에이전트 수"

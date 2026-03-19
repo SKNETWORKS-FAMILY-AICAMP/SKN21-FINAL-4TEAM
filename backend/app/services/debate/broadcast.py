@@ -118,9 +118,22 @@ def _queue_channel(topic_id: str, agent_id: str) -> str:
 
 
 async def publish_queue_event(topic_id: str, agent_id: str, event_type: str, data: dict) -> None:
-    """큐 이벤트를 Redis 채널에 발행. publish_event와 동일하게 공유 redis_client 사용 — 매 호출마다 연결 생성 방지."""
-    payload = json.dumps({"event": event_type, "data": data}, ensure_ascii=False, default=str)
-    await redis_client.publish(_queue_channel(topic_id, agent_id), payload)
+    """큐 이벤트를 Redis 채널에 best-effort 발행.
+
+    Redis 장애 시 예외를 내부에서 처리하고 로깅만 남긴다.
+    DB commit 이후에 호출되므로 실패해도 큐 등록/매치 생성 상태는 유지된다.
+    """
+    if not topic_id or not agent_id:
+        logger.warning("publish_queue_event: topic_id 또는 agent_id가 None — 발행 생략")
+        return
+    try:
+        payload = json.dumps({"event": event_type, "data": data}, ensure_ascii=False, default=str)
+        await redis_client.publish(_queue_channel(topic_id, agent_id), payload)
+    except Exception:
+        logger.error(
+            "publish_queue_event 실패 (topic=%s agent=%s event=%s)",
+            topic_id, agent_id, event_type, exc_info=True,
+        )
 
 
 async def subscribe_queue(

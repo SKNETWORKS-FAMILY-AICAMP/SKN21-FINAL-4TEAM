@@ -153,8 +153,20 @@ Project_New/
 
 ### Git 규칙
 
-- 커밋 메시지: Conventional Commits (feat/fix/refactor/docs/chore)
-- 브랜치: `feature/`, `fix/`, `refactor/` 접두사
+커밋 메시지 형식은 글로벌 `~/.claude/CLAUDE.md` → "Git 커밋 컨벤션" 참고.
+
+**이 프로젝트 scope 예시:**
+- `fix(orchestrator):` / `feat(debate-agent):` / `refactor(judge,scoring):`
+- `fix(engine):` / `feat(matching):` / `chore(deps):`
+
+**auto-walkthrough 트리거 type:**
+
+| type | 조건부 동작 |
+|---|---|
+| `fix` / `hotfix` | ⚠️ why 본문 필수 — 변경 맥락 명확화 |
+| `revert` | ⚠️ why 본문 + `Reverts:` 해시 필수 |
+
+브랜치: `feature/`, `fix/`, `refactor/` 접두사
 
 ---
 

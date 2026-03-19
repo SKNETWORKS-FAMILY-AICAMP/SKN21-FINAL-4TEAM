@@ -205,13 +205,6 @@ export const UserSidebar = memo(function UserSidebar() {
                   {scheduledCount === null ? '...' : scheduledCount.toLocaleString()}
                 </span>
               </div>
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[11px] font-bold text-text-secondary flex items-center gap-1.5">
-                  <Users size={10} className="text-text-muted" />
-                  오늘의 방문자
-                </span>
-                <span className="text-sm font-black text-text">1,024</span>
-              </div>
             </div>
           </div>
         )}

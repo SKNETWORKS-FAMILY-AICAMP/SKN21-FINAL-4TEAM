@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
-import { useUserStore } from '@/stores/userStore';
-import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
@@ -33,31 +31,6 @@ const MODE_OPTIONS = [
   { value: 'cross_exam', label: '교차 심문' },
 ];
 
-const HARDCODED_RANKING = [
-  { id: 'r-1',  name: '논리왕 GPT',    owner_nickname: 'alpha',   elo_rating: 2340 },
-  { id: 'r-2',  name: '설득의 달인',    owner_nickname: 'beta99',  elo_rating: 2210 },
-  { id: 'r-3',  name: '철학자 클로드',  owner_nickname: 'phil',    elo_rating: 2150 },
-  { id: 'r-4',  name: '데이터 헌터',    owner_nickname: 'data_k',  elo_rating: 2080 },
-  { id: 'r-5',  name: '소크라테스AI',   owner_nickname: 'sokr',    elo_rating: 2010 },
-  { id: 'r-6',  name: '반박 불가',      owner_nickname: 'noreply', elo_rating: 1980 },
-  { id: 'r-7',  name: '팩트체커',       owner_nickname: 'fact7',   elo_rating: 1940 },
-  { id: 'r-8',  name: '감성 설득가',    owner_nickname: 'emo8',    elo_rating: 1900 },
-  { id: 'r-9',  name: '전략가 알파',    owner_nickname: 'strat9',  elo_rating: 1860 },
-  { id: 'r-10', name: '냉철한 분석가',  owner_nickname: 'cool10',  elo_rating: 1820 },
-  { id: 'r-11', name: '언어의 마법사',  owner_nickname: 'magic11', elo_rating: 1780 },
-  { id: 'r-12', name: '논증 전문가',    owner_nickname: 'arg12',   elo_rating: 1740 },
-];
-
-const HARDCODED_TOPICS = [
-  { id: 'room-1', title: 'AI가 인간의 일자리를 대체할 것인가?',    mode: 'debate',    status: 'open',        queue_count: 120, owner: '에이원',   is_admin_topic: true },
-  { id: 'room-2', title: '기본소득제, 과연 실현 가능한가?',         mode: 'persuasion', status: 'in_progress', queue_count: 85,  owner: '경제학자', is_admin_topic: false },
-  { id: 'room-3', title: '동물 실험 금지법안, 찬성인가 반대인가?',  mode: 'debate',    status: 'open',        queue_count: 45,  owner: '윤리위원회', is_admin_topic: false },
-  { id: 'room-4', title: '자유 의지는 실재하는가?',                 mode: 'cross_exam', status: 'scheduled',   queue_count: 310, owner: '칸트',     is_admin_topic: true },
-  { id: 'room-5', title: '우주 탐사, 예산 낭비인가 필수적인가?',    mode: 'debate',    status: 'open',        queue_count: 95,  owner: '스페이스', is_admin_topic: false },
-  { id: 'room-6', title: '플라스틱 사용 전면 금지, 가능한가?',      mode: 'persuasion', status: 'in_progress', queue_count: 60,  owner: '그린피쓰', is_admin_topic: false },
-  { id: 'room-7', title: '사형제도 부활, 찬성 VS 반대',             mode: 'debate',    status: 'closed',      queue_count: 500, owner: '법치주의', is_admin_topic: true },
-  { id: 'room-8', title: '촉법소년 연령 하향 조정',                 mode: 'cross_exam', status: 'open',        queue_count: 220, owner: '시민',     is_admin_topic: false },
-];
 
 const STATUS_CONFIG: Record<string, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
   open:        { label: 'LIVE',  dotColor: 'bg-red-500', bgColor: 'bg-red-500/10',  textColor: 'text-red-500' },
@@ -94,7 +67,6 @@ export default function DebateTopicsPage() {
     fetchRanking,
   } = useDebateStore();
   const { agents, fetchMyAgents } = useDebateAgentStore();
-  const { user } = useUserStore();
 
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [sort, setSort] = useState<SortOption>('recent');
@@ -282,17 +254,6 @@ export default function DebateTopicsPage() {
     }
   };
 
-  const currentUserId = user?.id ?? null;
-
-
-  // 랭킹 색상: 1위=금, 2위=은, 3위=동, 나머지=회색
-  const rankColor = (rank: number) => {
-    if (rank === 1) return 'text-yellow-500';
-    if (rank === 2) return 'text-gray-400';
-    if (rank === 3) return 'text-amber-600';
-    return 'text-gray-500';
-  };
-
   return (
     <div className="max-w-[1600px] mx-auto py-12 px-4 xl:px-8">
       {/* 제목 */}
@@ -368,42 +329,51 @@ export default function DebateTopicsPage() {
           <div id="topic-list">
 
             <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-4 gap-5">
-              {HARDCODED_TOPICS.map((topic) => {
-                const config = STATUS_CONFIG[topic.status] || STATUS_CONFIG.closed;
-                const categoryLabel = MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
-                return (
-                  <Link
-                    key={topic.id}
-                    href={`/debate/topics/${topic.id}`}
-                    className="flex flex-col no-underline brutal-border brutal-shadow-sm bg-bg-surface p-5 rounded-2xl hover:translate-y-[-1px] transition-all group"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
-                          {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
-                          {config.label}
-                        </span>
+              {topicsLoading && topics.length === 0 ? (
+                Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
+              ) : !topicsLoading && topics.length === 0 ? (
+                <div className="col-span-2 flex flex-col items-center justify-center py-20 text-text-muted">
+                  <MessageSquare size={32} className="mb-3 opacity-40" />
+                  <p className="text-sm font-medium">등록된 토픽이 없습니다</p>
+                </div>
+              ) : (
+                topics.map((topic) => {
+                  const config = STATUS_CONFIG[topic.status] || STATUS_CONFIG.closed;
+                  const categoryLabel = MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
+                  return (
+                    <Link
+                      key={topic.id}
+                      href={`/debate/topics/${topic.id}`}
+                      className="flex flex-col no-underline brutal-border brutal-shadow-sm bg-bg-surface p-5 rounded-2xl hover:translate-y-[-1px] transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
+                            {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
+                            {config.label}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
-                    </div>
-                    <h3 className="text-[15px] font-black text-text m-0 leading-tight mb-4 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors">
-                      {topic.title}
-                    </h3>
-                    <div className="flex items-center justify-between mt-auto">
-                      <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                        <span className="flex items-center gap-1">
-                          <Users size={12} />
-                          {topic.queue_count}명
-                        </span>
-                        <span>@{topic.owner}</span>
+                      <h3 className="text-[15px] font-black text-text m-0 leading-tight mb-4 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors">
+                        {topic.title}
+                      </h3>
+                      <div className="flex items-center justify-between mt-auto">
+                        <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Users size={12} />
+                            {topic.queue_count}명
+                          </span>
+                          {topic.creator_nickname && <span>@{topic.creator_nickname}</span>}
+                        </div>
+                        <div className="px-3 py-1 rounded-lg bg-primary text-white text-[15px] font-black brutal-border brutal-shadow-sm">
+                          참여
+                        </div>
                       </div>
-                      <div className="px-3 py-1 rounded-lg bg-primary text-white text-[15px] font-black brutal-border brutal-shadow-sm">
-                        참여
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -412,29 +382,42 @@ export default function DebateTopicsPage() {
         <div className="lg:col-span-1 h-full">
           <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4 h-full">
             <div className="flex flex-col gap-2">
-              {HARDCODED_RANKING.map((r, idx) => {
-                const rank = idx + 1;
-                const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
-                const bgColor = rank === 1 ? 'bg-yellow-500/15' : rank === 2 ? 'bg-slate-400/15' : rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
-                return (
-                  <Link
-                    key={r.id}
-                    href={`/debate/agents/${r.id}`}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
-                  >
-                    <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
-                      {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
-                    </span>
-                    <div className="flex-1 min-w-0 flex flex-col justify-center">
-                      <p className="text-sm font-black text-text m-0 truncate leading-tight">{r.name}</p>
-                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
-                    </div>
-                    <div className="flex items-center shrink-0">
-                      <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
-                    </div>
-                  </Link>
-                );
-              })}
+              {rankingLoading ? (
+                <div className="flex flex-col gap-2 py-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-10 rounded-xl bg-bg animate-pulse" />
+                  ))}
+                </div>
+              ) : ranking.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-text-muted">
+                  <Trophy size={28} className="mb-2 opacity-40" />
+                  <p className="text-xs font-medium">랭킹 데이터 없음</p>
+                </div>
+              ) : (
+                ranking.slice(0, 12).map((r, idx) => {
+                  const rank = idx + 1;
+                  const rankColorClass = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                  const bgColor = rank === 1 ? 'bg-yellow-500/15' : rank === 2 ? 'bg-slate-400/15' : rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+                  return (
+                    <Link
+                      key={r.id}
+                      href={`/debate/agents/${r.id}`}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
+                    >
+                      <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColorClass}`}>
+                        {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
+                      </span>
+                      <div className="flex-1 min-w-0 flex flex-col justify-center">
+                        <p className="text-sm font-black text-text m-0 truncate leading-tight">{r.name}</p>
+                        <p className="text-[10px] text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
+                      </div>
+                      <div className="flex items-center shrink-0">
+                        <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

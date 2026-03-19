@@ -19,8 +19,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password: str | None, hashed_password: str | None) -> bool:
     """평문 비밀번호와 bcrypt 해시를 비교 검증한다.
+
+    입력값이 None이거나 빈 문자열이면 즉시 False를 반환한다.
 
     Args:
         plain_password: 사용자가 입력한 평문 비밀번호.
@@ -29,6 +31,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         비밀번호 일치 여부.
     """
+    if not plain_password or not hashed_password:
+        return False
     return pwd_context.verify(plain_password, hashed_password)
 
 

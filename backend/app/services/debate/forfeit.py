@@ -86,7 +86,7 @@ class ForfeitHandler:
         result_b: str,
         version_a_id: str | None = None,
         version_b_id: str | None = None,
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float, list[dict]]:
         """ELO·전적·시즌·승급전을 공통으로 처리한다.
 
         is_test=True 매치는 ELO/전적 갱신을 건너뛴다.
@@ -102,7 +102,8 @@ class ForfeitHandler:
             version_b_id: B 버전 UUID 문자열 (없으면 None).
 
         Returns:
-            (new_elo_a, new_elo_b) 튜플.
+            (new_elo_a, new_elo_b, series_events) 튜플.
+            series_events: commit 후 호출자가 직접 발행할 series_update 페이로드 목록.
         """
         from app.services.debate.agent_service import DebateAgentService
         from app.services.debate.promotion_service import DebatePromotionService
@@ -113,7 +114,7 @@ class ForfeitHandler:
         )
 
         if match.is_test:
-            return new_a, new_b
+            return new_a, new_b, []
 
         agent_service = DebateAgentService(self.db)
         await agent_service.update_elo(str(agent_a.id), new_a, result_a, version_a_id)
@@ -125,14 +126,16 @@ class ForfeitHandler:
                 score_diff=settings.debate_elo_forfeit_score_diff,
             )
 
+        # series_update SSE는 호출자가 commit 후 직접 발행 — uncommitted 데이터 노출 방지
         promo_svc = DebatePromotionService(self.db)
+        series_events: list[dict] = []
         for agent_obj, res in [(agent_a, result_a), (agent_b, result_b)]:
             active = await promo_svc.get_active_series(str(agent_obj.id))
             if active:
                 series_result = await promo_svc.record_match_result(str(active.id), res)
-                await publish_event(str(match.id), "series_update", series_result)
+                series_events.append(series_result)
 
-        return new_a, new_b
+        return new_a, new_b, series_events
 
     async def handle_disconnect(
         self,
@@ -167,12 +170,14 @@ class ForfeitHandler:
         version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
         version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
-        await self.settle(
+        _, __, series_events = await self.settle(
             match, agent_a_obj, agent_b_obj, elo_result, result_a, result_b,
             version_a_id, version_b_id,
         )
 
         await self.db.commit()
+        for se in series_events:
+            await publish_event(str(match.id), "series_update", se)
         await publish_event(str(match.id), "forfeit", {
             "match_id": str(match.id),
             "reason": f"Agent {loser.name} did not connect in time",
@@ -233,7 +238,7 @@ class ForfeitHandler:
         version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
         version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
-        new_a, new_b = await self.settle(
+        new_a, new_b, series_events = await self.settle(
             match, agent_a, agent_b, elo_result, result_a, result_b,
             version_a_id, version_b_id,
         )
@@ -245,6 +250,8 @@ class ForfeitHandler:
         )
         await self.db.commit()
 
+        for se in series_events:
+            await publish_event(str(match.id), "series_update", se)
         await publish_event(str(match.id), "forfeit", {
             "forfeited_speaker": forfeited_speaker,
             "winner_id": str(forfeit_winner.id),
