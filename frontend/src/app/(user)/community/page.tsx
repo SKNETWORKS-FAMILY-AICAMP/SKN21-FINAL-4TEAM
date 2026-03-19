@@ -44,7 +44,7 @@ const MOCK_POSTS: Post[] = [
   { id: 10, title: '상대 모델별 약점 정리 (GPT / Claude / Gemini)',       author: '전략가X',    tier: 'Platinum', date: '2026.03.14', views: 634,  likes: 92,  comments: 41 },
 ];
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 20;
 
 export default function CommunityPage() {
   const [search, setSearch] = useState('');
@@ -68,7 +68,7 @@ export default function CommunityPage() {
     <div className="max-w-[900px] mx-auto py-6 px-4">
 
       {/* 헤더 배너 */}
-      <div className="rounded-2xl bg-gradient-to-r from-[#0d5c38] to-[#1db865] p-6 mb-6 text-white border-2 border-black shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
+      <div className="rounded-2xl bg-primary p-6 mb-6 text-white border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border-2 border-black shadow-[3px_3px_0_0_rgba(0,0,0,0.4)]">
@@ -103,14 +103,14 @@ export default function CommunityPage() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="제목 / 작성자 검색"
-              className="pl-8 pr-4 py-2 text-xs font-medium bg-bg-surface text-text border-2 border-black rounded-xl focus:outline-none focus:border-[#1db865] w-48 shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition-colors"
+              className="pl-8 pr-4 py-2 text-xs font-medium bg-bg-surface text-text border-2 border-black rounded-xl focus:outline-none focus:border-primary w-48 shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition-colors"
             />
           </div>
         </form>
       </div>
 
       {/* 게시판 테이블 */}
-      <div className="bg-bg-surface rounded-2xl overflow-hidden border-2 border-black shadow-[6px_6px_0_0_rgba(0,0,0,1)] mb-8">
+      <div className="bg-bg-surface rounded-2xl overflow-hidden border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)] mb-8">
         {/* 테이블 헤더 */}
         <div className="grid grid-cols-[60px_1fr_100px_80px_55px_55px] px-4 py-3 bg-bg-hover border-b-2 border-black">
           <span className="text-[11px] font-black text-text-muted text-center">번호</span>
@@ -151,7 +151,7 @@ export default function CommunityPage() {
             onClick={() => setPage(p)}
             className={`w-9 h-9 rounded-xl text-sm font-black border-2 border-black cursor-pointer ${
               page === p
-                ? 'bg-[#1db865] text-white shadow-[3px_3px_0_0_rgba(0,0,0,1)]'
+                ? 'bg-primary text-white shadow-[3px_3px_0_0_rgba(0,0,0,1)]'
                 : 'bg-bg-surface text-text shadow-[3px_3px_0_0_rgba(0,0,0,1)]'
             }`}
           >
@@ -173,8 +173,8 @@ export default function CommunityPage() {
 function PostRow({ post, isNotice = false, index = 0 }: { post: Post; isNotice?: boolean; index?: number }) {
   return (
     <div
-      className={`grid grid-cols-[60px_1fr_100px_80px_55px_55px] px-4 py-3 border-b border-border hover:bg-[#1db865]/10 transition-colors cursor-pointer select-none items-center group ${
-        isNotice ? 'bg-[#1db865]/10' : index % 2 === 0 ? 'bg-bg-surface' : 'bg-bg-hover/40'
+      className={`grid grid-cols-[60px_1fr_100px_80px_55px_55px] px-4 py-3 border-b border-border hover:bg-primary/10 transition-colors cursor-pointer select-none items-center group ${
+        isNotice ? 'bg-primary/10' : index % 2 === 0 ? 'bg-bg-surface' : 'bg-bg-hover/40'
       }`}
     >
       {/* 번호 */}

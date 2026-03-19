@@ -458,7 +458,7 @@ export default function DebateTopicsPage() {
               {HARDCODED_RANKING.map((r, idx) => {
                 const rank = idx + 1;
                 const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
-                const bgColor = rank === 1 ? 'bg-[#f0fdf4]/60' : rank === 2 ? 'bg-bg' : rank === 3 ? 'bg-[#dcfce7]/60' : 'bg-bg';
+                const bgColor = rank === 1 ? 'bg-yellow-500/15' : rank === 2 ? 'bg-slate-400/15' : rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
 
                 return (
                   <Link
@@ -466,7 +466,7 @@ export default function DebateTopicsPage() {
                     href={`/debate/agents/${r.id}`}
                     className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
                   >
-                    <span className={`text-sm font-black w-5 text-center shrink-0 ${rankColor}`}>
+                    <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
                       {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
                     </span>
                     <div className="flex-1 min-w-0 flex flex-col justify-center">

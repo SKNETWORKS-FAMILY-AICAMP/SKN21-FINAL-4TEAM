@@ -79,7 +79,7 @@ function AgentCardView({
 
   return (
     <Link href={`/debate/agents/${agent.id}`} className="block no-underline cursor-pointer">
-      <div className="bg-bg-surface rounded-[20px] p-3.5 brutal-border border-2 border-black hover:translate-y-[-4px] hover:shadow-[6px_6px_0_0_rgba(0,0,0,1)] transition-all group cursor-pointer">
+      <div className="bg-bg-surface rounded-[20px] p-3.5 brutal-border border-2 border-black hover:translate-y-[-4px] hover:shadow-[4px_4px_0_0_rgba(0,0,0,1)] transition-all group cursor-pointer">
         <div className="flex items-start gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-bg-hover flex items-center justify-center text-2xl shadow-inner border border-border overflow-hidden">
             {avatar !== '🤖' ? (

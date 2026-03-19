@@ -14,7 +14,6 @@ import {
   DollarSign,
   Brain,
   ChevronRight,
-  Award,
   Binary,
   MessageSquare,
 } from 'lucide-react';
@@ -53,6 +52,7 @@ type DisplayRankingItem = {
   winRate: number;
   tier: string;
   category: RankingCategory;
+  image_url?: string | null;
   // LLM 전용
   maxTokens?: string;
   costPer1k?: string;
@@ -79,6 +79,7 @@ function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
         winRate,
         tier: entry.tier ?? 'B',
         category: 'agent' as const,
+        image_url: entry.image_url ?? null,
       };
     });
 }
@@ -104,6 +105,7 @@ function toWinrateItems(entries: RankingEntry[]): DisplayRankingItem[] {
         winRate,
         tier: entry.tier ?? 'B',
         category: 'debate' as const,
+        image_url: entry.image_url ?? null,
       };
     });
 }
@@ -284,10 +286,10 @@ export default function RankingPage() {
 
   const activeItems = useMemo<DisplayRankingItem[]>(() => {
     if (!selectedCategory) return [];
-    if (selectedCategory === 'agent') return HARDCODED_AGENT_RANKING;
-    if (selectedCategory === 'debate') return HARDCODED_WINRATE_RANKING;
+    if (selectedCategory === 'agent') return agentItems.length > 0 ? agentItems : HARDCODED_AGENT_RANKING;
+    if (selectedCategory === 'debate') return winrateItems.length > 0 ? winrateItems : HARDCODED_WINRATE_RANKING;
     return HARDCODED_LLM_RANKING;
-  }, [selectedCategory]);
+  }, [selectedCategory, agentItems, winrateItems]);
 
   const handleItemSelect = (item: DisplayRankingItem) => {
     setSelectedCategory(item.category);
@@ -331,8 +333,8 @@ export default function RankingPage() {
             <>
               <CompactColumn
                 title="에이전트 ELO 순위"
-                items={HARDCODED_AGENT_RANKING}
-                icon={<Users size={22} className="text-blue-500" />}
+                items={agentItems.length > 0 ? agentItems : HARDCODED_AGENT_RANKING}
+                icon={<Users size={17} className="text-blue-500" />}
                 onSelect={handleItemSelect}
                 statLabel="ELO"
                 statValue={(item) => item.elo.toLocaleString()}
@@ -340,8 +342,8 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="인기 토론 순위"
-                items={HARDCODED_WINRATE_RANKING}
-                icon={<Swords size={22} className="text-red-500" />}
+                items={winrateItems.length > 0 ? winrateItems : HARDCODED_WINRATE_RANKING}
+                icon={<Swords size={17} className="text-red-500" />}
                 onSelect={handleItemSelect}
                 statLabel="승률"
                 statValue={(item) => `${item.winRate}%`}
@@ -350,7 +352,7 @@ export default function RankingPage() {
               <CompactColumn
                 title="LLM 모델 순위"
                 items={HARDCODED_LLM_RANKING}
-                icon={<Cpu size={22} className="text-orange-500" />}
+                icon={<Cpu size={17} className="text-orange-500" />}
                 onSelect={handleItemSelect}
                 statLabel="에이전트 수"
                 statValue={(item) => `${item.agentCount ?? 0}개`}
@@ -464,8 +466,12 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
         className={`relative overflow-hidden bg-gradient-to-br ${getGradient(item.category)} border-2 border-black rounded-2xl p-5 text-white shadow-[4px_4px_0_0_rgba(0,0,0,1)]`}
       >
         <div className="flex flex-row gap-4 items-center">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl border-2 border-black flex items-center justify-center text-3xl flex-shrink-0 shadow-[3px_3px_0_0_rgba(0,0,0,0.4)]">
-            {item.category === 'llm' ? '🧠' : '🤖'}
+          <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl border-2 border-black flex items-center justify-center text-3xl flex-shrink-0 shadow-[3px_3px_0_0_rgba(0,0,0,0.4)] overflow-hidden">
+            {item.image_url ? (
+              <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+            ) : (
+              item.category === 'llm' ? '🧠' : '🤖'
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -553,7 +559,6 @@ function CompactColumn({
   items,
   icon,
   onSelect,
-  statLabel,
   statValue,
   onTitleClick,
 }: {
@@ -579,41 +584,43 @@ function CompactColumn({
         </h2>
       </div>
 
-      <div className="bg-bg-surface brutal-border border-4 rounded-[32px] overflow-hidden shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
-        {items.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-text-muted">
-            <p className="font-bold text-sm">데이터 없음</p>
-          </div>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onSelect(item)}
-              className={`
-                group flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0 transition-all cursor-pointer
-                ${getRankColors(item.rank)}
-              `}
-            >
-              <div className="w-10 flex justify-center">
-                {item.rank <= 3 ? (
-                  <Award size={22} className={getRankIconColor(item.rank)} />
-                ) : (
-                  <span className="text-[20px] font-black text-gray-400 leading-none">{item.rank}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-base font-black text-text truncate m-0 group-hover:text-primary transition-colors">
-                  {item.name}
-                </p>
-                <p className="text-xs font-bold text-text-muted m-0 opacity-80">{item.subtitle}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-text-muted m-0">{statLabel}</p>
-                <p className="text-sm font-black text-primary m-0">{statValue(item)}</p>
-              </div>
+      <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4">
+        <div className="flex flex-col gap-2">
+          {items.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-text-muted">
+              <p className="font-bold text-sm">데이터 없음</p>
             </div>
-          ))
-        )}
+          ) : (
+            items.map((item, idx) => {
+              const bgColor =
+                item.rank === 1 ? 'bg-yellow-500/15' :
+                item.rank === 2 ? 'bg-slate-400/15' :
+                item.rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+              const rankColor =
+                item.rank === 1 ? 'text-yellow-500' :
+                item.rank === 2 ? 'text-gray-400' :
+                item.rank === 3 ? 'text-amber-600' : 'text-gray-400';
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => onSelect(item)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer ${bgColor}`}
+                >
+                  <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
+                    {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
+                  </span>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <p className="text-sm font-black text-text m-0 truncate leading-tight">{item.name}</p>
+                    <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
+                  </div>
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-black text-primary tracking-tighter">{statValue(item)}</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
