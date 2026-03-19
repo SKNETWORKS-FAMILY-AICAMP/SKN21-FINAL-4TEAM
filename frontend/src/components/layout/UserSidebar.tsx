@@ -99,7 +99,7 @@ export const UserSidebar = memo(function UserSidebar() {
         {/* 로고 헤더 */}
         <div className={`px-4 py-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
           {!sidebarCollapsed ? (
-            <Link href="/" className="flex-1 no-underline group">
+            <Link href="/" className="flex-1 no-underline group select-none">
               <p className="text-xl font-bold text-text m-0 leading-tight tracking-tight group-hover:text-primary transition-colors">NEMo</p>
               <p className="text-[10px] font-black m-0 text-primary tracking-widest">AI DEBATE</p>
             </Link>

@@ -296,7 +296,7 @@ export default function DebateTopicsPage() {
   return (
     <div className="max-w-[1600px] mx-auto py-12 px-4 xl:px-8">
       {/* 제목 */}
-      <div className="flex flex-col gap-2 mb-8">
+      <div className="flex flex-col gap-2 mb-12">
         <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
           <Swords size={20} className="text-primary" />
           토픽 목록
@@ -306,66 +306,59 @@ export default function DebateTopicsPage() {
         </p>
       </div>
 
-      {/* 상단 액션 버튼 */}
-      <div className="flex items-center justify-end mb-8">
-        <div className="flex items-center gap-3">
+      {/* 헤더 행 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
+        <div className="lg:col-span-2 flex items-center justify-between">
+          <div className="flex gap-1.5">
+            {FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => handleFilterChange(opt.key)}
+                className={`px-3 py-1 rounded-lg text-[15px] font-black transition-all cursor-pointer ${
+                  filter === opt.key
+                    ? 'bg-primary text-white brutal-border brutal-shadow-sm'
+                    : 'bg-bg-surface text-text-secondary hover:text-text border-2 border-transparent'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => handleSortChange(e.target.value as SortOption)}
+            className="bg-bg-surface border-2 border-black rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none shrink-0 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="lg:col-span-1 flex items-center justify-end gap-2">
           {agents.length > 0 && (
             <button
               onClick={() => setShowRandomModal(true)}
-              className="px-6 py-2.5 bg-orange-500 text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
+              className="px-4 py-2 bg-orange-500 text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
             >
-              <Shuffle size={18} />
+              <Shuffle size={16} />
               랜덤 매칭
             </button>
           )}
           <button
             onClick={() => setShowModal(true)}
-            className="px-6 py-2.5 bg-white text-black text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
+            className="px-4 py-2 bg-bg-surface text-text text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             주제 제안
           </button>
           <Link
             href="/debate/agents"
-            className="px-6 py-2.5 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2"
+            className="px-4 py-2 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             내 에이전트
           </Link>
         </div>
-      </div>
-
-      {/* 헤더 행 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
-        <div className="lg:col-span-2 flex items-center justify-end">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1.5">
-              {FILTER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => handleFilterChange(opt.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    filter === opt.key
-                      ? 'bg-primary text-white brutal-border brutal-shadow-sm'
-                      : 'bg-bg-surface text-text-secondary hover:text-text border-2 border-transparent'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <select
-              value={sort}
-              onChange={(e) => handleSortChange(e.target.value as SortOption)}
-              className="bg-bg-surface border-2 border-black rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none shrink-0 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="lg:col-span-1" />
       </div>
 
       {/* 메인 콘텐츠: 토픽 리스트 + 랭킹 사이드바 가로 배치 */}
@@ -404,7 +397,7 @@ export default function DebateTopicsPage() {
                         </span>
                         <span>@{topic.owner}</span>
                       </div>
-                      <div className="px-3 py-1 rounded-lg bg-primary text-white text-[10px] font-black brutal-border brutal-shadow-sm">
+                      <div className="px-3 py-1 rounded-lg bg-primary text-white text-[15px] font-black brutal-border brutal-shadow-sm">
                         참여
                       </div>
                     </div>

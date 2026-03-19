@@ -429,7 +429,7 @@ export default function DebateTopicsPage() {
                       <span className="text-[10px] font-bold text-gray-400">{categoryLabel}</span>
                     </div>
 
-                    <h3 className="text-[18px] font-black text-text m-4 leading-tight mb-3 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors text-center">
+                    <h3 className="text-[18px] font-black text-text m-4 leading-tight mb-3 line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors text-left">
                       {room.title}
                     </h3>
 

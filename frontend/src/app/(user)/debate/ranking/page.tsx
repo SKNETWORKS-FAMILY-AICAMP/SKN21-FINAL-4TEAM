@@ -182,7 +182,7 @@ const getCategoryLabel = (category: RankingCategory) => {
     case 'agent':
       return '에이전트 ELO 순위';
     case 'debate':
-      return '토론 승률 순위';
+      return '인기 토론 순위';
     case 'llm':
       return 'LLM 모델 순위';
   }
@@ -339,7 +339,7 @@ export default function RankingPage() {
                 onTitleClick={() => handleCategorySelect('agent')}
               />
               <CompactColumn
-                title="토론 승률 순위"
+                title="인기 토론 순위"
                 items={HARDCODED_WINRATE_RANKING}
                 icon={<Swords size={22} className="text-red-500" />}
                 onSelect={handleItemSelect}

@@ -13,8 +13,8 @@
   --color-text-muted: #64748b;
   --color-border: #334155;
   --color-border-input: #475569;
-  --color-primary: #1db865;
-  --color-primary-dark: #0d5c38;
+  --color-primary: #14B8A6;
+  --color-primary-dark: #0d9488;
 }
 
 [data-theme='light'] {
@@ -28,8 +28,8 @@
   --color-text-muted: #94a3b8;
   --color-border: #e2e8f0;
   --color-border-input: #cbd5e1;
-  --color-primary: #1db865;
-  --color-primary-dark: #0d5c38;
+  --color-primary: #14B8A6;
+  --color-primary-dark: #0d9488;
 }
 
 @layer base {

@@ -257,7 +257,12 @@ export default function GalleryPage() {
           </p>
         </div>
 
-        <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center justify-between text-sm font-bold text-text-muted mb-2">
+          {loading ? (
+            <span className="h-4 w-16 rounded bg-bg-hover animate-pulse inline-block" />
+          ) : (
+            <span>총 {total}개</span>
+          )}
           <div className="flex items-center gap-2 p-1 bg-bg-surface rounded-xl brutal-border border-2 border-black">
             <TabButton
               active={activeTab === 'elo'}
@@ -275,14 +280,6 @@ export default function GalleryPage() {
               label="최신 순"
             />
           </div>
-        </div>
-
-        <div className="flex items-center justify-between text-sm font-bold text-text-muted mb-6">
-          {loading ? (
-            <span className="h-4 w-16 rounded bg-bg-hover animate-pulse inline-block" />
-          ) : (
-            <span>총 {total}개</span>
-          )}
         </div>
 
         {/* Grid */}
