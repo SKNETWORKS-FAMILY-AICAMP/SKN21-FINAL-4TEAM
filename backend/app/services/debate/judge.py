@@ -132,9 +132,14 @@ class DebateJudge:
     Stage 2: 분석 결과 기반 JSON 채점
     """
 
-    def __init__(self, client: "InferenceClient | None" = None) -> None:
+    def __init__(
+        self,
+        client: "InferenceClient | None" = None,
+        judge_model_override: str | None = None,
+    ) -> None:
         self._owns_client = client is None
         self.client = client if client is not None else InferenceClient()
+        self.judge_model_override = judge_model_override
 
     async def aclose(self) -> None:
         """소유한 InferenceClient를 닫는다. 외부 주입 클라이언트는 닫지 않는다."""
@@ -148,16 +153,25 @@ class DebateJudge:
         topic: DebateTopic,
         agent_a_name: str = "에이전트 A",
         agent_b_name: str = "에이전트 B",
+        trace_id: str | None = None,
+        orchestration_mode: str | None = None,
     ) -> dict:
         """LLM으로 토론 판정. 스코어카드 dict 반환."""
-        model_id = settings.debate_judge_model or settings.debate_orchestrator_model
+        model_id = self.judge_model_override or settings.debate_judge_model or settings.debate_orchestrator_model
         if not model_id:
             raise ValueError(
                 "judge 모델 미설정: DEBATE_JUDGE_MODEL 또는 DEBATE_ORCHESTRATOR_MODEL "
                 "환경 변수를 설정하세요. 모델 미설정 시 silent draw가 발생해 ELO 변동이 누락됩니다."
             )
         return await self._judge_with_model(
-            match, turns, topic, agent_a_name, agent_b_name, model_id=model_id,
+            match,
+            turns,
+            topic,
+            agent_a_name,
+            agent_b_name,
+            model_id=model_id,
+            trace_id=trace_id,
+            orchestration_mode=orchestration_mode,
         )
 
     async def _judge_with_model(
@@ -168,6 +182,8 @@ class DebateJudge:
         agent_a_name: str,
         agent_b_name: str,
         model_id: str,
+        trace_id: str | None = None,
+        orchestration_mode: str | None = None,
     ) -> dict:
         """지정된 model_id로 2-stage LLM 판정을 수행하고 스코어카드·점수·승패를 반환한다.
 
@@ -181,6 +197,7 @@ class DebateJudge:
         judge_input_tokens = 0
         judge_output_tokens = 0
         raw_content = ""
+        fallback_reason: str | None = None
         try:
             # Stage 1: 서술형 분석 — 숫자/점수 없이 논거·반박·전략 강약점 서술
             analysis_messages = [
@@ -229,7 +246,13 @@ class DebateJudge:
             if not isinstance(scorecard.get("agent_a"), dict) or not isinstance(scorecard.get("agent_b"), dict):
                 raise ValueError("Invalid scorecard structure")
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
-            logger.error("Judge response parse error: %s | raw: %.500s", exc, raw_content)
+            logger.error(
+                "Judge response parse error | trace_id=%s mode=%s err=%s raw=%.500s",
+                trace_id,
+                orchestration_mode,
+                exc,
+                raw_content,
+            )
             # 파싱 실패 시 각 항목 최대값의 절반으로 균등 점수 (무승부 폴백)
             half_scores = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
             scorecard = {
@@ -237,16 +260,24 @@ class DebateJudge:
                 "agent_b": half_scores,
                 "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
             }
+            fallback_reason = "parse_error"
         except Exception as exc:
             # httpx.HTTPError, ConnectionError, asyncio.TimeoutError 등 네트워크 오류
             # 파싱 오류와 동일하게 무승부 폴백 처리 — 완료된 매치를 error로 전환하지 않음
-            logger.error("Judge request error: %s", exc, exc_info=True)
+            logger.error(
+                "Judge request error | trace_id=%s mode=%s err=%s",
+                trace_id,
+                orchestration_mode,
+                exc,
+                exc_info=True,
+            )
             half_scores = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
             scorecard = {
                 "agent_a": half_scores,
                 "agent_b": half_scores,
                 "reasoning": "판정 요청 오류로 인해 동점 처리되었습니다.",
             }
+            fallback_reason = "request_error"
         # Judge 반환 점수를 SCORING_CRITERIA 범위로 클램핑 — LLM 오버슈팅 방어
         for key, max_val in SCORING_CRITERIA.items():
             scorecard["agent_a"][key] = max(0, min(scorecard["agent_a"].get(key, 0), max_val))
@@ -274,6 +305,7 @@ class DebateJudge:
             "input_tokens": judge_input_tokens,
             "output_tokens": judge_output_tokens,
             "model_id": model_id,
+            "fallback_reason": fallback_reason,
         }
 
     def _format_debate_log(

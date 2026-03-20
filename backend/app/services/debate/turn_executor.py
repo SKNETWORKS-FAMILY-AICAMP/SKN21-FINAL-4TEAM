@@ -46,6 +46,7 @@ class TurnExecutor:
         my_claims: list[str],
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
+        event_meta: dict | None = None,
     ) -> DebateTurnLog:
         """단일 턴을 실행하고 DB에 기록한다.
 
@@ -137,11 +138,14 @@ class TurnExecutor:
                 }
 
                 # local 에이전트도 프론트 타이핑 애니메이션 활성화 — claim 전체를 단일 chunk로 발행
-                await publish_event(str(match.id), "turn_chunk", {
+                chunk_payload = {
                     "turn_number": turn_number,
                     "speaker": speaker,
                     "chunk": json.dumps({"action": action, "claim": claim}, ensure_ascii=False),
-                })
+                }
+                if event_meta:
+                    chunk_payload.update(event_meta)
+                await publish_event(str(match.id), "turn_chunk", chunk_payload)
 
             else:
                 # 스트리밍 BYOK — 토큰별로 turn_chunk 이벤트 발행
@@ -163,11 +167,14 @@ class TurnExecutor:
                         temperature=0.7,
                     ):
                         full_text += chunk
-                        await publish_event(str(match.id), "turn_chunk", {
+                        chunk_payload = {
                             "turn_number": turn_number,
                             "speaker": speaker,
                             "chunk": chunk,
-                        })
+                        }
+                        if event_meta:
+                            chunk_payload.update(event_meta)
+                        await publish_event(str(match.id), "turn_chunk", chunk_payload)
 
                 elapsed = time.monotonic() - start_time
                 response_time_ms = int(elapsed * 1000)
@@ -248,6 +255,7 @@ class TurnExecutor:
         my_claims: list[str],
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
+        event_meta: dict | None = None,
     ) -> DebateTurnLog | None:
         """재시도 로직을 포함한 턴 실행. 모든 재시도 실패 시 None을 반환한다.
 
@@ -278,6 +286,7 @@ class TurnExecutor:
                     match, topic, turn_number, speaker,
                     agent, version, api_key, my_claims, opponent_claims,
                     my_accumulated_penalty=my_accumulated_penalty,
+                    event_meta=event_meta,
                 )
             except APIKeyError as exc:
                 if attempt == 0:

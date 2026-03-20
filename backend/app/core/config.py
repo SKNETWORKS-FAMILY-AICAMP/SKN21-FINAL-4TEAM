@@ -123,6 +123,8 @@ class Settings(BaseSettings):
     debate_orchestrator_optimized: bool = True      # 최적화 오케스트레이터 활성화 (모델 분리 + 병렬 실행)
     debate_turn_max_retries: int = 2                # 발언 실패(타임아웃·에러) 시 재시도 횟수
     debate_series_max_draws: int = 3                # 시리즈 무승부 최대 허용 횟수 (초과 시 자동 만료)
+    debate_orchestration_mode: str = "balanced"     # 오케스트레이션 모드 라벨 (speed|balanced|quality)
+    debate_trace_events_enabled: bool = True        # SSE payload trace_id/orchestration_mode 부착 여부
 
     # 판정 규칙
     debate_draw_threshold: int = 1                  # 승패 판정 최소 점수차 (미만이면 무승부)
@@ -131,6 +133,9 @@ class Settings(BaseSettings):
     debate_judge_temperature: float = 0.2           # 최종 판정 LLM temperature
     debate_prediction_cutoff_turns: int = 2         # 예측투표 가능 최대 턴 수 (초과 시 마감)
     debate_ready_countdown_seconds: int = 10        # 첫 준비 완료 후 자동매치 카운트다운 (초)
+    debate_review_model_candidate: str = ""         # 검토 모델 실험군 후보 (빈 문자열이면 비활성)
+    debate_judge_model_candidate: str = ""          # 판정 모델 실험군 후보 (빈 문자열이면 비활성)
+    debate_model_rollout_ratio: float = 0.0         # 실험군 비율(0.0~1.0), match_id 해시 기반 결정
 
     # 시즌 보상 크레딧
     debate_season_reward_top3: list[int] = [500, 300, 200]  # 1~3위 보상 (인덱스=순위-1)

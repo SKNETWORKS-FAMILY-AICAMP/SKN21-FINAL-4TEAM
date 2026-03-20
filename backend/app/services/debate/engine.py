@@ -19,6 +19,7 @@ from app.models.token_usage_log import TokenUsageLog
 from app.models.user import User
 from app.schemas.debate_ws import WSMatchReady
 from app.services.debate.broadcast import publish_event
+from app.services.debate.control_plane import OrchestrationControlPlane
 from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.finalizer import MatchFinalizer
 from app.services.debate.forfeit import ForfeitError, ForfeitHandler
@@ -104,6 +105,7 @@ async def _execute_turn_with_retry(
     my_claims: list[str],
     opponent_claims: list[str],
     my_accumulated_penalty: int = 0,
+    event_meta: dict | None = None,
 ) -> DebateTurnLog | None:
     """TurnExecutor.execute_with_retry 래퍼 — 테스트 import 경로 유지."""
     executor = TurnExecutor(client, db)
@@ -111,6 +113,7 @@ async def _execute_turn_with_retry(
         match, topic, turn_number, speaker,
         agent, version, api_key, my_claims, opponent_claims,
         my_accumulated_penalty=my_accumulated_penalty,
+        event_meta=event_meta,
     )
 
 
@@ -131,13 +134,14 @@ async def _run_turn_loop(
     model_cache: dict,
     usage_batch: list,
     parallel: bool,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> tuple[list[str], list[str], int, int]:
     """formats.run_turns_1v1 위임 래퍼 — 테스트 import 경로 유지."""
     executor = TurnExecutor(client, db)
     result = await run_turns_1v1(
         executor, orchestrator, db, match, topic,
         agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-        model_cache, usage_batch, parallel,
+        model_cache, usage_batch, parallel, control_plane,
     )
     return result.claims_a, result.claims_b, result.total_penalty_a, result.total_penalty_b
 

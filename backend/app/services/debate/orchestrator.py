@@ -116,11 +116,17 @@ class DebateOrchestrator:
     외부에서 InferenceClient를 주입받으면 커넥션 풀을 재사용하고 소유권은 갖지 않는다.
     """
 
-    def __init__(self, optimized: bool = True, client: "InferenceClient | None" = None) -> None:
+    def __init__(
+        self,
+        optimized: bool = True,
+        client: "InferenceClient | None" = None,
+        review_model_override: str | None = None,
+    ) -> None:
         # 외부에서 client를 주입받으면 커넥션 풀을 재사용하고 소유권은 갖지 않음
         self._owns_client = client is None
         self.client = client if client is not None else InferenceClient()
         self.optimized = optimized
+        self.review_model_override = review_model_override
 
     async def aclose(self) -> None:
         """소유한 InferenceClient를 닫는다. 외부 주입 클라이언트는 닫지 않는다."""
@@ -177,6 +183,7 @@ class DebateOrchestrator:
         output_tokens: int,
         skipped: bool | None = None,
         model_id: str = "",
+        fallback_reason: str | None = None,
     ) -> dict:
         """ReviewResult Pydantic 객체를 최종 결과 dict로 변환."""
         penalties: dict[str, int] = {}
@@ -207,6 +214,8 @@ class DebateOrchestrator:
         # skipped 플래그는 명시적으로 전달된 경우에만 포함
         if skipped is not None:
             result["skipped"] = skipped
+        if fallback_reason:
+            result["fallback_reason"] = fallback_reason
         return result
 
     async def review_turn(
@@ -219,13 +228,17 @@ class DebateOrchestrator:
         action: str,
         opponent_last_claim: str | None = None,
         recent_history: list[str] | None = None,  # 최근 2턴 요약 (순환논증·패턴 탐지용)
+        trace_id: str | None = None,
+        orchestration_mode: str | None = None,
     ) -> dict:
         """LLM으로 단일 턴 품질 검토. 위반 감지 + 벌점 산출 + 차단 여부 반환.
 
         실패 시 토론을 중단하지 않고 fallback dict를 반환한다.
         """
         # optimized 모드: 경량 review 모델 사용. 순차 모드: turn_review 모델 또는 기본 모델 사용.
-        if self.optimized:
+        if self.review_model_override:
+            model_id = self.review_model_override
+        elif self.optimized:
             model_id = settings.debate_review_model or settings.debate_orchestrator_model
         else:
             # 비활성 롤백 경로: DEBATE_ORCHESTRATOR_OPTIMIZED=false 로 다운그레이드 시 활성화
@@ -251,8 +264,15 @@ class DebateOrchestrator:
         # API 키 없으면 검토 불가 — 즉시 폴백
         api_key = _platform_api_key(_infer_provider(model_id))
         if not api_key:
-            logger.debug("review_turn skipped: no api_key configured for model=%s", model_id)
-            return self._review_fallback()
+            logger.warning(
+                "review_turn fallback(no_api_key) | trace_id=%s mode=%s turn=%s speaker=%s model=%s",
+                trace_id,
+                orchestration_mode,
+                turn_number,
+                speaker,
+                model_id,
+            )
+            return self._review_fallback("no_api_key")
 
         try:
             review, input_tokens, output_tokens = await self._call_review_llm(
@@ -265,22 +285,52 @@ class DebateOrchestrator:
             raise
         except TimeoutError:
             # debate_turn_review_timeout 초과 — 토론 진행을 막지 않도록 폴백
-            logger.warning("review_turn timeout for turn %d speaker=%s", turn_number, speaker)
-            return self._review_fallback()
+            logger.warning(
+                "review_turn fallback(timeout) | trace_id=%s mode=%s turn=%s speaker=%s model=%s",
+                trace_id,
+                orchestration_mode,
+                turn_number,
+                speaker,
+                model_id,
+            )
+            return self._review_fallback("timeout")
         except (json.JSONDecodeError, ValidationError) as exc:
             # JSON 형식 오류 또는 Pydantic 스키마 불일치 시 폴백
-            logger.warning("review_turn parse error: %s", exc)
-            return self._review_fallback()
+            logger.warning(
+                "review_turn fallback(parse_error) | trace_id=%s mode=%s turn=%s speaker=%s model=%s err=%s",
+                trace_id,
+                orchestration_mode,
+                turn_number,
+                speaker,
+                model_id,
+                exc,
+            )
+            return self._review_fallback("parse_error")
         except Exception as exc:
             # 네트워크 장애·API 에러 등 예기치 않은 실패 — 토론 중단 방지
-            logger.error("review_turn unexpected error: %s", exc)
-            return self._review_fallback()
+            logger.error(
+                "review_turn fallback(unexpected_error) | trace_id=%s mode=%s turn=%s speaker=%s model=%s err=%s",
+                trace_id,
+                orchestration_mode,
+                turn_number,
+                speaker,
+                model_id,
+                exc,
+            )
+            return self._review_fallback("unexpected_error")
 
         # optimized 모드에서는 skipped=False를 명시 — 관전자 UI에서 "검토됨" 표시용
         skipped = False if self.optimized else None
-        return self._build_review_result(review, input_tokens, output_tokens, skipped=skipped, model_id=model_id)
+        return self._build_review_result(
+            review,
+            input_tokens,
+            output_tokens,
+            skipped=skipped,
+            model_id=model_id,
+            fallback_reason=None,
+        )
 
-    def _review_fallback(self) -> dict:
+    def _review_fallback(self, reason: str = "review_unavailable") -> dict:
         """검토 실패 시 토론을 중단하지 않기 위한 안전 폴백."""
         return {
             "logic_score": 5,
@@ -293,6 +343,7 @@ class DebateOrchestrator:
             "input_tokens": 0,
             "output_tokens": 0,
             "model_id": "",
+            "fallback_reason": reason,
         }
 
 

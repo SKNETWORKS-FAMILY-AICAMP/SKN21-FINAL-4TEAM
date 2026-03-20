@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,9 @@ from app.services.debate.orchestrator import DebateOrchestrator
 from app.services.debate.turn_executor import TurnExecutor
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.services.debate.control_plane import OrchestrationControlPlane
 
 
 @dataclass
@@ -51,7 +55,12 @@ class TurnLoopResult:
 
 # ── 이벤트 발행 헬퍼 ──────────────────────────────────────────────────────────
 
-async def _publish_turn_event(match_id: str, turn: DebateTurnLog, review_result=None) -> None:
+async def _publish_turn_event(
+    match_id: str,
+    turn: DebateTurnLog,
+    review_result=None,
+    event_meta: dict | None = None,
+) -> None:
     """턴 완료 SSE 이벤트를 발행한다.
 
     Args:
@@ -59,7 +68,7 @@ async def _publish_turn_event(match_id: str, turn: DebateTurnLog, review_result=
         turn: 완료된 턴 로그 (DB 플러시 완료 상태).
         review_result: LLM 검토 결과 dict. None이면 review_result 필드를 null로 발행.
     """
-    await publish_event(match_id, "turn", {
+    payload = {
         "turn_number": turn.turn_number,
         "speaker": turn.speaker,
         "action": turn.action,
@@ -72,10 +81,20 @@ async def _publish_turn_event(match_id: str, turn: DebateTurnLog, review_result=
         "output_tokens": turn.output_tokens,
         "is_blocked": turn.is_blocked,
         "review_result": review_result,
-    })
+    }
+    if event_meta:
+        payload.update(event_meta)
+    await publish_event(match_id, "turn", payload)
 
 
-async def _publish_review_event(match_id: str, turn_number: int, speaker: str, review: dict) -> None:
+async def _publish_review_event(
+    match_id: str,
+    turn_number: int,
+    speaker: str,
+    review: dict,
+    event_meta: dict | None = None,
+    fallback_reason: str | None = None,
+) -> None:
     """리뷰 결과 SSE 이벤트를 발행한다.
 
     Args:
@@ -84,14 +103,19 @@ async def _publish_review_event(match_id: str, turn_number: int, speaker: str, r
         speaker: 발언자 ('agent_a' | 'agent_b' | 슬롯 레이블).
         review: DebateOrchestrator.review_turn()이 반환한 결과 dict.
     """
-    await publish_event(match_id, "turn_review", {
+    payload = {
         "turn_number": turn_number,
         "speaker": speaker,
         "logic_score": review["logic_score"],
         "violations": review["violations"],
         "feedback": review["feedback"],
         "blocked": review["block"],
-    })
+    }
+    if fallback_reason:
+        payload["fallback_reason"] = fallback_reason
+    if event_meta:
+        payload.update(event_meta)
+    await publish_event(match_id, "turn_review", payload)
 
 
 # ── 리뷰 결과 반영 헬퍼 ───────────────────────────────────────────────────────
@@ -220,6 +244,7 @@ async def run_turns_1v1(
     model_cache: dict,
     usage_batch: list,
     parallel: bool,
+    control_plane: "OrchestrationControlPlane | None" = None,
 ) -> TurnLoopResult:
     """1v1 포맷 턴 루프 진입점.
 
@@ -256,13 +281,13 @@ async def run_turns_1v1(
         total_penalty_a, total_penalty_b = await _run_parallel_turns(
             executor, orchestrator, db, match, topic,
             agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-            claims_a, claims_b, model_cache, usage_batch,
+            claims_a, claims_b, model_cache, usage_batch, control_plane=control_plane,
         )
     else:
         total_penalty_a, total_penalty_b = await _run_sequential_turns(
             executor, orchestrator, db, match, topic,
             agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-            claims_a, claims_b, model_cache, usage_batch,
+            claims_a, claims_b, model_cache, usage_batch, control_plane=control_plane,
         )
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)
@@ -284,6 +309,7 @@ async def _run_parallel_turns(
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
+    control_plane: "OrchestrationControlPlane | None" = None,
 ) -> tuple[int, int]:
     """롤링 병렬 패턴 턴 루프.
 
@@ -343,13 +369,33 @@ async def _run_parallel_turns(
                     review_prev_b["input_tokens"], review_prev_b["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
                 )
-                await _publish_review_event(str(match.id), prev_b_turn_num, "agent_b", review_prev_b)
+                fallback_reason = review_prev_b.get("fallback_reason")
+                if control_plane and fallback_reason:
+                    control_plane.mark_fallback(
+                        fallback_reason,
+                        stage="review",
+                        turn_number=prev_b_turn_num,
+                        speaker="agent_b",
+                    )
+                await _publish_review_event(
+                    str(match.id),
+                    prev_b_turn_num,
+                    "agent_b",
+                    review_prev_b,
+                    event_meta=control_plane.event_meta(
+                        turn_number=prev_b_turn_num,
+                        speaker="agent_b",
+                        fallback_reason=fallback_reason,
+                    ) if control_plane else None,
+                    fallback_reason=fallback_reason,
+                )
 
         # Agent A 턴
         turn_a = await executor.execute_with_retry(
             match, topic, turn_num, "agent_a",
             agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
         )
         if turn_a is None:
             raise ForfeitError(forfeited_speaker="agent_a")
@@ -360,7 +406,12 @@ async def _run_parallel_turns(
 
         # ★ gather 전에 A turn 이벤트 먼저 발행 — B 스트리밍이 pendingStreamingTurn
         # 없이 바로 streamingTurn으로 표시되도록 순서 보장.
-        await _publish_turn_event(str(match.id), turn_a, review_result=None)
+        await _publish_turn_event(
+            str(match.id),
+            turn_a,
+            review_result=None,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
+        )
 
         if settings.debate_turn_review_enabled:
             # A 검토를 백그라운드 태스크로 시작 — B 실행과 병렬로 진행
@@ -374,6 +425,8 @@ async def _run_parallel_turns(
                     action=turn_a.action,
                     opponent_last_claim=claims_b[-1] if claims_b else None,
                     recent_history=claims_a[-2:] if claims_a else None,
+                    trace_id=control_plane.runtime.trace_id if control_plane else None,
+                    orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
             )
 
@@ -382,6 +435,7 @@ async def _run_parallel_turns(
                 match, topic, turn_num, "agent_b",
                 agent_b, version_b, api_key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
             if turn_b is None:
                 raise ForfeitError(forfeited_speaker="agent_b")
@@ -391,7 +445,12 @@ async def _run_parallel_turns(
             claims_b.append(turn_b.claim)
 
             # ★ B 턴 이벤트 즉시 발행 — A 검토 완료를 기다리지 않으므로 스트리밍 지연 없음
-            await _publish_turn_event(str(match.id), turn_b, review_result=None)
+            await _publish_turn_event(
+                str(match.id),
+                turn_b,
+                review_result=None,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
+            )
 
             # ★ B 리뷰를 백그라운드 태스크로 시작 — 다음 턴 A 실행과 병렬로 진행
             prev_b_review_task = asyncio.create_task(
@@ -404,6 +463,8 @@ async def _run_parallel_turns(
                     action=turn_b.action,
                     opponent_last_claim=claims_a[-1] if claims_a else None,
                     recent_history=claims_b[-2:] if claims_b else None,
+                    trace_id=control_plane.runtime.trace_id if control_plane else None,
+                    orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
             )
             prev_turn_b = turn_b
@@ -428,7 +489,23 @@ async def _run_parallel_turns(
                 review_a["input_tokens"], review_a["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
             )
-            await _publish_review_event(str(match.id), turn_num, "agent_a", review_a)
+            fallback_reason = review_a.get("fallback_reason")
+            if control_plane and fallback_reason:
+                control_plane.mark_fallback(
+                    fallback_reason,
+                    stage="review",
+                    turn_number=turn_num,
+                    speaker="agent_a",
+                )
+            await _publish_review_event(
+                str(match.id),
+                turn_num,
+                "agent_a",
+                review_a,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason)
+                if control_plane else None,
+                fallback_reason=fallback_reason,
+            )
         else:
             # 리뷰 비활성: B 순차 실행
             b_exec_start = time.monotonic()
@@ -436,13 +513,18 @@ async def _run_parallel_turns(
                 match, topic, turn_num, "agent_b",
                 agent_b, version_b, api_key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
             turn_elapsed = time.monotonic() - b_exec_start
             if turn_b is None:
                 raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
             claims_b.append(turn_b.claim)
-            await _publish_turn_event(str(match.id), turn_b)
+            await _publish_turn_event(
+                str(match.id),
+                turn_b,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
+            )
 
         # 라운드 사이 딜레이 (마지막 제외)
         if turn_num < topic.max_turns:
@@ -470,7 +552,26 @@ async def _run_parallel_turns(
                 review_last_b["input_tokens"], review_last_b["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
             )
-            await _publish_review_event(str(match.id), prev_b_turn_num, "agent_b", review_last_b)
+            fallback_reason = review_last_b.get("fallback_reason")
+            if control_plane and fallback_reason:
+                control_plane.mark_fallback(
+                    fallback_reason,
+                    stage="review",
+                    turn_number=prev_b_turn_num,
+                    speaker="agent_b",
+                )
+            await _publish_review_event(
+                str(match.id),
+                prev_b_turn_num,
+                "agent_b",
+                review_last_b,
+                event_meta=control_plane.event_meta(
+                    turn_number=prev_b_turn_num,
+                    speaker="agent_b",
+                    fallback_reason=fallback_reason,
+                ) if control_plane else None,
+                fallback_reason=fallback_reason,
+            )
 
     return total_penalty_a, total_penalty_b
 
@@ -491,6 +592,7 @@ async def _run_sequential_turns(
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
+    control_plane: "OrchestrationControlPlane | None" = None,
 ) -> tuple[int, int]:
     """순차 턴 루프. DEBATE_ORCHESTRATOR_OPTIMIZED=false 시 또는 롤백 경로에서 사용.
 
@@ -529,6 +631,7 @@ async def _run_sequential_turns(
             match, topic, turn_num, "agent_a",
             agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
         )
         if turn_a is None:
             raise ForfeitError(forfeited_speaker="agent_a")
@@ -545,6 +648,8 @@ async def _run_sequential_turns(
                 action=turn_a.action,
                 opponent_last_claim=claims_b[-1] if claims_b else None,
                 recent_history=claims_a[-2:] if claims_a else None,
+                trace_id=control_plane.runtime.trace_id if control_plane else None,
+                orchestration_mode=control_plane.runtime.mode if control_plane else None,
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -561,9 +666,30 @@ async def _run_sequential_turns(
             review_elapsed = 0.0
             claims_a.append(turn_a.claim)
 
-        await _publish_turn_event(str(match.id), turn_a, turn_a.review_result)
+        await _publish_turn_event(
+            str(match.id),
+            turn_a,
+            turn_a.review_result,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
+        )
         if review_a is not None:
-            await _publish_review_event(str(match.id), turn_num, "agent_a", review_a)
+            fallback_reason = review_a.get("fallback_reason")
+            if control_plane and fallback_reason:
+                control_plane.mark_fallback(
+                    fallback_reason,
+                    stage="review",
+                    turn_number=turn_num,
+                    speaker="agent_a",
+                )
+            await _publish_review_event(
+                str(match.id),
+                turn_num,
+                "agent_a",
+                review_a,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason)
+                if control_plane else None,
+                fallback_reason=fallback_reason,
+            )
 
         # 관전 UX: 딜레이에서 검토 소요시간 차감
         remaining_delay = settings.debate_turn_delay_seconds - review_elapsed
@@ -575,6 +701,7 @@ async def _run_sequential_turns(
             match, topic, turn_num, "agent_b",
             agent_b, version_b, api_key_b, claims_b, claims_a,
             my_accumulated_penalty=total_penalty_b,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
         )
         if turn_b is None:
             raise ForfeitError(forfeited_speaker="agent_b")
@@ -591,6 +718,8 @@ async def _run_sequential_turns(
                 action=turn_b.action,
                 opponent_last_claim=claims_a[-1] if claims_a else None,
                 recent_history=claims_b[-2:] if claims_b else None,
+                trace_id=control_plane.runtime.trace_id if control_plane else None,
+                orchestration_mode=control_plane.runtime.mode if control_plane else None,
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -607,9 +736,30 @@ async def _run_sequential_turns(
             review_elapsed = 0.0
             claims_b.append(turn_b.claim)
 
-        await _publish_turn_event(str(match.id), turn_b, turn_b.review_result)
+        await _publish_turn_event(
+            str(match.id),
+            turn_b,
+            turn_b.review_result,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
+        )
         if review_b is not None:
-            await _publish_review_event(str(match.id), turn_num, "agent_b", review_b)
+            fallback_reason = review_b.get("fallback_reason")
+            if control_plane and fallback_reason:
+                control_plane.mark_fallback(
+                    fallback_reason,
+                    stage="review",
+                    turn_number=turn_num,
+                    speaker="agent_b",
+                )
+            await _publish_review_event(
+                str(match.id),
+                turn_num,
+                "agent_b",
+                review_b,
+                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b", fallback_reason=fallback_reason)
+                if control_plane else None,
+                fallback_reason=fallback_reason,
+            )
 
         # 라운드 사이 딜레이 (마지막 제외)
         if turn_num < topic.max_turns:
@@ -639,6 +789,7 @@ async def _run_multi_slot_turn(
     total_penalty: int,
     model_cache: dict,
     usage_batch: list,
+    control_plane: "OrchestrationControlPlane | None" = None,
 ) -> int:
     """멀티에이전트 슬롯 단일 턴: 실행 → 검토 → 이벤트 발행.
 
@@ -650,6 +801,7 @@ async def _run_multi_slot_turn(
         match, topic, turn_num, speaker_role,
         agent, version, api_key, my_claims, opp_claims,
         my_accumulated_penalty=total_penalty,
+        event_meta=control_plane.event_meta(turn_number=turn_num, speaker=speaker_label) if control_plane else None,
     )
     if turn is None:
         raise ForfeitError(forfeited_speaker=speaker_role)
@@ -665,6 +817,8 @@ async def _run_multi_slot_turn(
             action=turn.action,
             opponent_last_claim=opp_claims[-1] if opp_claims else None,
             recent_history=my_claims[-2:] if my_claims else None,
+            trace_id=control_plane.runtime.trace_id if control_plane else None,
+            orchestration_mode=control_plane.runtime.mode if control_plane else None,
         )
         total_penalty = _apply_review_to_turn(
             turn, review, my_claims, total_penalty, update_last_claim=False
@@ -674,14 +828,38 @@ async def _run_multi_slot_turn(
             review["input_tokens"], review["output_tokens"],
             model_cache=model_cache, usage_batch=usage_batch,
         )
-        await _publish_review_event(str(match.id), turn_num, speaker_label, review)
+        fallback_reason = review.get("fallback_reason")
+        if control_plane and fallback_reason:
+            control_plane.mark_fallback(
+                fallback_reason,
+                stage="review",
+                turn_number=turn_num,
+                speaker=speaker_label,
+            )
+        await _publish_review_event(
+            str(match.id),
+            turn_num,
+            speaker_label,
+            review,
+            event_meta=control_plane.event_meta(turn_number=turn_num, speaker=speaker_label, fallback_reason=fallback_reason)
+            if control_plane else None,
+            fallback_reason=fallback_reason,
+        )
     else:
         my_claims.append(turn.claim)
 
     # turn.speaker는 "agent_a"|"agent_b"이므로 슬롯 레이블로 오버라이드
-    await _publish_turn_event(str(match.id), turn, turn.review_result)
+    await _publish_turn_event(
+        str(match.id),
+        turn,
+        turn.review_result,
+        event_meta=control_plane.event_meta(turn_number=turn_num, speaker=speaker_label) if control_plane else None,
+    )
     # 슬롯 레이블을 별도 필드로 보완 (프론트엔드 멀티에이전트 구분용)
-    await publish_event(str(match.id), "turn_slot", {"speaker": speaker_label, "turn_number": turn_num})
+    slot_payload = {"speaker": speaker_label, "turn_number": turn_num}
+    if control_plane:
+        slot_payload.update(control_plane.event_meta(turn_number=turn_num, speaker=speaker_label))
+    await publish_event(str(match.id), "turn_slot", slot_payload)
 
     return total_penalty
 
@@ -698,6 +876,7 @@ async def run_turns_multi(
     agent_b: DebateAgent,
     model_cache: dict,
     usage_batch: list,
+    control_plane: "OrchestrationControlPlane | None" = None,
 ) -> TurnLoopResult:
     """멀티에이전트 턴 루프 (2v2/3v3 라운드 로빈).
 
@@ -782,13 +961,13 @@ async def run_turns_multi(
                 executor, orchestrator, db, match, topic, turn_num,
                 "agent_a", f"agent_a_slot{i}",
                 multi_agent_a, ver_a, api_key_a, claims_a, claims_b,
-                total_penalty_a, model_cache, usage_batch,
+                total_penalty_a, model_cache, usage_batch, control_plane=control_plane,
             )
             total_penalty_b = await _run_multi_slot_turn(
                 executor, orchestrator, db, match, topic, turn_num,
                 "agent_b", f"agent_b_slot{i}",
                 multi_agent_b, ver_b, api_key_b, claims_b, claims_a,
-                total_penalty_b, model_cache, usage_batch,
+                total_penalty_b, model_cache, usage_batch, control_plane=control_plane,
             )
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)
