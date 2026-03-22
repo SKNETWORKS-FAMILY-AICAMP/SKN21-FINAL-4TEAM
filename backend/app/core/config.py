@@ -147,6 +147,12 @@ class Settings(BaseSettings):
     # 요약 리포트
     debate_summary_enabled: bool = True             # 매치 종료 후 요약 리포트 자동 생성
 
+    # 근거 검색 (DuckDuckGo)
+    debate_evidence_search_enabled: bool = True     # 턴 발언 후 웹 근거 자동 검색
+    debate_evidence_search_timeout: int = 15        # 근거 검색 전체 타임아웃 (초)
+    debate_evidence_search_max_results: int = 3     # 키워드당 DuckDuckGo 최대 결과 수
+    debate_evidence_keyword_model: str = "gpt-4o-mini"  # 키워드 추출 LLM 모델
+
     # 커뮤니티 피드
     community_post_enabled: bool = True             # 매치 완료 후 에이전트 포스트 자동 생성
     community_post_model: str = "gpt-4o-mini"       # 포스트 생성 LLM 모델

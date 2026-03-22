@@ -21,10 +21,13 @@ from app.models.debate_turn_log import DebateTurnLog
 from app.models.llm_model import LLMModel
 from app.models.token_usage_log import TokenUsageLog
 from app.services.debate.broadcast import publish_event
+from app.services.debate.evidence_search import EvidenceResult, EvidenceSearchService
 from app.services.debate.forfeit import ForfeitError
 from app.services.debate.helpers import _resolve_api_key
 from app.services.debate.orchestrator import DebateOrchestrator
 from app.services.debate.turn_executor import TurnExecutor
+
+_evidence_service = EvidenceSearchService()
 
 logger = logging.getLogger(__name__)
 
@@ -344,11 +347,12 @@ async def _run_parallel_turns(
     total_penalty_b = 0
 
     prev_b_review_task: asyncio.Task | None = None
+    prev_b_evidence_task: asyncio.Task | None = None
     prev_turn_b: DebateTurnLog | None = None
     prev_b_turn_num: int = 0
 
     for turn_num in range(1, topic.max_turns + 1):
-        # ★ 롤링 병렬: 이전 턴의 B 리뷰 결과를 A 실행 시작 전에 수집
+        # ★ 롤링 병렬: 이전 턴의 B 리뷰 + 근거 검색 결과를 A 실행 시작 전에 수집
         if settings.debate_turn_review_enabled and prev_b_review_task is not None:
             try:
                 review_prev_b = await prev_b_review_task
@@ -356,6 +360,22 @@ async def _run_parallel_turns(
                 logger.error("B review task failed: %s — using fallback", exc)
                 review_prev_b = orchestrator._review_fallback()
             prev_b_review_task = None
+
+            # B evidence 수집 (review와 함께 이미 대부분 완료됨)
+            if prev_b_evidence_task is not None and prev_turn_b is not None:
+                try:
+                    evidence_b = await prev_b_evidence_task
+                    if isinstance(evidence_b, EvidenceResult):
+                        prev_turn_b.evidence = evidence_b.format()
+                        await db.flush()
+                        await publish_event(str(match.id), "turn_evidence_patch", {
+                            "turn_number": prev_b_turn_num,
+                            "speaker": "agent_b",
+                            "evidence": prev_turn_b.evidence,
+                        })
+                except Exception as exc:
+                    logger.warning("B evidence task failed: %s", exc)
+                prev_b_evidence_task = None
 
             if prev_turn_b is None:
                 logger.error("prev_turn_b unexpectedly None at turn %d, skipping B review", turn_num)
@@ -398,6 +418,9 @@ async def _run_parallel_turns(
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
         )
         if turn_a is None:
+            for _t in [prev_b_review_task, prev_b_evidence_task]:
+                if _t and not _t.done():
+                    _t.cancel()
             raise ForfeitError(forfeited_speaker="agent_a")
         total_penalty_a += turn_a.penalty_total
 
@@ -429,6 +452,10 @@ async def _run_parallel_turns(
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
             )
+            # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
+            evidence_a_task: asyncio.Task | None = asyncio.create_task(
+                _evidence_service.search(turn_a.claim)
+            ) if turn_a.claim else None
 
             # B 실행 (A 검토와 병렬)
             turn_b = await executor.execute_with_retry(
@@ -438,6 +465,9 @@ async def _run_parallel_turns(
                 event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
             if turn_b is None:
+                for _t in [prev_b_review_task, prev_b_evidence_task]:
+                    if _t and not _t.done():
+                        _t.cancel()
                 raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
 
@@ -467,16 +497,34 @@ async def _run_parallel_turns(
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
             )
+            # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
+            prev_b_evidence_task = asyncio.create_task(
+                _evidence_service.search(turn_b.claim)
+            ) if turn_b.claim else None
             prev_turn_b = turn_b
             prev_b_turn_num = turn_num
 
-            # A 검토 완료 대기 (B 실행 동안 이미 상당 부분 진행됨)
+            # A 검토 + 근거 검색 완료 대기 (B 실행 동안 이미 상당 부분 진행됨)
             review_start = time.monotonic()
             try:
                 review_a = await review_a_task
             except Exception as exc:
                 logger.error("A review task failed: %s — using fallback", exc)
                 review_a = orchestrator._review_fallback()
+            if evidence_a_task is not None:
+                try:
+                    evidence_a = await evidence_a_task
+                    if isinstance(evidence_a, EvidenceResult):
+                        turn_a.evidence = evidence_a.format()
+                        await db.flush()
+                        await publish_event(str(match.id), "turn_evidence_patch", {
+                            "turn_number": turn_num,
+                            "speaker": "agent_a",
+                            "evidence": turn_a.evidence,
+                        })
+                except Exception as exc:
+                    logger.warning("A evidence task failed: %s", exc)
+                evidence_a_task = None
             turn_elapsed = time.monotonic() - review_start
 
             # A 검토 결과 반영 (차단 시 claims_a 마지막 항목 패치)

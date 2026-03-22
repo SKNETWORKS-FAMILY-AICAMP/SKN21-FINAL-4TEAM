@@ -138,14 +138,17 @@ class TurnExecutor:
                 }
 
                 # local 에이전트도 프론트 타이핑 애니메이션 활성화 — claim 전체를 단일 chunk로 발행
+                # event_meta가 turn_number/speaker/chunk를 덮어쓰지 못하도록 역순 병합
                 chunk_payload = {
+                    **(event_meta or {}),
                     "turn_number": turn_number,
                     "speaker": speaker,
                     "chunk": json.dumps({"action": action, "claim": claim}, ensure_ascii=False),
                 }
-                if event_meta:
-                    chunk_payload.update(event_meta)
-                await publish_event(str(match.id), "turn_chunk", chunk_payload)
+                try:
+                    await publish_event(str(match.id), "turn_chunk", chunk_payload)
+                except Exception as pub_exc:
+                    logger.warning("SSE 발행 실패 (turn %d %s): %s", turn_number, speaker, pub_exc)
 
             else:
                 # 스트리밍 BYOK — 토큰별로 turn_chunk 이벤트 발행
@@ -167,14 +170,17 @@ class TurnExecutor:
                         temperature=0.7,
                     ):
                         full_text += chunk
+                        # event_meta가 turn_number/speaker/chunk를 덮어쓰지 못하도록 역순 병합
                         chunk_payload = {
+                            **(event_meta or {}),
                             "turn_number": turn_number,
                             "speaker": speaker,
                             "chunk": chunk,
                         }
-                        if event_meta:
-                            chunk_payload.update(event_meta)
-                        await publish_event(str(match.id), "turn_chunk", chunk_payload)
+                        try:
+                            await publish_event(str(match.id), "turn_chunk", chunk_payload)
+                        except Exception as pub_exc:
+                            logger.warning("SSE 발행 실패 (turn %d %s): %s", turn_number, speaker, pub_exc)
 
                 elapsed = time.monotonic() - start_time
                 response_time_ms = int(elapsed * 1000)
@@ -184,23 +190,7 @@ class TurnExecutor:
                 input_tokens = usage_out.get("input_tokens", 0)
                 output_tokens = usage_out.get("output_tokens", 0)
 
-                if usage_out.get("finish_reason") == "length":
-                    # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 파싱 가능하면 그대로 사용, 불가하면 원문 절삭
-                    if parsed is None:
-                        claim = response_text[:500]
-                        raw_response = {"raw": response_text}
-                    else:
-                        action = parsed["action"]
-                        claim = parsed["claim"]
-                        evidence = parsed.get("evidence")
-                        raw_response = {
-                            "action": parsed["action"],
-                            "claim": parsed["claim"],
-                            "evidence": parsed.get("evidence"),
-                            "tool_used": parsed.get("tool_used"),
-                            "tool_result": parsed.get("tool_result"),
-                        }
-                elif parsed is None:
+                if parsed is None:
                     # JSON 파싱 불가 또는 스키마 불일치 — 원문을 발언으로 사용
                     claim = response_text[:500]
                     raw_response = {"raw": response_text}
@@ -215,6 +205,10 @@ class TurnExecutor:
                         "tool_used": parsed.get("tool_used"),
                         "tool_result": parsed.get("tool_result"),
                     }
+                # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 메타 정보만 추가
+                if usage_out.get("finish_reason") == "length":
+                    if isinstance(raw_response, dict):
+                        raw_response["finish_reason"] = "length"
 
         except Exception:
             # TimeoutError 포함 모든 예외를 그대로 전파 — execute_with_retry가 재시도·부전패 처리
