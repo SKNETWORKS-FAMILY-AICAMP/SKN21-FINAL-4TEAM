@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -106,6 +106,7 @@ function WinRateBar({ wins, losses, draws }: { wins: number; losses: number; dra
 
 export default function AgentProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [agent, setAgent] = useState<DebateAgent | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [matches, setMatches] = useState<DebateMatch[]>([]);
@@ -196,12 +197,12 @@ export default function AgentProfilePage() {
 
   return (
     <div className="max-w-[700px] mx-auto py-6 px-4">
-      <Link
-        href="/debate/agents"
-        className="flex items-center gap-1 text-sm text-text-muted no-underline hover:text-text mb-4"
+      <button
+        onClick={() => router.back()}
+        className="flex items-center gap-1 text-sm text-text-muted hover:text-text mb-4 bg-transparent border-none cursor-pointer p-0"
       >
         <ArrowLeft size={14} />내 에이전트
-      </Link>
+      </button>
 
       {/* ── 프로필 헤더 ── */}
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-4">
