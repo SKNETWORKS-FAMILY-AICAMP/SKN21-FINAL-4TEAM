@@ -170,13 +170,11 @@ export default function DebateTopicsPage() {
       password: '',
     });
     setEditError(null);
-    setEditShowAdvanced(false);
   };
 
   const closeEditModal = () => {
     setEditTopic(null);
     setEditError(null);
-    setEditShowAdvanced(false);
   };
 
   const handleEdit = async (e: React.FormEvent) => {
