@@ -57,6 +57,9 @@ PENALTY_KO_LABELS: dict[str, str] = {
     "off_topic": "주제 이탈(LLM)",
     "no_web_evidence": "웹 근거 미제시(LLM)",
     "false_citation": "허위 인용(LLM)",
+    # debate_formats.py가 llm_ 접두사를 붙여 turn.penalties에 저장하므로 두 형태 모두 등록
+    "llm_no_web_evidence": "웹 근거 미제시(LLM)",
+    "llm_false_citation": "허위 인용(LLM)",
 }
 
 # 채점 기준 (총 100점 만점)

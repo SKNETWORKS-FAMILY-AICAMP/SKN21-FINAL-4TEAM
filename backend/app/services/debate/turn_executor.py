@@ -232,6 +232,8 @@ class TurnExecutor:
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_calls[0]["id"],
+                            # name 포함 — Google _to_gemini_format()이 functionResponse name으로 사용
+                            "name": tool_calls[0]["function"]["name"],
                             "content": tool_result_content,
                         })
                         input_tokens += stage1.get("input_tokens", 0)
