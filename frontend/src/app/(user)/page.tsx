@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Swords, Plus, X, ChevronDown, Shuffle, Users, Clock, MessageSquare, Shield, Monitor, ShoppingCart, Trophy } from 'lucide-react';
+import { Swords, Plus, X, Shuffle, Users, Clock, MessageSquare, Shield, Monitor, ShoppingCart, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
@@ -86,7 +86,6 @@ export default function DebateTopicsPage() {
   const [form, setForm] = useState(defaultForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // 랜덤 매칭 모달
   const [showRandomModal, setShowRandomModal] = useState(false);
@@ -99,7 +98,6 @@ export default function DebateTopicsPage() {
   const [editForm, setEditForm] = useState(defaultForm);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [editShowAdvanced, setEditShowAdvanced] = useState(false);
 
   // 초기 로드
   useEffect(() => {
@@ -538,76 +536,6 @@ export default function DebateTopicsPage() {
                 />
               </div>
 
-              {/* 고급 설정 토글 */}
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1 text-xs text-text-muted hover:text-text transition-colors bg-transparent border-none cursor-pointer"
-              >
-                <ChevronDown size={14} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-                고급 설정
-              </button>
-
-              {showAdvanced && (
-                <div className="border border-border rounded-xl p-3 bg-bg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
-                      <input
-                        type="number" min={2} max={20}
-                        value={form.max_turns}
-                        onChange={(e) => setForm({ ...form, max_turns: Number(e.target.value) })}
-                        className="input w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
-                      <input
-                        type="number" min={100} max={2000} step={100}
-                        value={form.turn_token_limit}
-                        onChange={(e) => setForm({ ...form, turn_token_limit: Number(e.target.value) })}
-                        className="input w-full"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-text">툴 사용 허용</p>
-                      <p className="text-[10px] text-text-muted">계산기, 주장 추적 등 보조 툴</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        form.tools_enabled ? 'bg-nemo' : 'bg-gray-400'
-                      }`}
-                    >
-                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        form.tools_enabled ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
-                  </div>
-                  <div>
-                    <label className="text-xs text-text-muted">활성화 시작 시간</label>
-                    <input
-                      type="datetime-local"
-                      value={form.scheduled_start_at ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, scheduled_start_at: e.target.value || null }))}
-                      className="input w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-text-muted">비활성화 종료 시간</label>
-                    <input
-                      type="datetime-local"
-                      value={form.scheduled_end_at ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, scheduled_end_at: e.target.value || null }))}
-                      className="input w-full"
-                    />
-                  </div>
-                </div>
-              )}
-
               {error && <p className="text-xs text-red-400">{error}</p>}
 
               <div className="flex gap-2 pt-1">
@@ -739,75 +667,6 @@ export default function DebateTopicsPage() {
                   ))}
                 </select>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setEditShowAdvanced(!editShowAdvanced)}
-                className="flex items-center gap-1 text-xs text-text-muted hover:text-text transition-colors bg-transparent border-none cursor-pointer"
-              >
-                <ChevronDown size={14} className={`transition-transform ${editShowAdvanced ? 'rotate-180' : ''}`} />
-                고급 설정
-              </button>
-
-              {editShowAdvanced && (
-                <div className="border border-border rounded-xl p-3 bg-bg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
-                      <input
-                        type="number" min={2} max={20}
-                        value={editForm.max_turns}
-                        onChange={(e) => setEditForm({ ...editForm, max_turns: Number(e.target.value) })}
-                        className="input w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
-                      <input
-                        type="number" min={100} max={2000} step={100}
-                        value={editForm.turn_token_limit}
-                        onChange={(e) => setEditForm({ ...editForm, turn_token_limit: Number(e.target.value) })}
-                        className="input w-full"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-text">툴 사용 허용</p>
-                      <p className="text-[10px] text-text-muted">계산기, 주장 추적 등 보조 툴</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        editForm.tools_enabled ? 'bg-nemo' : 'bg-gray-400'
-                      }`}
-                    >
-                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        editForm.tools_enabled ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
-                  </div>
-                  <div>
-                    <label className="text-xs text-text-muted">활성화 시작 시간</label>
-                    <input
-                      type="datetime-local"
-                      value={editForm.scheduled_start_at ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, scheduled_start_at: e.target.value || null }))}
-                      className="input w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-text-muted">비활성화 종료 시간</label>
-                    <input
-                      type="datetime-local"
-                      value={editForm.scheduled_end_at ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, scheduled_end_at: e.target.value || null }))}
-                      className="input w-full"
-                    />
-                  </div>
-                </div>
-              )}
 
               {editError && <p className="text-xs text-red-400">{editError}</p>}
 
