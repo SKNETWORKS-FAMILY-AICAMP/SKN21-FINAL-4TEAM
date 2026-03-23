@@ -71,12 +71,12 @@ def _calculate_required_credits(
     """
     model = models_map.get(agent.model_id)
     if model is None:
-        logger.warning(
-            "Model %s not found in llm_models for agent %s — falling back to credit_per_1k=1",
-            agent.model_id, agent.id,
+        raise ValueError(
+            f"Model '{agent.model_id}' not found in llm_models — "
+            f"cannot calculate required credits for agent {agent.id}. "
+            "Register the model in llm_models table or disable credit system."
         )
-    credit_per_1k = model.credit_per_1k_tokens if model else 1
-    return math.ceil(max_turns * turn_token_limit * 1.5 * credit_per_1k / 1000)
+    return math.ceil(max_turns * turn_token_limit * settings.debate_credit_buffer_ratio * model.credit_per_1k_tokens / 1000)
 
 
 class CreditInsufficientError(Exception):
@@ -164,10 +164,11 @@ class DebateEngine:
         await self._wait_for_local_agents(match, topic, agent_a, agent_b)
 
         if match.status == "forfeit":
-            # 로컬 에이전트 접속 실패로 몰수패 처리된 경우
+            # 로컬 에이전트 접속 실패로 몰수패 처리 — 선차감 크레딧 환불 후 종료
+            await self._refund_credits(match)
             return
 
-        use_platform = getattr(match, "is_test", False)
+        use_platform = match.is_test
         api_key_a = _resolve_api_key(agent_a, force_platform=use_platform)
         api_key_b = _resolve_api_key(agent_b, force_platform=use_platform)
 
@@ -200,12 +201,11 @@ class DebateEngine:
         if match is None:
             raise ValueError(f"Match {match_id} not found")
 
-        # topic + agents 병렬 조회 — match 로드 후 id가 확정되므로 gather 가능
-        topic_fut = self.db.execute(select(DebateTopic).where(DebateTopic.id == match.topic_id))
-        agents_fut = self.db.execute(
+        # SQLAlchemy AsyncSession은 동시 await를 허용하지 않으므로 순차 조회
+        topic_result = await self.db.execute(select(DebateTopic).where(DebateTopic.id == match.topic_id))
+        agents_res = await self.db.execute(
             select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
-        topic_result, agents_res = await asyncio.gather(topic_fut, agents_fut)
 
         topic = topic_result.scalar_one_or_none()
         if topic is None:
@@ -343,49 +343,50 @@ class DebateEngine:
                 })
                 # credit_insufficient SSE를 이미 발행했으므로 error SSE 재발행 방지용 전용 예외
                 raise CreditInsufficientError(message)
+            # 차감 성공 시 누적 기록 — _refund_credits가 이 값을 참조해 환불 금액을 결정한다
+            match.credits_deducted = (match.credits_deducted or 0) + required
 
         await self.db.commit()
 
-    async def _void_match(self, db: AsyncSession, match: DebateMatch, reason: str) -> None:
+    async def _void_match(self, match: DebateMatch, reason: str) -> None:
         """매치를 error 상태로 전환하고 SSE로 알린다.
 
         Args:
-            db: 비동기 DB 세션.
             match: 상태를 변경할 매치 객체.
             reason: error 사유 문자열 (match_void SSE 페이로드에 포함).
         """
         match.status = "error"
         match.error_reason = reason
-        await db.commit()
+        await self.db.commit()
         await publish_event(str(match.id), "match_void", {"reason": reason})
 
-    async def _refund_credits(self, db: AsyncSession, match: DebateMatch) -> None:
+    async def _refund_credits(self, match: DebateMatch) -> None:
         """선차감 크레딧을 두 참가자에게 자동 환불한다.
 
         match.credits_deducted가 0이거나 None이면 즉시 반환.
         use_platform_credits=True인 에이전트 소유자들에게만 균등 환불.
+        credits_deducted는 _deduct_credits()에서 차감 시 누적 기록되므로 이 값이 신뢰할 수 있다.
 
         Args:
-            db: 비동기 DB 세션.
             match: 환불 대상 매치. credits_deducted 필드를 참조한다.
         """
         if not match.credits_deducted:
             return
         refund = match.credits_deducted / 2
         # agent_a_id, agent_b_id를 통해 owner_id를 가져와 균등 환불
-        agents_res = await db.execute(
+        agents_res = await self.db.execute(
             select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
         agents = agents_res.scalars().all()
         owner_ids = list({a.owner_id for a in agents if a.use_platform_credits})
         if not owner_ids:
             return
-        await db.execute(
+        await self.db.execute(
             update(User)
             .where(User.id.in_(owner_ids))
             .values(credit_balance=User.credit_balance + refund)
         )
-        await db.commit()
+        await self.db.commit()
 
     async def _run_with_client(
         self,
@@ -438,11 +439,12 @@ class DebateEngine:
                     agent_a, agent_b, model_cache, usage_batch,
                 )
         except MatchVoidError as void_err:
-            await self._void_match(self.db, match, str(void_err))
-            await self._refund_credits(self.db, match)
+            await self._void_match(match, str(void_err))
+            await self._refund_credits(match)
             return
         except ForfeitError as forfeit:
             await ForfeitHandler(self.db).handle_retry_exhaustion(match, agent_a, agent_b, forfeit.forfeited_speaker)
+            await self._refund_credits(match)
             return
 
         match.penalty_a = loop_result.total_penalty_a
@@ -456,9 +458,14 @@ class DebateEngine:
         )
         turns = list(turns_res.scalars().all())
         judge_instance = DebateJudge(client=client)
-        judgment = await judge_instance.judge(
-            match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
-        )
+        try:
+            judgment = await judge_instance.judge(
+                match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name
+            )
+        except Exception as judge_exc:
+            logger.error("Judge failed for match %s: %s — voiding match", match.id, judge_exc, exc_info=True)
+            await self._void_match(match, f"judge_failed: {judge_exc}")
+            return
 
         finalizer = MatchFinalizer(self.db)
         await finalizer.finalize(
@@ -509,15 +516,20 @@ async def run_debate(match_id: str) -> None:
                 logger.error("Failed to mark match %s as error after credit failure", match_id)
         except asyncio.CancelledError:
             logger.warning("Debate task cancelled for match %s — marking as error", match_id)
-            try:
-                await asyncio.shield(db.rollback())
-                await asyncio.shield(db.execute(
+
+            async def _cleanup_cancelled() -> None:
+                await db.rollback()
+                await db.execute(
                     update(DebateMatch)
                     .where(DebateMatch.id == match_id)
                     .values(status="error", finished_at=datetime.now(UTC))
-                ))
-                await asyncio.shield(db.commit())
-                await asyncio.shield(publish_event(match_id, "error", {"message": "Match cancelled by server"}))
+                )
+                await db.commit()
+                await publish_event(match_id, "error", {"message": "Match cancelled by server"})
+
+            try:
+                # 단일 shield로 묶어 cleanup 전체가 원자적으로 실행되도록 보장
+                await asyncio.shield(_cleanup_cancelled())
             except Exception as cleanup_exc:
                 logger.error("Cleanup failed for cancelled match %s: %s", match_id, cleanup_exc)
             raise

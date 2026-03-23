@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     # 제한
     debate_daily_topic_limit: int = 5               # 사용자 일일 토픽 등록 최대 건수
     debate_credit_cost: int = 5                     # 매치 참가 시 차감 크레딧
+    debate_credit_buffer_ratio: float = 1.5         # 크레딧 선차감 버퍼 비율 (예상 토큰 × 배수)
 
     # LLM 모델
     debate_orchestrator_model: str = "gpt-4o"       # 기본 오케스트레이터 모델 (폴백용)
@@ -129,6 +130,7 @@ class Settings(BaseSettings):
     # 판정 규칙
     debate_draw_threshold: int = 1                  # 승패 판정 최소 점수차 (미만이면 무승부)
     debate_review_max_tokens: int = 2000            # 턴 검토 LLM max_tokens (gpt-5-nano reasoning 포함)
+    debate_judge_timeout_seconds: int = 120         # 판정 LLM 전체 응답 최대 대기 시간 (stage1+stage2 합산)
     debate_judge_max_tokens: int = 1024             # 최종 판정 LLM max_tokens
     debate_judge_temperature: float = 0.2           # 최종 판정 LLM temperature
     debate_prediction_cutoff_turns: int = 2         # 예측투표 가능 최대 턴 수 (초과 시 마감)

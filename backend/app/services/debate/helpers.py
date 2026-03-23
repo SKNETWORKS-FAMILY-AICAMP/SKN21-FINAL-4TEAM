@@ -185,7 +185,7 @@ def _build_messages(
     """
     side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
     tools_line = (
-        "툴 사용: 허용됨 (calculator, stance_tracker, opponent_summary, turn_info)"
+        "툴 사용: 허용됨 (web_search — 현재 주장을 뒷받침하는 웹 근거 검색)"
         if topic.tools_enabled
         else "툴 사용: 이 토론에서는 툴 사용이 금지되어 있습니다. tool_used는 반드시 null로 설정하세요."
     )
