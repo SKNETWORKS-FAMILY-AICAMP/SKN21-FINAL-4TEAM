@@ -512,7 +512,7 @@ export default function DebateTopicsPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-text-muted mb-1">토론 방식</label>
+                <label className="block text-xs text-text-muted mb-1">카테고리</label>
                 <select
                   value={form.mode}
                   onChange={(e) => setForm({ ...form, mode: e.target.value })}
@@ -656,7 +656,7 @@ export default function DebateTopicsPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-text-muted mb-1">토론 방식</label>
+                <label className="block text-xs text-text-muted mb-1">카테고리</label>
                 <select
                   value={editForm.mode}
                   onChange={(e) => setEditForm({ ...editForm, mode: e.target.value })}
