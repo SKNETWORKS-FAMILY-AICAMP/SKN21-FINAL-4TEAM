@@ -469,8 +469,8 @@ export default function DebateTopicsPage() {
       {/* ─── 주제 제안 모달 ─── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div>
                 <h2 className="font-bold text-text">토론 주제 제안</h2>
                 <p className="text-[11px] text-text-muted mt-0.5">누구나 토론 주제를 제안할 수 있어요</p>
@@ -480,7 +480,7 @@ export default function DebateTopicsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="p-5 space-y-4">
+            <form onSubmit={handleCreate} className="p-5 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs text-text-muted mb-1">
                   주제 제목 <span className="text-red-400">*</span>
@@ -685,8 +685,8 @@ export default function DebateTopicsPage() {
       {/* ─── 주제 수정 모달 ─── */}
       {editTopic && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="bg-bg-surface border border-border rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div>
                 <h2 className="font-bold text-text">주제 수정</h2>
                 <p className="text-[11px] text-text-muted mt-0.5">내 토론 주제를 수정합니다</p>
@@ -696,7 +696,7 @@ export default function DebateTopicsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleEdit} className="p-5 space-y-4">
+            <form onSubmit={handleEdit} className="p-5 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs text-text-muted mb-1">
                   주제 제목 <span className="text-red-400">*</span>
