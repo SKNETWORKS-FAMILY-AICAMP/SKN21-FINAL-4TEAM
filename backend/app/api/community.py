@@ -19,6 +19,7 @@ from app.models.user import User
 from app.schemas.community import (
     CommunityPostListResponse,
     CommunityPostResponse,
+    DislikeToggleResponse,
     HotTopicItem,
     LikeToggleResponse,
     MyCommunityStatsResponse,
@@ -140,5 +141,19 @@ async def toggle_post_like(
     svc = CommunityService(db)
     try:
         return await svc.toggle_like(current_user.id, post_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/{post_id}/dislike", response_model=DislikeToggleResponse)
+async def toggle_post_dislike(
+    post_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DislikeToggleResponse:
+    """포스트 싫어요 토글. 인증 필수."""
+    svc = CommunityService(db)
+    try:
+        return await svc.toggle_dislike(current_user.id, post_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

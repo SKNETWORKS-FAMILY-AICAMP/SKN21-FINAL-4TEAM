@@ -9,13 +9,13 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.community_post import CommunityPost, CommunityPostLike
+from app.models.community_post import CommunityPost, CommunityPostDislike, CommunityPostLike
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.user_community_stats import UserCommunityStats
 from app.models.user_follow import UserFollow
-from app.schemas.community import LikeToggleResponse, MyCommunityStatsResponse
+from app.schemas.community import DislikeToggleResponse, LikeToggleResponse, MyCommunityStatsResponse
 
 # tier 경계값: (상한 점수 미만, tier 이름, 다음 tier)
 _TIER_THRESHOLDS = [
@@ -223,8 +223,9 @@ class CommunityService:
         agents_res = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
         agents_map = {a.id: a for a in agents_res.scalars().all()}
 
-        # 좋아요 여부 배치 조회
+        # 좋아요/싫어요 여부 배치 조회
         liked_post_ids: set = set()
+        disliked_post_ids: set = set()
         if user_id is not None:
             post_ids = [p.id for p in posts]
             likes_res = await self.db.execute(
@@ -234,6 +235,13 @@ class CommunityService:
                 )
             )
             liked_post_ids = set(likes_res.scalars().all())
+            dislikes_res = await self.db.execute(
+                select(CommunityPostDislike.post_id).where(
+                    CommunityPostDislike.user_id == user_id,
+                    CommunityPostDislike.post_id.in_(post_ids),
+                )
+            )
+            disliked_post_ids = set(dislikes_res.scalars().all())
 
         items = []
         for post in posts:
@@ -248,7 +256,9 @@ class CommunityService:
                 "content": post.content,
                 "match_result": post.match_result,
                 "likes_count": post.likes_count,
+                "dislikes_count": post.dislikes_count,
                 "is_liked": post.id in liked_post_ids,
+                "is_disliked": post.id in disliked_post_ids,
                 "created_at": post.created_at,
             })
 
@@ -410,6 +420,56 @@ class CommunityService:
         # 좋아요 추가 → stats 비동기 업데이트
         _schedule_stats_update(str(user_id), likes_delta=1)
         return LikeToggleResponse(liked=True, likes_count=count)
+
+    async def toggle_dislike(self, user_id: UUID, post_id: UUID) -> DislikeToggleResponse:
+        """포스트 싫어요를 토글한다. 이미 싫어요한 경우 취소, 아닌 경우 추가."""
+        post_res = await self.db.execute(select(CommunityPost).where(CommunityPost.id == post_id))
+        post = post_res.scalar_one_or_none()
+        if post is None:
+            raise ValueError("포스트를 찾을 수 없습니다.")
+
+        existing_res = await self.db.execute(
+            select(CommunityPostDislike).where(
+                CommunityPostDislike.post_id == post_id,
+                CommunityPostDislike.user_id == user_id,
+            )
+        )
+        existing = existing_res.scalar_one_or_none()
+
+        if existing is not None:
+            await self.db.delete(existing)
+            await self.db.execute(
+                sa_update(CommunityPost)
+                .where(CommunityPost.id == post_id)
+                .values(dislikes_count=CommunityPost.dislikes_count - 1)
+            )
+            await self.db.commit()
+            updated = await self.db.execute(
+                select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
+            )
+            return DislikeToggleResponse(disliked=False, dislikes_count=max(0, updated.scalar() or 0))
+
+        dislike = CommunityPostDislike(post_id=post_id, user_id=user_id)
+        self.db.add(dislike)
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            await self.db.rollback()
+            updated = await self.db.execute(
+                select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
+            )
+            return DislikeToggleResponse(disliked=True, dislikes_count=updated.scalar() or 0)
+
+        await self.db.execute(
+            sa_update(CommunityPost)
+            .where(CommunityPost.id == post_id)
+            .values(dislikes_count=CommunityPost.dislikes_count + 1)
+        )
+        await self.db.commit()
+        updated = await self.db.execute(
+            select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
+        )
+        return DislikeToggleResponse(disliked=True, dislikes_count=updated.scalar() or 0)
 
 
 async def generate_community_posts_task(match_id: str) -> None:

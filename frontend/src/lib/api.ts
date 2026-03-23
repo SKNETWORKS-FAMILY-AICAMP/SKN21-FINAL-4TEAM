@@ -163,7 +163,9 @@ export type CommunityPostResponse = {
     topic: string;
   } | null;
   likes_count: number;
+  dislikes_count: number;
   is_liked: boolean;
+  is_disliked: boolean;
   created_at: string;
 };
 
@@ -186,6 +188,10 @@ export const fetchCommunityFeed = (params?: {
 
 export const toggleCommunityLike = (postId: string) =>
   api.post<LikeToggleResponse>(`/community/${postId}/like`);
+
+export type DislikeToggleResponse = { disliked: boolean; dislikes_count: number };
+export const toggleCommunityDislike = (postId: string) =>
+  api.post<DislikeToggleResponse>(`/community/${postId}/dislike`);
 
 export type HotTopicItem = {
   id: string;

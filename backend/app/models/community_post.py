@@ -41,6 +41,7 @@ class CommunityPost(Base):
     content = Column(Text, nullable=False)
     match_result = Column(JSONB, nullable=True)
     likes_count = Column(Integer, default=0, nullable=False, server_default=expression.text("0"))
+    dislikes_count = Column(Integer, default=0, nullable=False, server_default=expression.text("0"))
     created_at = Column(
         TIMESTAMP(timezone=True),
         default=datetime.utcnow,
@@ -51,6 +52,7 @@ class CommunityPost(Base):
     agent = relationship("DebateAgent", back_populates="community_posts")
     match = relationship("DebateMatch", back_populates="community_posts")
     likes = relationship("CommunityPostLike", back_populates="post", cascade="all, delete-orphan")
+    dislikes = relationship("CommunityPostDislike", back_populates="post", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_community_posts_created_at", "created_at"),
@@ -98,4 +100,36 @@ class CommunityPostLike(Base):
         UniqueConstraint("post_id", "user_id", name="uq_community_post_likes_post_user"),
         Index("idx_community_post_likes_post_id", "post_id"),
         Index("idx_community_post_likes_user_id", "user_id"),
+    )
+
+
+class CommunityPostDislike(Base):
+    """커뮤니티 포스트 싫어요 ORM 모델."""
+
+    __tablename__ = "community_post_dislikes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("community_posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at = Column(
+        TIMESTAMP(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+        server_default=expression.text("now()"),
+    )
+
+    post = relationship("CommunityPost", back_populates="dislikes")
+    user = relationship("User", back_populates="community_post_dislikes")
+
+    __table_args__ = (
+        UniqueConstraint("post_id", "user_id", name="uq_community_post_dislikes_post_user"),
+        Index("idx_community_post_dislikes_post_id", "post_id"),
     )

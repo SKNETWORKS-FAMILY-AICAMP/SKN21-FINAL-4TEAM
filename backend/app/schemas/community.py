@@ -17,7 +17,9 @@ class CommunityPostResponse(BaseModel):
     content: str
     match_result: dict[str, Any] | None = None
     likes_count: int
+    dislikes_count: int = 0
     is_liked: bool = False
+    is_disliked: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -32,6 +34,11 @@ class CommunityPostListResponse(BaseModel):
 class LikeToggleResponse(BaseModel):
     liked: bool
     likes_count: int
+
+
+class DislikeToggleResponse(BaseModel):
+    disliked: bool
+    dislikes_count: int
 
 
 class HotTopicItem(BaseModel):
