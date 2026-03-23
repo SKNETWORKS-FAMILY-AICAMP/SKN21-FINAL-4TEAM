@@ -18,6 +18,9 @@ from app.services.debate.helpers import calculate_elo
 
 logger = logging.getLogger(__name__)
 
+# 백그라운드 태스크 강한 참조 보관 — GC가 완료 전 수거하지 못하도록 모듈 레벨에서 관리
+_background_tasks: set[asyncio.Task] = set()
+
 
 class MatchFinalizer:
     """매치 완료 후처리를 통합 관리하는 클래스.
@@ -100,7 +103,10 @@ class MatchFinalizer:
 
             # 4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
             promo_svc = DebatePromotionService(self.db)
-            for agent_obj, res, elo_after in [(agent_a, result_a, new_a), (agent_b, result_b, new_b)]:
+            for agent_obj, res, elo_before, elo_after in [
+                (agent_a, result_a, elo_a_before, new_a),
+                (agent_b, result_b, elo_b_before, new_b),
+            ]:
                 active = await promo_svc.get_active_series(str(agent_obj.id))
                 if active:
                     series_result = await promo_svc.record_match_result(str(active.id), res)
@@ -115,7 +121,7 @@ class MatchFinalizer:
                         else:
                             post_protection = 0
                         new_series = await promo_svc.check_and_trigger(
-                            str(agent_obj.id), 0, int(elo_after), post_tier, post_protection,
+                            str(agent_obj.id), int(elo_before), int(elo_after), post_tier, post_protection,
                         )
                         if new_series:
                             series_updates.append({
@@ -135,16 +141,18 @@ class MatchFinalizer:
                             })
 
         # 5. DB 커밋 + usage_batch 일괄 INSERT — SSE 발행 전 커밋으로 데이터 정합성 보장
-        await self.db.execute(
-            update(DebateMatch)
-            .where(DebateMatch.id == match.id)
-            .values(
-                elo_a_before=elo_a_before,
-                elo_b_before=elo_b_before,
-                elo_a_after=new_a,
-                elo_b_after=new_b,
+        # is_test 매치는 ELO 컬럼 기록 생략 (랭킹에 영향 없도록)
+        if not match.is_test:
+            await self.db.execute(
+                update(DebateMatch)
+                .where(DebateMatch.id == match.id)
+                .values(
+                    elo_a_before=elo_a_before,
+                    elo_b_before=elo_b_before,
+                    elo_a_after=new_a,
+                    elo_b_after=new_b,
+                )
             )
-        )
         if usage_batch:
             self.db.add_all(usage_batch)
         await self.db.commit()
@@ -188,11 +196,13 @@ class MatchFinalizer:
             except Exception as exc:
                 logger.error("advance_round failed for match %s tournament %s: %s", match.id, match.tournament_id, exc)
 
-        # 9. 요약 리포트 백그라운드 태스크 — 참조 보관으로 GC 수거 방지
+        # 9. 요약 리포트 백그라운드 태스크 — 모듈 레벨 set에 보관하여 GC 수거 방지
         if settings.debate_summary_enabled:
             task = asyncio.create_task(generate_summary_task(str(match.id)))
+            _background_tasks.add(task)
 
             def _on_summary_done(t: asyncio.Task, mid: str = str(match.id)) -> None:
+                _background_tasks.discard(t)
                 if not t.cancelled() and (exc := t.exception()):
                     logger.warning("Summary task failed for match %s: %s", mid, exc)
 
@@ -203,8 +213,10 @@ class MatchFinalizer:
             from app.services.community_service import generate_community_posts_task
 
             community_task = asyncio.create_task(generate_community_posts_task(str(match.id)))
+            _background_tasks.add(community_task)
 
             def _on_community_done(t: asyncio.Task, mid: str = str(match.id)) -> None:
+                _background_tasks.discard(t)
                 if not t.cancelled() and (exc := t.exception()):
                     logger.warning("community_post_task failed for match %s: %s", mid, exc)
 

@@ -1,17 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Users,
-  Heart,
-  ThumbsDown,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  Trophy,
-  X,
-  Swords,
-  TrendingUp,
+  Users, Heart, ThumbsDown, Search, ChevronLeft, ChevronRight, Trophy,
 } from 'lucide-react';
 import {
   fetchCommunityFeed,
@@ -34,12 +26,6 @@ const RESULT_STYLE: Record<'win' | 'lose' | 'draw', string> = {
   draw: 'bg-gray-100 text-gray-600 border-gray-300',
 };
 
-const RESULT_LABEL: Record<'win' | 'lose' | 'draw', string> = {
-  win: '승리',
-  lose: '패배',
-  draw: '무승부',
-};
-
 const PAGE_SIZE = 20;
 
 function formatDate(iso: string): string {
@@ -48,12 +34,12 @@ function formatDate(iso: string): string {
 }
 
 export default function CommunityPage() {
+  const router = useRouter();
   const [posts, setPosts] = useState<CommunityPostResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedPost, setSelectedPost] = useState<CommunityPostResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,9 +56,7 @@ export default function CommunityPage() {
       }
     }
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = posts.filter(
@@ -85,29 +69,26 @@ export default function CommunityPage() {
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
-  const updatePost = (updated: Partial<CommunityPostResponse> & { id: string }) => {
-    setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-    setSelectedPost((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
-  };
-
-  const handleLike = async (postId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const handleLike = async (postId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const res = await toggleCommunityLike(postId);
-      updatePost({ id: postId, is_liked: res.liked, likes_count: res.likes_count });
-    } catch {
-      /* 조용히 무시 */
-    }
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, is_liked: res.liked, likes_count: res.likes_count } : p)),
+      );
+    } catch { /* 무시 */ }
   };
 
-  const handleDislike = async (postId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const handleDislike = async (postId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const res = await toggleCommunityDislike(postId);
-      updatePost({ id: postId, is_disliked: res.disliked, dislikes_count: res.dislikes_count });
-    } catch {
-      /* 조용히 무시 */
-    }
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, is_disliked: res.disliked, dislikes_count: res.dislikes_count } : p,
+        ),
+      );
+    } catch { /* 무시 */ }
   };
 
   return (
@@ -125,24 +106,13 @@ export default function CommunityPage() {
 
       {/* 검색 */}
       <div className="flex justify-end mb-4">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPage(1);
-          }}
-        >
+        <form onSubmit={(e) => { e.preventDefault(); setPage(1); }}>
           <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               type="text"
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="제목 / 에이전트 검색"
               className="pl-8 pr-4 py-2 text-xs font-medium bg-bg-surface text-text border-2 border-black rounded-xl focus:outline-none focus:border-primary w-48 shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition-colors"
             />
@@ -160,30 +130,24 @@ export default function CommunityPage() {
           <span className="text-[11px] font-black text-text-muted text-center">추천</span>
         </div>
 
-        {loading && (
-          <div className="py-16 text-center text-sm text-text-muted font-bold">불러오는 중...</div>
-        )}
-        {!loading && error && (
-          <div className="py-16 text-center text-sm text-rose-500 font-bold">{error}</div>
-        )}
+        {loading && <div className="py-16 text-center text-sm text-text-muted font-bold">불러오는 중...</div>}
+        {!loading && error && <div className="py-16 text-center text-sm text-rose-500 font-bold">{error}</div>}
         {!loading && !error && paginated.length === 0 && (
           <div className="py-16 text-center text-sm text-gray-400 font-bold">
             아직 게시물이 없습니다. 토론이 완료되면 에이전트들의 후기가 여기에 올라옵니다.
           </div>
         )}
-        {!loading &&
-          !error &&
-          paginated.map((post, i) => (
-            <PostRow
-              key={post.id}
-              post={post}
-              index={i}
-              globalIndex={(page - 1) * PAGE_SIZE + i + 1}
-              onLike={handleLike}
-              onDislike={handleDislike}
-              onClick={() => setSelectedPost(post)}
-            />
-          ))}
+        {!loading && !error && paginated.map((post, i) => (
+          <PostRow
+            key={post.id}
+            post={post}
+            index={i}
+            globalIndex={(page - 1) * PAGE_SIZE + i + 1}
+            onLike={handleLike}
+            onDislike={handleDislike}
+            onClick={() => router.push(`/community/${post.id}`)}
+          />
+        ))}
       </div>
 
       {/* 페이지네이션 */}
@@ -218,16 +182,6 @@ export default function CommunityPage() {
           </button>
         </div>
       )}
-
-      {/* 상세 모달 */}
-      {selectedPost && (
-        <PostModal
-          post={selectedPost}
-          onClose={() => setSelectedPost(null)}
-          onLike={handleLike}
-          onDislike={handleDislike}
-        />
-      )}
     </div>
   );
 }
@@ -261,9 +215,7 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
       </div>
       <div className="flex items-center gap-2 min-w-0">
         {result && (
-          <span
-            className={`text-[10px] font-black border rounded px-1 py-0.5 shrink-0 ${RESULT_STYLE[result]}`}
-          >
+          <span className={`text-[10px] font-black border rounded px-1 py-0.5 shrink-0 ${RESULT_STYLE[result]}`}>
             {result === 'win' ? '승' : result === 'lose' ? '패' : '무'}
           </span>
         )}
@@ -273,8 +225,7 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
         {post.match_result && (
           <span className="text-[10px] font-black text-text-muted shrink-0 flex items-center gap-0.5">
             <Trophy size={10} />
-            {post.match_result.elo_delta > 0 ? '+' : ''}
-            {post.match_result.elo_delta}
+            {post.match_result.elo_delta > 0 ? '+' : ''}{post.match_result.elo_delta}
           </span>
         )}
       </div>
@@ -282,9 +233,7 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
         <span className={`text-xs truncate block ${tierClass}`}>{post.agent_name}</span>
       </div>
       <div className="text-center">
-        <span className="text-[11px] text-text-muted font-medium">
-          {formatDate(post.created_at)}
-        </span>
+        <span className="text-[11px] text-text-muted font-medium">{formatDate(post.created_at)}</span>
       </div>
       <div className="flex items-center justify-center gap-2">
         <button
@@ -305,130 +254,6 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
           <ThumbsDown size={10} fill={post.is_disliked ? 'currentColor' : 'none'} />
           {post.dislikes_count}
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ── 상세 모달 ─────────────────────────────────────────────────────────────────
-
-type PostModalProps = {
-  post: CommunityPostResponse;
-  onClose: () => void;
-  onLike: (id: string) => void;
-  onDislike: (id: string) => void;
-};
-
-function PostModal({ post, onClose, onLike, onDislike }: PostModalProps) {
-  const tier = post.agent_tier?.toLowerCase() ?? '';
-  const tierClass = TIER_STYLE[tier] ?? 'text-text-muted font-bold';
-  const result = post.match_result?.result;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-bg-surface border-2 border-black rounded-2xl shadow-[6px_6px_0_0_rgba(0,0,0,1)] w-full max-w-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 모달 헤더 — 에이전트 정보 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b-2 border-black">
-          <div className="flex items-center gap-3">
-            {post.agent_image_url ? (
-              <img
-                src={post.agent_image_url}
-                alt={post.agent_name}
-                className="w-9 h-9 rounded-xl object-cover border-2 border-black"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-xl bg-bg-hover border-2 border-black flex items-center justify-center text-sm font-black text-text-muted">
-                {post.agent_name[0]}
-              </div>
-            )}
-            <div>
-              <p className={`text-sm font-black ${tierClass}`}>{post.agent_name}</p>
-              <p className="text-[10px] text-text-muted font-medium">{post.agent_model ?? ''}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-bg-hover transition-colors cursor-pointer"
-          >
-            <X size={16} className="text-text-muted" />
-          </button>
-        </div>
-
-        {/* 매치 결과 요약 */}
-        {post.match_result && result && (
-          <div className="mx-6 mt-4 p-3 rounded-xl border-2 border-black bg-bg-hover">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Swords size={13} className="text-primary" />
-                <span className="text-xs font-black text-text truncate max-w-[260px]">
-                  {post.match_result.topic}
-                </span>
-              </div>
-              <span
-                className={`text-xs font-black border rounded px-2 py-0.5 ${RESULT_STYLE[result]}`}
-              >
-                {RESULT_LABEL[result]}
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-[11px] text-text-muted font-bold">
-              <span>vs {post.match_result.opponent_name}</span>
-              <span>
-                점수 {post.match_result.score_mine.toFixed(1)} :{' '}
-                {post.match_result.score_opp.toFixed(1)}
-              </span>
-              <span className="flex items-center gap-0.5">
-                <TrendingUp size={10} />
-                ELO {post.match_result.elo_delta > 0 ? '+' : ''}
-                {post.match_result.elo_delta}
-                <span className="text-text-muted/60">({post.match_result.elo_after})</span>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 후기 본문 */}
-        <div className="px-6 py-4">
-          <p className="text-sm text-text font-medium leading-relaxed whitespace-pre-wrap">
-            {post.content}
-          </p>
-        </div>
-
-        {/* 하단 — 날짜 + 좋아요/싫어요 */}
-        <div className="flex items-center justify-between px-6 py-4 border-t-2 border-black">
-          <span className="text-[11px] text-text-muted font-medium">
-            {formatDate(post.created_at)}
-          </span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => onLike(post.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black text-xs font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all cursor-pointer ${
-                post.is_liked
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-bg-surface text-rose-400 hover:bg-rose-50'
-              }`}
-            >
-              <Heart size={12} fill={post.is_liked ? 'currentColor' : 'none'} />
-              {post.likes_count}
-            </button>
-            <button
-              onClick={() => onDislike(post.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-black text-xs font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all cursor-pointer ${
-                post.is_disliked
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-bg-surface text-blue-400 hover:bg-blue-50'
-              }`}
-            >
-              <ThumbsDown size={12} fill={post.is_disliked ? 'currentColor' : 'none'} />
-              {post.dislikes_count}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

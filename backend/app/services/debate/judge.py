@@ -21,12 +21,14 @@ def _infer_provider(model_id: str) -> str:
         model_id: LLM 모델 ID 문자열.
 
     Returns:
-        'anthropic' | 'google' | 'openai'
+        'anthropic' | 'google' | 'runpod' | 'openai'
     """
     if model_id.startswith("claude"):
         return "anthropic"
     if model_id.startswith("gemini"):
         return "google"
+    if model_id.startswith(("meta-", "llama", "mistral", "qwen")):
+        return "runpod"
     return "openai"
 
 
@@ -34,16 +36,18 @@ def _platform_api_key(provider: str) -> str:
     """provider에 맞는 플랫폼 API 키를 반환한다.
 
     Args:
-        provider: 'anthropic' | 'google' | 'openai'.
+        provider: 'anthropic' | 'google' | 'runpod' | 'openai'.
 
     Returns:
-        해당 플랫폼 API 키 문자열.
+        해당 플랫폼 API 키 문자열 (미설정이면 빈 문자열).
     """
     if provider == "anthropic":
-        return settings.anthropic_api_key
+        return settings.anthropic_api_key or ""
     if provider == "google":
-        return settings.google_api_key
-    return settings.openai_api_key
+        return settings.google_api_key or ""
+    if provider == "runpod":
+        return settings.runpod_api_key or ""
+    return settings.openai_api_key or ""
 
 
 # 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
@@ -304,47 +308,42 @@ class DebateJudge:
         judge_output_tokens = 0
         raw_content = ""
         fallback_reason: str | None = None
-        judge_timeout = getattr(settings, "debate_judge_timeout_seconds", 120)
         try:
-            # Stage 1: 서술형 분석 — 숫자/점수 없이 논거·반박·전략 강약점 서술
-            analysis_messages = [
-                {"role": "system", "content": JUDGE_ANALYSIS_PROMPT},
-                {"role": "user", "content": debate_log},
-            ]
-            analysis_result = await asyncio.wait_for(
-                self.client.generate_byok(
+            # stage1+stage2 합산 시간을 단일 타임아웃으로 제한
+            async with asyncio.timeout(settings.debate_judge_timeout_seconds):
+                # Stage 1: 서술형 분석 — 숫자/점수 없이 논거·반박·전략 강약점 서술
+                analysis_messages = [
+                    {"role": "system", "content": JUDGE_ANALYSIS_PROMPT},
+                    {"role": "user", "content": debate_log},
+                ]
+                analysis_result = await self.client.generate_byok(
                     provider=provider,
                     model_id=model_id,
                     api_key=api_key,
                     messages=analysis_messages,
                     max_tokens=settings.debate_judge_max_tokens,
                     temperature=0.3,
-                ),
-                timeout=judge_timeout,
-            )
-            judge_input_tokens += analysis_result.get("input_tokens", 0)
-            judge_output_tokens += analysis_result.get("output_tokens", 0)
-            analysis_content = analysis_result.get("content", "")
-            if not analysis_content:
-                logger.warning("Judge Stage 1 returned empty content for match %s", match.id)
+                )
+                judge_input_tokens += analysis_result.get("input_tokens", 0)
+                judge_output_tokens += analysis_result.get("output_tokens", 0)
+                analysis_content = analysis_result.get("content", "")
+                if not analysis_content:
+                    logger.warning("Judge Stage 1 returned empty content for match %s", match.id)
 
-            # Stage 2: 분석 결과 기반 채점 — JSON 출력
-            scoring_input = f"[토론 전문]\n{debate_log}\n\n[분석 결과]\n{analysis_content}"
-            scoring_messages = [
-                {"role": "system", "content": JUDGE_SCORING_PROMPT},
-                {"role": "user", "content": scoring_input},
-            ]
-            scoring_result = await asyncio.wait_for(
-                self.client.generate_byok(
+                # Stage 2: 분석 결과 기반 채점 — JSON 출력
+                # debate_log 재전송 생략: Stage 1이 이미 전체 대화를 분석했으므로 분석 결과만 전달
+                scoring_messages = [
+                    {"role": "system", "content": JUDGE_SCORING_PROMPT},
+                    {"role": "user", "content": f"[분석 결과]\n{analysis_content}"},
+                ]
+                scoring_result = await self.client.generate_byok(
                     provider=provider,
                     model_id=model_id,
                     api_key=api_key,
                     messages=scoring_messages,
                     max_tokens=settings.debate_judge_max_tokens,
                     temperature=settings.debate_judge_temperature,
-                ),
-                timeout=judge_timeout,
-            )
+                )
             judge_input_tokens += scoring_result.get("input_tokens", 0)
             judge_output_tokens += scoring_result.get("output_tokens", 0)
             raw_content = scoring_result.get("content", "")
@@ -421,6 +420,8 @@ class DebateJudge:
             "output_tokens": judge_output_tokens,
             "model_id": model_id,
             "fallback_reason": fallback_reason,
+            # fallback 판정(parse_error/request_error)은 신뢰도가 낮으므로 ELO 변동 억제 권고
+            "elo_suppressed": fallback_reason is not None,
         }
 
     def _format_debate_log(

@@ -1,3 +1,30 @@
+## [2026-03-23] DuckDuckGo Tool-Use 웹 근거 인용 통합
+
+### Added
+- **`evidence_search.py`** — `EvidenceSearchService.search_by_query()` 추가: 이미 추출된 쿼리로 LLM 키워드 추출 없이 직접 DDG 검색 (Tool-Use 경로 전용)
+- **`turn_executor.py`** — API 에이전트(OpenAI/Anthropic/Google) Tool-Use 2단계 파이프라인:
+  - 1단계: 비스트리밍 호출로 `web_search` function call 감지
+  - `turn_tool_call` SSE 이벤트 발행 ("근거 검색 중..." 스피너)
+  - 검색 결과를 messages에 네이티브 형식으로 주입
+  - 2단계: 스트리밍 발언 생성 (검색 결과 인용 포함)
+- **`orchestrator.py`** — `LLM_VIOLATION_PENALTIES`에 `no_web_evidence`(3점), `false_citation`(8점) 추가; `REVIEW_SYSTEM_PROMPT`에 `tools_available` 조건부 위반 규칙 주입
+- **`judge.py`** — `PENALTY_KO_LABELS`에 `no_web_evidence`, `false_citation`, `llm_no_web_evidence`, `llm_false_citation` 등록
+- **`frontend/src/hooks/useDebateStream.ts`** — `turn_tool_call` SSE 이벤트 핸들러
+- **`frontend/src/stores/debateStore.ts`** — `setTurnSearching()` 액션, `searchingTurns` 상태
+- **`frontend/src/components/debate/TurnBubble.tsx`** — 검색 중 스피너 + "근거 검색 중..." UI, 출처 링크 표시
+
+### Fixed
+- **`debate_formats.py`** — 사후(post-hoc) evidence 수집 시 Tool-Use로 이미 근거가 설정된 턴 덮어쓰기 방지: `raw.get("tool_used") != "web_search"` 가드를 3곳(롤링 B 수집, A 수집, 루프 종료 후 마지막 B)에 적용
+- **`turn_executor.py`** — Google provider `_to_gemini_format()`이 `functionResponse.name`을 읽을 수 있도록 tool 메시지에 `name` 필드 포함
+- **`judge.py`** — `llm_` 접두사 레이블 누락으로 TurnBubble에서 위반 유형 미표시 버그 수정
+
+### Notes
+- RunPod(SGLang)은 function calling 미지원으로 Tool-Use 제외, 기존 사후 evidence 경로 유지
+- Tool-Use 비활성: `DEBATE_TOOL_USE_ENABLED=false` 환경 변수로 즉시 비활성화 (기존 스트리밍 경로로 폴백)
+- 기존 `turn_evidence_patch` SSE + TurnBubble 근거 박스는 Tool-Use 사용 턴을 제외하고 유지
+
+---
+
 ## [2026-03-17] 문서 전면 최신화 (코드베이스 기준: 3a715c2)
 
 ### Changed
