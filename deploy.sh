@@ -107,7 +107,7 @@ check_env() {
 run_migrations() {
   log "Alembic 마이그레이션 실행 중..."
   $COMPOSE_CMD run --rm backend \
-    sh -c "PYTHONPATH=/app alembic upgrade head"
+    sh -c "PYTHONPATH=/app alembic upgrade heads"
   log "마이그레이션 완료"
 }
 
