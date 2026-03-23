@@ -84,6 +84,7 @@ class MatchFinalizer:
         result_b = "win" if elo_result == "b_win" else ("loss" if elo_result == "a_win" else "draw")
 
         agent_service = DebateAgentService(self.db)
+        series_updates: list[dict] = []  # is_test=True 경로에서도 참조 가능하도록 최상단 초기화
         if not match.is_test:
             # version_id 전달 버그 수정 (멀티 경로에서 미전달됐던 issue)
             version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
@@ -99,7 +100,6 @@ class MatchFinalizer:
 
             # 4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
             promo_svc = DebatePromotionService(self.db)
-            series_updates: list[dict] = []
             for agent_obj, res, elo_after in [(agent_a, result_a, new_a), (agent_b, result_b, new_b)]:
                 active = await promo_svc.get_active_series(str(agent_obj.id))
                 if active:
@@ -167,20 +167,26 @@ class MatchFinalizer:
             "elo_b": new_b,
         })
 
-        # 7. 예측투표 정산
+        # 7. 예측투표 정산 — commit 후 독립 단계. 실패해도 후속 단계 진행
         match_service = DebateMatchService(self.db)
-        await match_service.resolve_predictions(
-            str(match.id),
-            str(match.winner_id) if match.winner_id else None,
-            str(match.agent_a_id),
-            str(match.agent_b_id),
-        )
+        try:
+            await match_service.resolve_predictions(
+                str(match.id),
+                str(match.winner_id) if match.winner_id else None,
+                str(match.agent_a_id),
+                str(match.agent_b_id),
+            )
+        except Exception as exc:
+            logger.error("resolve_predictions failed for match %s: %s", match.id, exc)
 
-        # 8. 토너먼트 라운드 진행
+        # 8. 토너먼트 라운드 진행 — 실패해도 매치 완료 상태에 영향 없음
         if match.tournament_id:
             from app.services.debate.tournament_service import DebateTournamentService
             t_service = DebateTournamentService(self.db)
-            await t_service.advance_round(str(match.tournament_id))
+            try:
+                await t_service.advance_round(str(match.tournament_id))
+            except Exception as exc:
+                logger.error("advance_round failed for match %s tournament %s: %s", match.id, match.tournament_id, exc)
 
         # 9. 요약 리포트 백그라운드 태스크 — 참조 보관으로 GC 수거 방지
         if settings.debate_summary_enabled:

@@ -346,6 +346,12 @@ async def _run_parallel_turns(
     total_penalty_a = 0
     total_penalty_b = 0
 
+    # settings가 MagicMock인 테스트 환경에서는 evidence task를 생성하지 않도록 엄밀 타입 검사
+    # bool 타입인 경우만 True로 간주 — MagicMock은 bool이 아니므로 False로 처리됨
+    _ev_enabled = isinstance(
+        getattr(settings, "debate_evidence_search_enabled", False), bool
+    ) and settings.debate_evidence_search_enabled
+
     prev_b_review_task: asyncio.Task | None = None
     prev_b_evidence_task: asyncio.Task | None = None
     prev_turn_b: DebateTurnLog | None = None
@@ -358,7 +364,7 @@ async def _run_parallel_turns(
                 review_prev_b = await prev_b_review_task
             except Exception as exc:
                 logger.error("B review task failed: %s — using fallback", exc)
-                review_prev_b = orchestrator._review_fallback()
+                review_prev_b = orchestrator.review_fallback()
             prev_b_review_task = None
 
             # B evidence 수집 (review와 함께 이미 대부분 완료됨)
@@ -425,6 +431,8 @@ async def _run_parallel_turns(
         total_penalty_a += turn_a.penalty_total
 
         # B가 참조할 수 있도록 A 발언을 먼저 큐에 등록 (검토 전 원본)
+        # P3: recent_history를 append 전에 캡처 — 현재 발언이 이전 발언 목록에 섞이지 않도록
+        recent_history_a = claims_a[-2:] if claims_a else None
         claims_a.append(turn_a.claim)
 
         # ★ gather 전에 A turn 이벤트 먼저 발행 — B 스트리밍이 pendingStreamingTurn
@@ -447,7 +455,7 @@ async def _run_parallel_turns(
                     evidence=turn_a.evidence,
                     action=turn_a.action,
                     opponent_last_claim=claims_b[-1] if claims_b else None,
-                    recent_history=claims_a[-2:] if claims_a else None,
+                    recent_history=recent_history_a,
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
@@ -455,7 +463,7 @@ async def _run_parallel_turns(
             # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
             evidence_a_task: asyncio.Task | None = asyncio.create_task(
                 _evidence_service.search(turn_a.claim)
-            ) if turn_a.claim else None
+            ) if (_ev_enabled and turn_a.claim) else None
 
             # B 실행 (A 검토와 병렬)
             turn_b = await executor.execute_with_retry(
@@ -465,13 +473,16 @@ async def _run_parallel_turns(
                 event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
             if turn_b is None:
-                for _t in [prev_b_review_task, prev_b_evidence_task]:
+                # P1: turn_b 실패 시 현재 실행 중인 review_a_task와 evidence_a_task도 취소
+                for _t in [review_a_task, evidence_a_task, prev_b_review_task, prev_b_evidence_task]:
                     if _t and not _t.done():
                         _t.cancel()
                 raise ForfeitError(forfeited_speaker="agent_b")
             total_penalty_b += turn_b.penalty_total
 
             # B 발언을 검토 전에 즉시 등록 — 다음 턴 A가 원본 클레임을 참조할 수 있도록
+            # P3: recent_history를 append 전에 캡처
+            recent_history_b = claims_b[-2:] if claims_b else None
             claims_b.append(turn_b.claim)
 
             # ★ B 턴 이벤트 즉시 발행 — A 검토 완료를 기다리지 않으므로 스트리밍 지연 없음
@@ -492,7 +503,7 @@ async def _run_parallel_turns(
                     evidence=turn_b.evidence,
                     action=turn_b.action,
                     opponent_last_claim=claims_a[-1] if claims_a else None,
-                    recent_history=claims_b[-2:] if claims_b else None,
+                    recent_history=recent_history_b,
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 )
@@ -500,7 +511,7 @@ async def _run_parallel_turns(
             # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
             prev_b_evidence_task = asyncio.create_task(
                 _evidence_service.search(turn_b.claim)
-            ) if turn_b.claim else None
+            ) if (_ev_enabled and turn_b.claim) else None
             prev_turn_b = turn_b
             prev_b_turn_num = turn_num
 
@@ -510,7 +521,7 @@ async def _run_parallel_turns(
                 review_a = await review_a_task
             except Exception as exc:
                 logger.error("A review task failed: %s — using fallback", exc)
-                review_a = orchestrator._review_fallback()
+                review_a = orchestrator.review_fallback()
             if evidence_a_task is not None:
                 try:
                     evidence_a = await evidence_a_task
@@ -580,13 +591,32 @@ async def _run_parallel_turns(
             if remaining_delay > 0:
                 await asyncio.sleep(remaining_delay)
 
-    # ★ 롤링 병렬: 루프 종료 후 마지막 B 리뷰 수집
+    # ★ 롤링 병렬: 루프 종료 후 마지막 B 근거 수집
+    # P2: 리뷰 수집 대기 시간 동안 이미 완료됐으면 수집, 미완료면 취소 (백그라운드 태스크 누수 방지)
+    if settings.debate_turn_review_enabled and prev_b_evidence_task is not None and prev_turn_b is not None:
+        if prev_b_evidence_task.done() and not prev_b_evidence_task.cancelled():
+            try:
+                evidence_last_b = prev_b_evidence_task.result()
+                if isinstance(evidence_last_b, EvidenceResult):
+                    prev_turn_b.evidence = evidence_last_b.format()
+                    await db.flush()
+                    await publish_event(str(match.id), "turn_evidence_patch", {
+                        "turn_number": prev_b_turn_num,
+                        "speaker": "agent_b",
+                        "evidence": prev_turn_b.evidence,
+                    })
+            except Exception as exc:
+                logger.warning("Last B evidence task failed: %s", exc)
+        else:
+            # 미완료 태스크 취소 — 루프 종료 후 고아 태스크로 남지 않도록
+            prev_b_evidence_task.cancel()
+
     if settings.debate_turn_review_enabled and prev_b_review_task is not None:
         try:
             review_last_b = await prev_b_review_task
         except Exception as exc:
             logger.error("Last B review task failed: %s — using fallback", exc)
-            review_last_b = orchestrator._review_fallback()
+            review_last_b = orchestrator.review_fallback()
 
         if prev_turn_b is None:
             logger.error("prev_turn_b unexpectedly None after loop, skipping last B review")

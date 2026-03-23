@@ -1,5 +1,6 @@
 """토론 판정기. LLM 기반 최종 판정(judge)."""
 
+import asyncio
 import json
 import logging
 import re
@@ -198,23 +199,29 @@ class DebateJudge:
         judge_output_tokens = 0
         raw_content = ""
         fallback_reason: str | None = None
+        judge_timeout = getattr(settings, "debate_judge_timeout_seconds", 120)
         try:
             # Stage 1: 서술형 분석 — 숫자/점수 없이 논거·반박·전략 강약점 서술
             analysis_messages = [
                 {"role": "system", "content": JUDGE_ANALYSIS_PROMPT},
                 {"role": "user", "content": debate_log},
             ]
-            analysis_result = await self.client.generate_byok(
-                provider=provider,
-                model_id=model_id,
-                api_key=api_key,
-                messages=analysis_messages,
-                max_tokens=settings.debate_judge_max_tokens,
-                temperature=0.3,
+            analysis_result = await asyncio.wait_for(
+                self.client.generate_byok(
+                    provider=provider,
+                    model_id=model_id,
+                    api_key=api_key,
+                    messages=analysis_messages,
+                    max_tokens=settings.debate_judge_max_tokens,
+                    temperature=0.3,
+                ),
+                timeout=judge_timeout,
             )
             judge_input_tokens += analysis_result.get("input_tokens", 0)
             judge_output_tokens += analysis_result.get("output_tokens", 0)
             analysis_content = analysis_result.get("content", "")
+            if not analysis_content:
+                logger.warning("Judge Stage 1 returned empty content for match %s", match.id)
 
             # Stage 2: 분석 결과 기반 채점 — JSON 출력
             scoring_input = f"[토론 전문]\n{debate_log}\n\n[분석 결과]\n{analysis_content}"
@@ -222,13 +229,16 @@ class DebateJudge:
                 {"role": "system", "content": JUDGE_SCORING_PROMPT},
                 {"role": "user", "content": scoring_input},
             ]
-            scoring_result = await self.client.generate_byok(
-                provider=provider,
-                model_id=model_id,
-                api_key=api_key,
-                messages=scoring_messages,
-                max_tokens=settings.debate_judge_max_tokens,
-                temperature=settings.debate_judge_temperature,
+            scoring_result = await asyncio.wait_for(
+                self.client.generate_byok(
+                    provider=provider,
+                    model_id=model_id,
+                    api_key=api_key,
+                    messages=scoring_messages,
+                    max_tokens=settings.debate_judge_max_tokens,
+                    temperature=settings.debate_judge_temperature,
+                ),
+                timeout=judge_timeout,
             )
             judge_input_tokens += scoring_result.get("input_tokens", 0)
             judge_output_tokens += scoring_result.get("output_tokens", 0)
@@ -286,8 +296,8 @@ class DebateJudge:
         score_a = sum(scorecard["agent_a"].values())
         score_b = sum(scorecard["agent_b"].values())
 
-        penalty_a = match.penalty_a
-        penalty_b = match.penalty_b
+        penalty_a = match.penalty_a or 0
+        penalty_b = match.penalty_b or 0
         final_a = max(0, score_a - penalty_a)
         final_b = max(0, score_b - penalty_b)
 

@@ -272,7 +272,7 @@ class DebateOrchestrator:
                 speaker,
                 model_id,
             )
-            return self._review_fallback("no_api_key")
+            return self.review_fallback("no_api_key")
 
         try:
             review, input_tokens, output_tokens = await self._call_review_llm(
@@ -293,7 +293,7 @@ class DebateOrchestrator:
                 speaker,
                 model_id,
             )
-            return self._review_fallback("timeout")
+            return self.review_fallback("timeout")
         except (json.JSONDecodeError, ValidationError) as exc:
             # JSON 형식 오류 또는 Pydantic 스키마 불일치 시 폴백
             logger.warning(
@@ -305,7 +305,7 @@ class DebateOrchestrator:
                 model_id,
                 exc,
             )
-            return self._review_fallback("parse_error")
+            return self.review_fallback("parse_error")
         except Exception as exc:
             # 네트워크 장애·API 에러 등 예기치 않은 실패 — 토론 중단 방지
             logger.error(
@@ -317,7 +317,7 @@ class DebateOrchestrator:
                 model_id,
                 exc,
             )
-            return self._review_fallback("unexpected_error")
+            return self.review_fallback("unexpected_error")
 
         # optimized 모드에서는 skipped=False를 명시 — 관전자 UI에서 "검토됨" 표시용
         skipped = False if self.optimized else None
@@ -330,7 +330,7 @@ class DebateOrchestrator:
             fallback_reason=None,
         )
 
-    def _review_fallback(self, reason: str = "review_unavailable") -> dict:
+    def review_fallback(self, reason: str = "review_unavailable") -> dict:
         """검토 실패 시 토론을 중단하지 않기 위한 안전 폴백."""
         return {
             "logic_score": 5,

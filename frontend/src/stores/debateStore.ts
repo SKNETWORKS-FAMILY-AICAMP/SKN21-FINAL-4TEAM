@@ -85,6 +85,7 @@ type DebateState = {
   clearStreamingTurn: () => void;
   setStreaming: (v: boolean) => void;
   addTurnReview: (review: TurnReview) => void;
+  patchTurnEvidence: (turn_number: number, speaker: string, evidence: string) => void;
   // 리플레이 액션
   startReplay: () => void;
   stopReplay: () => void;
@@ -357,6 +358,16 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         return { turnReviews: s.turnReviews.map((r, i) => (i === idx ? review : r)) };
       }
       return { turnReviews: [...s.turnReviews, review] };
+    });
+  },
+  patchTurnEvidence: (turn_number, speaker, evidence) => {
+    set((s) => {
+      const idx = s.turns.findIndex((t) => t.turn_number === turn_number && t.speaker === speaker);
+      if (idx >= 0) {
+        const updated = s.turns.map((t, i) => (i === idx ? { ...t, evidence } : t));
+        return { turns: updated };
+      }
+      return {};
     });
   },
   appendChunk: (turn_number, speaker, chunk) => {

@@ -131,12 +131,38 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
         </p>
 
         {/* 근거 */}
-        {turn.evidence && (
-          <div className="mt-2 px-2.5 py-1.5 bg-bg rounded border border-border">
-            <span className="text-[10px] text-text-muted font-semibold">근거</span>
-            <p className="text-xs text-text-secondary mt-0.5">{turn.evidence}</p>
-          </div>
-        )}
+        {turn.evidence && (() => {
+          // "[출처: URL1 | URL2]" 패턴 파싱 — DuckDuckGo 검색 결과 출처를 클릭 링크로 렌더링
+          const sourceMatch = turn.evidence.match(/\[출처:\s*(.+?)\]$/s);
+          const bodyText = sourceMatch
+            ? turn.evidence.slice(0, turn.evidence.lastIndexOf('[출처:')).trim()
+            : turn.evidence;
+          const sourceUrls = sourceMatch
+            ? sourceMatch[1].split('|').map((u) => u.trim()).filter(Boolean)
+            : [];
+          return (
+            <div className="mt-2 px-2.5 py-1.5 bg-bg rounded border border-border">
+              <span className="text-[10px] text-text-muted font-semibold">근거</span>
+              <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{bodyText}</p>
+              {sourceUrls.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span className="text-[10px] text-text-muted">출처:</span>
+                  {sourceUrls.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-primary underline break-all"
+                    >
+                      {url}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 툴 사용 내역 */}
         {turn.tool_used && (

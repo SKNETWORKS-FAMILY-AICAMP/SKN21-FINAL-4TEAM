@@ -132,15 +132,25 @@ def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
     # 플랫폼 모드 (force_platform 또는 use_platform_credits=True)
     match agent.provider:
         case "openai":
-            return settings.openai_api_key or ""
+            key = settings.openai_api_key or ""
         case "anthropic":
-            return settings.anthropic_api_key or ""
+            key = settings.anthropic_api_key or ""
         case "google":
-            return settings.google_api_key or ""
+            key = settings.google_api_key or ""
         case "runpod":
-            return settings.runpod_api_key or ""
+            key = settings.runpod_api_key or ""
         case _:
+            logger.warning(
+                "Unknown provider '%s' for agent %s — cannot resolve platform API key",
+                agent.provider, agent.id,
+            )
             return ""
+    if not key:
+        logger.warning(
+            "Platform API key not set for provider '%s' (agent %s) — LLM call will fail",
+            agent.provider, agent.id,
+        )
+    return key
 
 
 def _build_messages(

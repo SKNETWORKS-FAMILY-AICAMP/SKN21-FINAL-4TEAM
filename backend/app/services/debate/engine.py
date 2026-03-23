@@ -339,6 +339,7 @@ class DebateEngine:
                     "agent_name": agent.name,
                     "required": required,
                     "message": message,
+                    "match_status": "error",
                 })
                 # credit_insufficient SSE를 이미 발행했으므로 error SSE 재발행 방지용 전용 예외
                 raise CreditInsufficientError(message)
@@ -517,8 +518,8 @@ async def run_debate(match_id: str) -> None:
                 ))
                 await asyncio.shield(db.commit())
                 await asyncio.shield(publish_event(match_id, "error", {"message": "Match cancelled by server"}))
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                logger.error("Cleanup failed for cancelled match %s: %s", match_id, cleanup_exc)
             raise
         except Exception as exc:
             logger.error("Debate engine error for match %s: %s", match_id, exc, exc_info=True)

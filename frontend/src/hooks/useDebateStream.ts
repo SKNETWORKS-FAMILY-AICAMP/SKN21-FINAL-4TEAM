@@ -95,6 +95,13 @@ export function useDebateStream(
                   s.addTurnFromSSE(event.data as TurnLog);
                 } else if (event.event === 'turn_review') {
                   s.addTurnReview(event.data as TurnReview);
+                } else if (event.event === 'turn_evidence_patch') {
+                  const { turn_number, speaker, evidence } = event.data as {
+                    turn_number: number;
+                    speaker: string;
+                    evidence: string;
+                  };
+                  s.patchTurnEvidence(turn_number, speaker, evidence);
                 } else if (event.event === 'series_update') {
                   onSeriesUpdateRef.current?.(event.data as PromotionSeries);
                 } else if (event.event === 'waiting_agent') {
