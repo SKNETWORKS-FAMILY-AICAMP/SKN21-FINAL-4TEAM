@@ -129,10 +129,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   </td>
                 )}
                 {columns.map((col) => (
-                  <td
-                    key={String(col.key)}
-                    className="px-3 py-2.5 border-b border-bg text-text"
-                  >
+                  <td key={String(col.key)} className="px-3 py-2.5 border-b border-bg text-text">
                     {col.render ? col.render(row[col.key], row) : String(row[col.key] ?? '')}
                   </td>
                 ))}

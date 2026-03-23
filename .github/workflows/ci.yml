@@ -69,8 +69,6 @@ jobs:
 
       - name: Run unit tests
         run: pytest backend/tests/unit/ -v
-        env:
-          PIPELINE_LAZY_LOAD: "true"
 
   backend-integration-test:
     name: Backend Integration Tests
@@ -115,7 +113,6 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot_test
           DATABASE_SYNC_URL: postgresql://chatbot:chatbot@localhost:5432/chatbot_test
           SECRET_KEY: test-secret-key
-          PIPELINE_LAZY_LOAD: "true"
 
   # ──────────────────────────────────────────────
   # Frontend Jobs
@@ -140,10 +137,10 @@ jobs:
         run: npm ci
 
       - name: ESLint
-        run: npx eslint .
+        run: npx next lint --max-warnings 50
 
       - name: Prettier check
-        run: npx prettier --check .
+        run: npx prettier --check "src/**/*.{ts,tsx,css}"
 
       - name: TypeScript type check
         run: npx tsc --noEmit

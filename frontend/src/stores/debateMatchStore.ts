@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-import type { DebateMatch, TurnLog, TurnReview, StreamingTurn, PredictionStats } from '@/types/debate';
+import type {
+  DebateMatch,
+  TurnLog,
+  TurnReview,
+  StreamingTurn,
+  PredictionStats,
+} from '@/types/debate';
 
 type DebateMatchState = {
   currentMatch: DebateMatch | null;
@@ -26,8 +32,8 @@ type DebateMatchState = {
   predictionStats: PredictionStats | null;
   predictionLoading: boolean;
   // SSE 특수 이벤트 상태
-  waitingAgent: boolean;        // 에이전트 WebSocket 연결 대기 중
-  creditInsufficient: boolean;  // 크레딧 부족으로 토론 중단
+  waitingAgent: boolean; // 에이전트 WebSocket 연결 대기 중
+  creditInsufficient: boolean; // 크레딧 부족으로 토론 중단
   matchVoidReason: string | null; // 매치 무효화 사유
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
@@ -208,13 +214,9 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
       const remainingPendingLogs = s.pendingTurnLogs.filter(
         (t) => !(t.turn_number === turn_number && t.speaker === speaker),
       );
-      const exists = s.turns.some(
-        (t) => t.turn_number === turn_number && t.speaker === speaker,
-      );
+      const exists = s.turns.some((t) => t.turn_number === turn_number && t.speaker === speaker);
       const updatedTurns = exists
-        ? s.turns.map((t) =>
-            t.turn_number === turn_number && t.speaker === speaker ? pending : t,
-          )
+        ? s.turns.map((t) => (t.turn_number === turn_number && t.speaker === speaker ? pending : t))
         : [...s.turns, pending];
 
       return {
@@ -271,7 +273,12 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
       // 대기 중인 pendingTurnLogs를 turns에 병합 — finished/error 이벤트 시 손실 방지
       const logsToFlush = s.pendingTurnLogs;
       if (logsToFlush.length === 0) {
-        return { streamingTurn: null, pendingStreamingTurn: null, pendingTurnLogs: [], nextSpeaker: null };
+        return {
+          streamingTurn: null,
+          pendingStreamingTurn: null,
+          pendingTurnLogs: [],
+          nextSpeaker: null,
+        };
       }
       let updatedTurns = [...s.turns];
       for (const pending of logsToFlush) {
@@ -297,9 +304,21 @@ export const useDebateMatchStore = create<DebateMatchState>((set, get) => ({
   setStreaming: (v) => set({ streaming: v }),
   // replayIndex -1: 재생 시작 시 0턴도 아직 안 보임. 첫 tick에서 0으로 올라가 첫 턴 등장
   startReplay: () =>
-    set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false, debateShowAll: false }),
+    set({
+      replayMode: true,
+      replayIndex: -1,
+      replayPlaying: true,
+      replayTyping: false,
+      debateShowAll: false,
+    }),
   stopReplay: () =>
-    set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false, debateShowAll: true }),
+    set({
+      replayMode: false,
+      replayPlaying: false,
+      replayIndex: -1,
+      replayTyping: false,
+      debateShowAll: true,
+    }),
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   tickReplay: () => {
     const { replayIndex, turns, replayTyping } = get();

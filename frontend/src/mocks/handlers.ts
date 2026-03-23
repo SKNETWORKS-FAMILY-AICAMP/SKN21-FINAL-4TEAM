@@ -107,11 +107,20 @@ export const handlers = [
   http.get('/api/agents/me', () => HttpResponse.json([])),
   http.get('/api/agents/templates', () => HttpResponse.json([])),
   http.post('/api/agents', async ({ request }) => {
-    const data = await request.clone().json().catch(() => ({}));
-    return HttpResponse.json({ id: 'mock-agent-1', ...(data as object), elo_rating: 1200 }, { status: 201 });
+    const data = await request
+      .clone()
+      .json()
+      .catch(() => ({}));
+    return HttpResponse.json(
+      { id: 'mock-agent-1', ...(data as object), elo_rating: 1200 },
+      { status: 201 },
+    );
   }),
   http.put('/api/agents/:id', async ({ request }) => {
-    const data = await request.clone().json().catch(() => ({}));
+    const data = await request
+      .clone()
+      .json()
+      .catch(() => ({}));
     return HttpResponse.json({ id: 'mock-agent-1', ...(data as object), elo_rating: 1200 });
   }),
   http.delete('/api/agents/:id', () => new HttpResponse(null, { status: 204 })),

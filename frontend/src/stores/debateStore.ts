@@ -69,14 +69,25 @@ type DebateState = {
   rankingLoading: boolean;
   featuredMatches: DebateMatch[];
   // ─── topic 액션 ────────────────────────────────────────────
-  fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
+  fetchTopics: (params?: {
+    status?: string;
+    sort?: string;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
   deleteTopic: (topicId: string) => Promise<void>;
-  joinQueue: (topicId: string, agentId: string, password?: string) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
+  joinQueue: (
+    topicId: string,
+    agentId: string,
+    password?: string,
+  ) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
-  randomMatch: (agentId: string) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
+  randomMatch: (
+    agentId: string,
+  ) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
   // ─── match 액션 ────────────────────────────────────────────
   fetchMatch: (matchId: string) => Promise<void>;
   fetchTurns: (matchId: string) => Promise<void>;
@@ -341,9 +352,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         (t) => t.turn_number === turn_number && t.speaker === speaker,
       );
       const updatedTurns =
-        turnIdx >= 0
-          ? s.turns.map((t, i) => (i === turnIdx ? pending : t))
-          : [...s.turns, pending];
+        turnIdx >= 0 ? s.turns.map((t, i) => (i === turnIdx ? pending : t)) : [...s.turns, pending];
 
       return {
         turns: updatedTurns,
@@ -405,7 +414,12 @@ export const useDebateStore = create<DebateState>((set, get) => ({
       // 대기 중인 pendingTurnLogs를 turns에 병합 — finished/error 이벤트 시 손실 방지
       const logsToFlush = s.pendingTurnLogs;
       if (logsToFlush.length === 0) {
-        return { streamingTurn: null, pendingStreamingTurn: null, pendingTurnLogs: [], nextSpeaker: null };
+        return {
+          streamingTurn: null,
+          pendingStreamingTurn: null,
+          pendingTurnLogs: [],
+          nextSpeaker: null,
+        };
       }
       // 기존 turns를 Map으로 인덱싱 — O(n²) some+map 중첩 대신 O(n) 단일 패스로 병합
       const turnMap = new Map(s.turns.map((t, i) => [`${t.turn_number}:${t.speaker}`, i]));
@@ -431,9 +445,21 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   setStreaming: (v) => set({ streaming: v }),
   // replayIndex -1: 재생 시작 시 0턴도 아직 안 보임. 첫 tick에서 0으로 올라가 첫 턴 등장
   startReplay: () =>
-    set({ replayMode: true, replayIndex: -1, replayPlaying: true, replayTyping: false, debateShowAll: false }),
+    set({
+      replayMode: true,
+      replayIndex: -1,
+      replayPlaying: true,
+      replayTyping: false,
+      debateShowAll: false,
+    }),
   stopReplay: () =>
-    set({ replayMode: false, replayPlaying: false, replayIndex: -1, replayTyping: false, debateShowAll: true }),
+    set({
+      replayMode: false,
+      replayPlaying: false,
+      replayIndex: -1,
+      replayTyping: false,
+      debateShowAll: true,
+    }),
   setReplaySpeed: (speed) => set({ replaySpeed: speed }),
   tickReplay: () => {
     const { replayIndex, turns, replayTyping } = get();

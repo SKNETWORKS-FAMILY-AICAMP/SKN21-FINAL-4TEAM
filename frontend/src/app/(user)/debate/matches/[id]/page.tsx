@@ -116,15 +116,13 @@ export default function MatchPage() {
     .reduce((s, t) => s + t.penalty_total, 0);
   const attrition = turns.length; // 완료된 턴당 1 HP 자연 감소 (긴장감 연출)
 
-  const hpA = isCompleted
-    ? currentMatch.score_a
-    : Math.max(20, 100 - attrition - penaltiesA);
-  const hpB = isCompleted
-    ? currentMatch.score_b
-    : Math.max(20, 100 - attrition - penaltiesB);
+  const hpA = isCompleted ? currentMatch.score_a : Math.max(20, 100 - attrition - penaltiesA);
+  const hpB = isCompleted ? currentMatch.score_b : Math.max(20, 100 - attrition - penaltiesB);
 
-  const isWinnerA = (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_a.id;
-  const isWinnerB = (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_b.id;
+  const isWinnerA =
+    (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_a.id;
+  const isWinnerB =
+    (isCompleted || isForfeit) && currentMatch.winner_id === currentMatch.agent_b.id;
 
   // 종료 배너 결정
   const showBanner = isCompleted || isForfeit;
@@ -162,7 +160,9 @@ export default function MatchPage() {
     <div className="-m-4 md:-m-6">
       {/* 종료 배너 — 최상단 고정 (배틀 헤더보다 위) */}
       {showBanner && (
-        <div className={`sticky top-0 z-40 px-4 py-2 text-center text-sm font-semibold ${bannerClass}`}>
+        <div
+          className={`sticky top-0 z-40 px-4 py-2 text-center text-sm font-semibold ${bannerClass}`}
+        >
           <span>{bannerText}</span>
           {match.elo_a_after != null && (
             <span className="ml-4 inline-flex items-center gap-3 text-xs font-mono">
@@ -225,7 +225,10 @@ export default function MatchPage() {
                 {STATUS_LABELS[currentMatch.status] ?? currentMatch.status}
               </span>
               {currentMatch.match_type && currentMatch.match_type !== 'ranked' && (
-                <PromotionBadge type={currentMatch.match_type as 'promotion' | 'demotion'} size="sm" />
+                <PromotionBadge
+                  type={currentMatch.match_type as 'promotion' | 'demotion'}
+                  size="sm"
+                />
               )}
               {isCompleted && (
                 <span className="text-sm font-mono font-bold text-text mt-0.5">
@@ -258,27 +261,32 @@ export default function MatchPage() {
           </div>
 
           {/* 승급전/강등전 시리즈 진행도 */}
-          {(seriesUpdate || currentMatch.match_type !== 'ranked') && (() => {
-            const activeSeries = seriesUpdate ?? (currentMatch.match_type && currentMatch.match_type !== 'ranked' ? {
-              id: currentMatch.series_id ?? '',
-              agent_id: '',
-              series_type: currentMatch.match_type as 'promotion' | 'demotion',
-              from_tier: '',
-              to_tier: '',
-              required_wins: currentMatch.match_type === 'promotion' ? 2 : 1,
-              current_wins: 0,
-              current_losses: 0,
-              status: 'active' as const,
-              created_at: '',
-              completed_at: null,
-            } : null);
-            if (!activeSeries || !activeSeries.from_tier) return null;
-            return (
-              <div className="mt-2 pt-2 border-t border-border flex justify-center">
-                <PromotionSeriesProgress series={activeSeries} />
-              </div>
-            );
-          })()}
+          {(seriesUpdate || currentMatch.match_type !== 'ranked') &&
+            (() => {
+              const activeSeries =
+                seriesUpdate ??
+                (currentMatch.match_type && currentMatch.match_type !== 'ranked'
+                  ? {
+                      id: currentMatch.series_id ?? '',
+                      agent_id: '',
+                      series_type: currentMatch.match_type as 'promotion' | 'demotion',
+                      from_tier: '',
+                      to_tier: '',
+                      required_wins: currentMatch.match_type === 'promotion' ? 2 : 1,
+                      current_wins: 0,
+                      current_losses: 0,
+                      status: 'active' as const,
+                      created_at: '',
+                      completed_at: null,
+                    }
+                  : null);
+              if (!activeSeries || !activeSeries.from_tier) return null;
+              return (
+                <div className="mt-2 pt-2 border-t border-border flex justify-center">
+                  <PromotionSeriesProgress series={activeSeries} />
+                </div>
+              );
+            })()}
         </div>
       </div>
 

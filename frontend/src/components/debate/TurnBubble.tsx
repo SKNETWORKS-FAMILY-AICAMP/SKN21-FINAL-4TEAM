@@ -1,7 +1,15 @@
 'use client';
 
 import { memo, useState } from 'react';
-import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight, Ban, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ShieldAlert,
+  Wrench,
+  ChevronDown,
+  ChevronRight,
+  Ban,
+  Loader2,
+} from 'lucide-react';
 import type { TurnLog, TurnReview } from '@/stores/debateStore';
 
 type Props = {
@@ -10,7 +18,10 @@ type Props = {
   agentBName: string;
   agentAImageUrl?: string | null;
   agentBImageUrl?: string | null;
-  review?: Pick<TurnReview, 'logic_score' | 'violations' | 'feedback' | 'blocked' | 'skipped'> | null;
+  review?: Pick<
+    TurnReview,
+    'logic_score' | 'violations' | 'feedback' | 'blocked' | 'skipped'
+  > | null;
   displayClaim?: string; // 리플레이 스트리밍 시 부분 텍스트 오버라이드
   searching?: { speaker: string; query: string } | null;
 };
@@ -33,35 +44,68 @@ const ACTION_LABELS: Record<string, string> = {
 
 /** 벌점 키 → 한국어 레이블 + 설명 */
 const PENALTY_INFO: Record<string, { label: string; desc: string }> = {
-  schema_violation:        { label: 'JSON 형식 위반',     desc: '응답이 요구된 JSON 스키마를 따르지 않음' },
-  repetition:              { label: '주장 반복',            desc: '이전 턴과 지나치게 유사한 주장을 반복함' },
-  prompt_injection:        { label: '프롬프트 인젝션',      desc: '시스템 지시를 무력화하려는 패턴이 감지됨' },
-  timeout:                 { label: '응답 시간 초과',       desc: '제한 시간 내에 응답하지 못함' },
-  false_source:            { label: '허위 출처 인용',       desc: '존재하지 않는 데이터·인용을 사용함' },
-  ad_hominem:              { label: '인신공격',             desc: '논거 대신 상대방을 직접 비하하는 표현 사용' },
-  human_suspicion:         { label: '인간 개입 의심',       desc: '응답 패턴이 AI가 아닌 인간의 개입을 암시함' },
+  schema_violation: { label: 'JSON 형식 위반', desc: '응답이 요구된 JSON 스키마를 따르지 않음' },
+  repetition: { label: '주장 반복', desc: '이전 턴과 지나치게 유사한 주장을 반복함' },
+  prompt_injection: { label: '프롬프트 인젝션', desc: '시스템 지시를 무력화하려는 패턴이 감지됨' },
+  timeout: { label: '응답 시간 초과', desc: '제한 시간 내에 응답하지 못함' },
+  false_source: { label: '허위 출처 인용', desc: '존재하지 않는 데이터·인용을 사용함' },
+  ad_hominem: { label: '인신공격', desc: '논거 대신 상대방을 직접 비하하는 표현 사용' },
+  human_suspicion: { label: '인간 개입 의심', desc: '응답 패턴이 AI가 아닌 인간의 개입을 암시함' },
   // LLM 검토 기반 벌점 (llm_ 접두사)
-  llm_prompt_injection:    { label: '[LLM] 프롬프트 인젝션', desc: 'LLM 검토: 시스템 지시를 무력화하려는 시도 감지' },
-  llm_ad_hominem:          { label: '[LLM] 인신공격',        desc: 'LLM 검토: 논거 대신 상대방을 직접 비하하는 표현' },
-  llm_straw_man:           { label: '[LLM] 허수아비 논증',   desc: 'LLM 검토: 상대 주장을 왜곡·과장해 반박' },
-  llm_circular_reasoning:  { label: '[LLM] 순환논증',        desc: 'LLM 검토: 결론을 전제로 반복하는 논증 오류' },
-  llm_hasty_generalization:{ label: '[LLM] 성급한 일반화',   desc: 'LLM 검토: 일부 사례로 전체를 단정하는 일반화 오류' },
-  llm_accent:              { label: '[LLM] 강조의 오류',     desc: 'LLM 검토: 특정 표현만 강조하거나 맥락을 제거해 의미 왜곡' },
-  llm_genetic_fallacy:     { label: '[LLM] 유전적 오류',     desc: 'LLM 검토: 출처·배경만 근거로 현재 가치나 진위를 판단' },
-  llm_appeal:              { label: '[LLM] 부적절한 호소',   desc: 'LLM 검토: 동정·위협 등 감정/힘에 호소해 결론을 유도' },
-  llm_slippery_slope:      { label: '[LLM] 미끄러운 경사',   desc: 'LLM 검토: 근거 없이 연쇄적 파국을 단정하는 오류' },
-  llm_division:            { label: '[LLM] 분할의 오류',     desc: 'LLM 검토: 전체의 성질을 부분에도 그대로 적용' },
-  llm_composition:         { label: '[LLM] 합성의 오류',     desc: 'LLM 검토: 부분의 속성을 전체의 속성으로 일반화' },
-  llm_off_topic:           { label: '[LLM] 주제 이탈',       desc: 'LLM 검토: 토론 주제와 무관한 내용이 포함됨' },
-  llm_false_claim:         { label: '[LLM] 허위 주장',       desc: 'LLM 검토: 사실 확인이 불가능하거나 허위인 주장' },
+  llm_prompt_injection: {
+    label: '[LLM] 프롬프트 인젝션',
+    desc: 'LLM 검토: 시스템 지시를 무력화하려는 시도 감지',
+  },
+  llm_ad_hominem: {
+    label: '[LLM] 인신공격',
+    desc: 'LLM 검토: 논거 대신 상대방을 직접 비하하는 표현',
+  },
+  llm_straw_man: { label: '[LLM] 허수아비 논증', desc: 'LLM 검토: 상대 주장을 왜곡·과장해 반박' },
+  llm_circular_reasoning: {
+    label: '[LLM] 순환논증',
+    desc: 'LLM 검토: 결론을 전제로 반복하는 논증 오류',
+  },
+  llm_hasty_generalization: {
+    label: '[LLM] 성급한 일반화',
+    desc: 'LLM 검토: 일부 사례로 전체를 단정하는 일반화 오류',
+  },
+  llm_accent: {
+    label: '[LLM] 강조의 오류',
+    desc: 'LLM 검토: 특정 표현만 강조하거나 맥락을 제거해 의미 왜곡',
+  },
+  llm_genetic_fallacy: {
+    label: '[LLM] 유전적 오류',
+    desc: 'LLM 검토: 출처·배경만 근거로 현재 가치나 진위를 판단',
+  },
+  llm_appeal: {
+    label: '[LLM] 부적절한 호소',
+    desc: 'LLM 검토: 동정·위협 등 감정/힘에 호소해 결론을 유도',
+  },
+  llm_slippery_slope: {
+    label: '[LLM] 미끄러운 경사',
+    desc: 'LLM 검토: 근거 없이 연쇄적 파국을 단정하는 오류',
+  },
+  llm_division: {
+    label: '[LLM] 분할의 오류',
+    desc: 'LLM 검토: 전체의 성질을 부분에도 그대로 적용',
+  },
+  llm_composition: {
+    label: '[LLM] 합성의 오류',
+    desc: 'LLM 검토: 부분의 속성을 전체의 속성으로 일반화',
+  },
+  llm_off_topic: { label: '[LLM] 주제 이탈', desc: 'LLM 검토: 토론 주제와 무관한 내용이 포함됨' },
+  llm_false_claim: {
+    label: '[LLM] 허위 주장',
+    desc: 'LLM 검토: 사실 확인이 불가능하거나 허위인 주장',
+  },
 };
 
 /** 툴 이름 → 한국어 */
 const TOOL_LABELS: Record<string, string> = {
-  calculator:       '계산기',
-  stance_tracker:   '주장 추적',
+  calculator: '계산기',
+  stance_tracker: '주장 추적',
   opponent_summary: '상대 요약',
-  turn_info:        '턴 정보',
+  turn_info: '턴 정보',
 };
 
 function LogicScoreBar({ score }: { score: number | null }) {
@@ -79,7 +123,16 @@ function LogicScoreBar({ score }: { score: number | null }) {
 }
 
 // SSE 스트리밍 중 매 청크마다 완료된 턴이 불필요하게 재렌더링되는 것을 방지
-export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review, displayClaim, searching }: Props) {
+export const TurnBubble = memo(function TurnBubble({
+  turn,
+  agentAName,
+  agentBName,
+  agentAImageUrl,
+  agentBImageUrl,
+  review,
+  displayClaim,
+  searching,
+}: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
@@ -140,38 +193,42 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
         )}
 
         {/* 근거 */}
-        {turn.evidence && (() => {
-          // "[출처: URL1 | URL2]" 패턴 파싱 — DuckDuckGo 검색 결과 출처를 클릭 링크로 렌더링
-          const sourceMatch = turn.evidence.match(/\[출처:\s*(.+?)\]$/s);
-          const bodyText = sourceMatch
-            ? turn.evidence.slice(0, turn.evidence.lastIndexOf('[출처:')).trim()
-            : turn.evidence;
-          const sourceUrls = sourceMatch
-            ? sourceMatch[1].split('|').map((u) => u.trim()).filter(Boolean)
-            : [];
-          return (
-            <div className="mt-2 px-2.5 py-1.5 bg-bg rounded border border-border">
-              <span className="text-[10px] text-text-muted font-semibold">근거</span>
-              <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{bodyText}</p>
-              {sourceUrls.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-                  <span className="text-[10px] text-text-muted">출처:</span>
-                  {sourceUrls.map((url) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-primary underline break-all"
-                    >
-                      {url}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {turn.evidence &&
+          (() => {
+            // "[출처: URL1 | URL2]" 패턴 파싱 — DuckDuckGo 검색 결과 출처를 클릭 링크로 렌더링
+            const sourceMatch = turn.evidence.match(/\[출처:\s*(.+?)\]$/s);
+            const bodyText = sourceMatch
+              ? turn.evidence.slice(0, turn.evidence.lastIndexOf('[출처:')).trim()
+              : turn.evidence;
+            const sourceUrls = sourceMatch
+              ? sourceMatch[1]
+                  .split('|')
+                  .map((u) => u.trim())
+                  .filter(Boolean)
+              : [];
+            return (
+              <div className="mt-2 px-2.5 py-1.5 bg-bg rounded border border-border">
+                <span className="text-[10px] text-text-muted font-semibold">근거</span>
+                <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{bodyText}</p>
+                {sourceUrls.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                    <span className="text-[10px] text-text-muted">출처:</span>
+                    {sourceUrls.map((url) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-primary underline break-all"
+                      >
+                        {url}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
         {/* 툴 사용 내역 */}
         {turn.tool_used && (
@@ -230,12 +287,8 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
                 <div key={key} className="flex items-start gap-2 text-[11px]">
                   <span className="shrink-0 text-red-400 font-semibold mt-0.5">-{value}</span>
                   <div>
-                    <span className="text-text font-medium">
-                      {info?.label || key}
-                    </span>
-                    {info?.desc && (
-                      <span className="text-text-muted ml-1">— {info.desc}</span>
-                    )}
+                    <span className="text-text font-medium">{info?.label || key}</span>
+                    {info?.desc && <span className="text-text-muted ml-1">— {info.desc}</span>}
                   </div>
                 </div>
               );
@@ -251,9 +304,7 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
             }`}
           >
             <ShieldAlert size={12} />
-            <span>
-              인간 개입 {turn.human_suspicion_score > 60 ? '강한 의심' : '의심'}
-            </span>
+            <span>인간 개입 {turn.human_suspicion_score > 60 ? '강한 의심' : '의심'}</span>
             <span className="text-text-muted text-[10px]">
               (점수: {turn.human_suspicion_score})
             </span>
@@ -269,23 +320,28 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
         )}
 
         {/* LLM 검토 결과 — 접힘 시 숨김 */}
-        {reviewExpanded && review && !review.skipped && (review.logic_score != null || (review.violations?.length ?? 0) > 0 || review.blocked) && (
-          <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>
-              {review.blocked && (
-                <div className="flex items-center gap-1 text-[10px] font-bold text-red-500">
-                  <Ban size={10} />
-                  <span>차단됨</span>
-                </div>
+        {reviewExpanded &&
+          review &&
+          !review.skipped &&
+          (review.logic_score != null ||
+            (review.violations?.length ?? 0) > 0 ||
+            review.blocked) && (
+            <div className="mt-2 border border-border rounded-lg bg-bg px-2.5 py-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-text-muted">논증 품질</span>
+                {review.blocked && (
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-red-500">
+                    <Ban size={10} />
+                    <span>차단됨</span>
+                  </div>
+                )}
+              </div>
+              <LogicScoreBar score={review.logic_score} />
+              {review.feedback && (
+                <p className="text-[11px] text-text-secondary italic">{review.feedback}</p>
               )}
             </div>
-            <LogicScoreBar score={review.logic_score} />
-            {review.feedback && (
-              <p className="text-[11px] text-text-secondary italic">{review.feedback}</p>
-            )}
-          </div>
-        )}
+          )}
 
         {/* 메타 정보 */}
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-text-muted">

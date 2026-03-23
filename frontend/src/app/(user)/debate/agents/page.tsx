@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bot, Trophy, Users, Zap, Brain, ChevronRight, Star, TrendingUp, Cpu, DollarSign } from 'lucide-react';
+import {
+  Bot,
+  Trophy,
+  Users,
+  Zap,
+  Brain,
+  ChevronRight,
+  Star,
+  TrendingUp,
+  Cpu,
+  DollarSign,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToastStore } from '@/stores/toastStore';
 
@@ -77,7 +88,10 @@ function ModelListSkeleton() {
   return (
     <div className="flex flex-col gap-2 animate-pulse">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-gray-100 border-2 border-transparent">
+        <div
+          key={i}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-gray-100 border-2 border-transparent"
+        >
           <div className="w-6 h-6 rounded bg-gray-200 shrink-0" />
           <div className="w-9 h-9 rounded-lg bg-gray-200 shrink-0" />
           <div className="flex-1">
@@ -220,7 +234,9 @@ export default function AIProfilePage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[11px] text-gray-400 capitalize">{model.provider}</span>
+                          <span className="text-[11px] text-gray-400 capitalize">
+                            {model.provider}
+                          </span>
                           <span className="text-[11px] text-gray-300">·</span>
                           <span className="text-[11px] text-gray-400">{model.model_id}</span>
                         </div>
@@ -314,21 +330,29 @@ export default function AIProfilePage() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                     <span className="text-[12px] text-gray-500 font-semibold">Provider</span>
-                    <span className="text-sm font-bold text-black capitalize">{selectedModel.provider}</span>
+                    <span className="text-sm font-bold text-black capitalize">
+                      {selectedModel.provider}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                     <span className="text-[12px] text-gray-500 font-semibold">Model ID</span>
-                    <span className="text-sm font-bold text-black font-mono">{selectedModel.model_id}</span>
+                    <span className="text-sm font-bold text-black font-mono">
+                      {selectedModel.model_id}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                     <span className="text-[12px] text-gray-500 font-semibold">성인 전용</span>
-                    <span className={`text-sm font-bold ${selectedModel.is_adult_only ? 'text-red-500' : 'text-gray-400'}`}>
+                    <span
+                      className={`text-sm font-bold ${selectedModel.is_adult_only ? 'text-red-500' : 'text-gray-400'}`}
+                    >
                       {selectedModel.is_adult_only ? '예' : '아니오'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                     <span className="text-[12px] text-gray-500 font-semibold">상태</span>
-                    <span className={`text-sm font-bold ${selectedModel.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span
+                      className={`text-sm font-bold ${selectedModel.is_active ? 'text-green-600' : 'text-gray-400'}`}
+                    >
                       {selectedModel.is_active ? '활성' : '비활성'}
                     </span>
                   </div>

@@ -55,7 +55,7 @@ export function DesktopHeader() {
           >
             {user?.nickname?.charAt(0)?.toUpperCase() ?? 'U'}
           </button>
-          
+
           {/* Dropdown Menu */}
           {showDropdown && (
             <div className="absolute right-0 top-[calc(100%+8px)] w-48 bg-bg-surface border border-border rounded-xl shadow-lg py-2 z-[100] animate-in fade-in slide-in-from-top-2 duration-200">

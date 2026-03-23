@@ -14,8 +14,15 @@ const MAX_BADGE = 99;
 export function NotificationBell() {
   const router = useRouter();
   const { user } = useUserStore();
-  const { notifications, unreadCount, loading, fetchNotifications, fetchUnreadCount, markRead, markAllRead } =
-    useNotificationStore();
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    fetchNotifications,
+    fetchUnreadCount,
+    markRead,
+    markAllRead,
+  } = useNotificationStore();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);

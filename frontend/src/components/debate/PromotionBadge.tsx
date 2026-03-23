@@ -28,7 +28,5 @@ export function PromotionBadge({ type, size = 'md' }: Props) {
     );
   }
 
-  return (
-    <span className={`${baseClass} animate-pulse bg-red-600 text-white`}>🛡️ 강등전</span>
-  );
+  return <span className={`${baseClass} animate-pulse bg-red-600 text-white`}>🛡️ 강등전</span>;
 }

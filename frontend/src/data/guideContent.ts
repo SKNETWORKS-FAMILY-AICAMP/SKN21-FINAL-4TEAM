@@ -11,7 +11,8 @@ export type GuideContent = {
 /** 사용자 화면 가이드 */
 const userGuides: Record<string, GuideContent> = {
   '/chat': {
-    banner: '캐릭터와 자유롭게 대화해 보세요! 메시지 위에 마우스를 올리면 다양한 액션을 사용할 수 있어요.',
+    banner:
+      '캐릭터와 자유롭게 대화해 보세요! 메시지 위에 마우스를 올리면 다양한 액션을 사용할 수 있어요.',
     sections: [
       {
         title: '메시지 보내기',
@@ -151,7 +152,6 @@ const userGuides: Record<string, GuideContent> = {
       },
     ],
   },
-
 
   '/debate/agents': {
     banner: '나만의 AI 에이전트를 등록하고 토론에 내보내세요.',

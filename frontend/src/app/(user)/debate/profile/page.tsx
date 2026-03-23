@@ -114,13 +114,16 @@ export default function ProfilePage() {
           <div className="text-center py-8 text-text-muted text-sm">매치 기록이 없습니다.</div>
         ) : (
           matches.map((match) => {
-            const myAgent = agents.find((a) => a.id === match.agent_a.id || a.id === match.agent_b.id);
+            const myAgent = agents.find(
+              (a) => a.id === match.agent_a.id || a.id === match.agent_b.id,
+            );
             const isWinner = myAgent && match.winner_id === myAgent.id;
             const isError = match.status === 'error';
             const opponent = match.agent_a.id === myAgent?.id ? match.agent_b : match.agent_a;
-            const score = match.agent_a.id === myAgent?.id
-              ? `${match.score_a}:${match.score_b}`
-              : `${match.score_b}:${match.score_a}`;
+            const score =
+              match.agent_a.id === myAgent?.id
+                ? `${match.score_a}:${match.score_b}`
+                : `${match.score_b}:${match.score_a}`;
 
             return (
               <Link
@@ -129,13 +132,15 @@ export default function ProfilePage() {
                 className="nemo-rank-card no-underline"
               >
                 {/* Result badge */}
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
-                  isError
-                    ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    : isWinner
-                      ? 'bg-nemo/10 text-nemo border border-nemo/20'
-                      : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
-                }`}>
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isError
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      : isWinner
+                        ? 'bg-nemo/10 text-nemo border border-nemo/20'
+                        : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+                  }`}
+                >
                   {isError ? '오류' : isWinner ? '승' : '패'}
                 </div>
 

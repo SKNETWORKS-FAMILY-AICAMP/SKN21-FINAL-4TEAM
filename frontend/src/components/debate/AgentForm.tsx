@@ -33,43 +33,47 @@ const PROVIDERS = [
 const MODEL_OPTIONS: Record<string, { value: string; label: string; ctx: string }[]> = {
   openai: [
     // ── GPT-5 계열 (최신) ──────────────────────────
-    { value: 'gpt-5.2',      label: '★ GPT-5.2',          ctx: '400K' },
-    { value: 'gpt-5.2-pro',  label: '★ GPT-5.2 Pro',      ctx: '400K' },
-    { value: 'gpt-5.1',      label: 'GPT-5.1',             ctx: '200K' },
-    { value: 'gpt-5',        label: 'GPT-5',               ctx: '128K' },
-    { value: 'gpt-5-mini',   label: 'GPT-5 Mini',          ctx: '128K' },
+    { value: 'gpt-5.2', label: '★ GPT-5.2', ctx: '400K' },
+    { value: 'gpt-5.2-pro', label: '★ GPT-5.2 Pro', ctx: '400K' },
+    { value: 'gpt-5.1', label: 'GPT-5.1', ctx: '200K' },
+    { value: 'gpt-5', label: 'GPT-5', ctx: '128K' },
+    { value: 'gpt-5-mini', label: 'GPT-5 Mini', ctx: '128K' },
     // ── GPT-4.1 / 4o ──────────────────────────────
-    { value: 'gpt-4.1',      label: 'GPT-4.1',             ctx: '1M'   },
-    { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini',        ctx: '1M'   },
-    { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano',        ctx: '1M'   },
-    { value: 'gpt-4o',       label: 'GPT-4o',              ctx: '128K' },
-    { value: 'gpt-4o-mini',  label: 'GPT-4o Mini',         ctx: '128K' },
+    { value: 'gpt-4.1', label: 'GPT-4.1', ctx: '1M' },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', ctx: '1M' },
+    { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', ctx: '1M' },
+    { value: 'gpt-4o', label: 'GPT-4o', ctx: '128K' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', ctx: '128K' },
     // ── 추론 모델 ─────────────────────────────────
-    { value: 'o3',           label: 'o3  (추론)',           ctx: '200K' },
-    { value: 'o3-pro',       label: 'o3 Pro  (추론)',       ctx: '200K' },
-    { value: 'o4-mini',      label: 'o4-mini  (추론)',      ctx: '200K' },
+    { value: 'o3', label: 'o3  (추론)', ctx: '200K' },
+    { value: 'o3-pro', label: 'o3 Pro  (추론)', ctx: '200K' },
+    { value: 'o4-mini', label: 'o4-mini  (추론)', ctx: '200K' },
   ],
   anthropic: [
-    { value: 'claude-opus-4-6',           label: '★ Claude Opus 4.6',   ctx: '200K' },
-    { value: 'claude-sonnet-4-6',         label: '★ Claude Sonnet 4.6', ctx: '200K' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',    ctx: '200K' },
-    { value: 'claude-sonnet-4-5',         label: 'Claude Sonnet 4.5',   ctx: '200K' },
-    { value: 'claude-opus-4-5',           label: 'Claude Opus 4.5',     ctx: '200K' },
+    { value: 'claude-opus-4-6', label: '★ Claude Opus 4.6', ctx: '200K' },
+    { value: 'claude-sonnet-4-6', label: '★ Claude Sonnet 4.6', ctx: '200K' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', ctx: '200K' },
+    { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', ctx: '200K' },
+    { value: 'claude-opus-4-5', label: 'Claude Opus 4.5', ctx: '200K' },
   ],
   google: [
     // ── Gemini 3 계열 (최신, Preview) ─────────────
-    { value: 'gemini-3.1-pro-preview',  label: '★ Gemini 3.1 Pro Preview',  ctx: '1M' },
-    { value: 'gemini-3-flash-preview',  label: 'Gemini 3 Flash Preview',    ctx: '1M' },
+    { value: 'gemini-3.1-pro-preview', label: '★ Gemini 3.1 Pro Preview', ctx: '1M' },
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', ctx: '1M' },
     // ── Gemini 2.5 계열 (안정) ────────────────────
-    { value: 'gemini-2.5-pro',          label: 'Gemini 2.5 Pro',            ctx: '1M' },
-    { value: 'gemini-2.5-flash',        label: 'Gemini 2.5 Flash',          ctx: '1M' },
-    { value: 'gemini-2.5-flash-lite',   label: 'Gemini 2.5 Flash-Lite',     ctx: '1M' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', ctx: '1M' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', ctx: '1M' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', ctx: '1M' },
   ],
   runpod: [
-    { value: 'meta-llama/Meta-Llama-3.1-70B-Instruct', label: 'Llama 3.1 70B Instruct', ctx: '128K' },
-    { value: 'meta-llama/Llama-3.3-70B-Instruct',      label: 'Llama 3.3 70B Instruct', ctx: '128K' },
-    { value: 'mistralai/Mixtral-8x7B-Instruct-v0.1',   label: 'Mixtral 8x7B Instruct',  ctx: '32K'  },
-    { value: 'Qwen/Qwen2.5-72B-Instruct',              label: 'Qwen 2.5 72B Instruct',  ctx: '128K' },
+    {
+      value: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+      label: 'Llama 3.1 70B Instruct',
+      ctx: '128K',
+    },
+    { value: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B Instruct', ctx: '128K' },
+    { value: 'mistralai/Mixtral-8x7B-Instruct-v0.1', label: 'Mixtral 8x7B Instruct', ctx: '32K' },
+    { value: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B Instruct', ctx: '128K' },
   ],
   local: [],
 };
@@ -94,7 +98,9 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   // 선택된 템플릿 (null이면 BYOK/로컬 모드)
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
-  const [customizations, setCustomizations] = useState<Record<string, unknown>>(initialData?.customizations ?? {});
+  const [customizations, setCustomizations] = useState<Record<string, unknown>>(
+    initialData?.customizations ?? {},
+  );
   const [enableFreeText, setEnableFreeText] = useState(false);
 
   // 기본 에이전트 폼 상태
@@ -183,7 +189,11 @@ export function AgentForm({ initialData, isEdit }: Props) {
         error?: string;
         error_type?: 'api_key' | 'model' | 'other';
         model_response?: string;
-      }>('/agents/test', { provider: form.provider, model_id: form.model_id, api_key: form.api_key });
+      }>('/agents/test', {
+        provider: form.provider,
+        model_id: form.model_id,
+        api_key: form.api_key,
+      });
       if (result.ok) {
         setTestStatus('ok');
       } else {
@@ -259,16 +269,17 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
       if (isEdit && initialData?.id) {
         // 편집: template 모드면 customizations만 전달 가능
-        const updatePayload = useTemplate && editMode === 'template'
-          ? {
-              name: form.name,
-              description: form.description || undefined,
-              customizations,
-              enable_free_text: enableFreeText,
-              version_tag: form.version_tag || undefined,
-              ...(form.api_key ? { api_key: form.api_key } : {}),
-            }
-          : payload;
+        const updatePayload =
+          useTemplate && editMode === 'template'
+            ? {
+                name: form.name,
+                description: form.description || undefined,
+                customizations,
+                enable_free_text: enableFreeText,
+                version_tag: form.version_tag || undefined,
+                ...(form.api_key ? { api_key: form.api_key } : {}),
+              }
+            : payload;
         await updateAgent(initialData.id, updatePayload);
         addToast('success', '에이전트가 수정되었습니다.');
         router.push(`/debate/agents/${initialData.id}`);
@@ -419,19 +430,23 @@ export function AgentForm({ initialData, isEdit }: Props) {
           required
         />
         {/* 이름 변경 제한 안내 (편집 모드 + name_changed_at 있을 때) */}
-        {isEdit && initialData?.name_changed_at && (() => {
-          const changedAt = new Date(initialData.name_changed_at!);
-          const now = new Date();
-          const daysSince = Math.floor((now.getTime() - changedAt.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysSince < 7) {
-            return (
-              <p className="text-[11px] text-yellow-500 mt-1">
-                이름은 7일에 한 번 변경 가능 — {7 - daysSince}일 후 변경 가능
-              </p>
+        {isEdit &&
+          initialData?.name_changed_at &&
+          (() => {
+            const changedAt = new Date(initialData.name_changed_at!);
+            const now = new Date();
+            const daysSince = Math.floor(
+              (now.getTime() - changedAt.getTime()) / (1000 * 60 * 60 * 24),
             );
-          }
-          return null;
-        })()}
+            if (daysSince < 7) {
+              return (
+                <p className="text-[11px] text-yellow-500 mt-1">
+                  이름은 7일에 한 번 변경 가능 — {7 - daysSince}일 후 변경 가능
+                </p>
+              );
+            }
+            return null;
+          })()}
       </div>
 
       <div>
@@ -520,7 +535,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
               >
                 {(MODEL_OPTIONS[form.provider] ?? []).map((m) => (
                   <option key={m.value} value={m.value}>
-                    {m.label}  ·  ctx {m.ctx}
+                    {m.label} · ctx {m.ctx}
                   </option>
                 ))}
                 {/* 편집 모드: 기존 model_id가 목록에 없을 때 보존 */}
@@ -536,13 +551,20 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
       {/* 플랫폼 크레딧 사용 토글 (non-local 에이전트 전용) */}
       {!isLocal && (
-        <div className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
-          form.use_platform_credits
-            ? 'border-yellow-500/40 bg-yellow-500/5'
-            : 'border-border bg-bg'
-        }`}>
+        <div
+          className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
+            form.use_platform_credits
+              ? 'border-yellow-500/40 bg-yellow-500/5'
+              : 'border-border bg-bg'
+          }`}
+        >
           <div className="flex items-center gap-2.5 min-w-0">
-            <Coins size={16} className={form.use_platform_credits ? 'text-yellow-400 shrink-0' : 'text-text-muted shrink-0'} />
+            <Coins
+              size={16}
+              className={
+                form.use_platform_credits ? 'text-yellow-400 shrink-0' : 'text-text-muted shrink-0'
+              }
+            />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-text">플랫폼 크레딧 사용</p>
               <p className="text-[11px] text-text-muted">
@@ -575,13 +597,13 @@ export function AgentForm({ initialData, isEdit }: Props) {
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
           <p className="text-sm font-semibold text-text">로컬 에이전트 안내</p>
           <p className="text-xs text-text-muted">
-            내 PC에서 Ollama로 LLM을 직접 구동하는 에이전트입니다. API 키·시스템 프롬프트는
-            로컬에서 관리하므로 플랫폼에 입력할 필요 없습니다.
+            내 PC에서 Ollama로 LLM을 직접 구동하는 에이전트입니다. API 키·시스템 프롬프트는 로컬에서
+            관리하므로 플랫폼에 입력할 필요 없습니다.
           </p>
           <ol className="text-xs text-text-muted list-decimal list-inside space-y-0.5">
             <li>
-              에이전트 생성 후 <strong className="text-text">상세 페이지</strong>에서 설정 파일
-              및 실행 명령어를 확인하세요.
+              에이전트 생성 후 <strong className="text-text">상세 페이지</strong>에서 설정 파일 및
+              실행 명령어를 확인하세요.
             </li>
             <li>
               <code className="text-text bg-primary/10 px-1 rounded">
@@ -599,8 +621,8 @@ export function AgentForm({ initialData, isEdit }: Props) {
             플랫폼 크레딧으로 실행됩니다
           </p>
           <p className="text-[11px] text-text-muted">
-            API 키 없이 플랫폼의 LLM 인프라를 사용합니다. 토론 1회당 크레딧이 소모됩니다.
-            크레딧이 부족하면 토론에 참가할 수 없습니다.
+            API 키 없이 플랫폼의 LLM 인프라를 사용합니다. 토론 1회당 크레딧이 소모됩니다. 크레딧이
+            부족하면 토론에 참가할 수 없습니다.
           </p>
         </div>
       ) : (
@@ -634,19 +656,24 @@ export function AgentForm({ initialData, isEdit }: Props) {
                   disabled={testStatus === 'testing'}
                   className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    ${testStatus === 'ok'
-                      ? 'bg-green-500/10 border-green-500/30 text-green-600'
-                      : testStatus === 'fail'
-                        ? 'bg-red-500/10 border-red-500/30 text-red-600'
-                        : 'border-border text-text hover:bg-border/20'
+                    ${
+                      testStatus === 'ok'
+                        ? 'bg-green-500/10 border-green-500/30 text-green-600'
+                        : testStatus === 'fail'
+                          ? 'bg-red-500/10 border-red-500/30 text-red-600'
+                          : 'border-border text-text hover:bg-border/20'
                     }`}
                 >
                   {testStatus === 'testing' ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : testStatus === 'ok' ? (
-                    <span className="flex items-center gap-1"><CheckCircle2 size={14} /> 성공</span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 size={14} /> 성공
+                    </span>
                   ) : testStatus === 'fail' ? (
-                    <span className="flex items-center gap-1"><XCircle size={14} /> 실패</span>
+                    <span className="flex items-center gap-1">
+                      <XCircle size={14} /> 실패
+                    </span>
                   ) : (
                     '테스트'
                   )}
@@ -655,14 +682,20 @@ export function AgentForm({ initialData, isEdit }: Props) {
             </div>
             {testStatus === 'fail' && testError && (
               <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
-                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  testErrorType === 'api_key'
-                    ? 'bg-red-500/15 text-red-600'
+                <span
+                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    testErrorType === 'api_key'
+                      ? 'bg-red-500/15 text-red-600'
+                      : testErrorType === 'model'
+                        ? 'bg-orange-500/15 text-orange-600'
+                        : 'bg-red-500/15 text-red-600'
+                  }`}
+                >
+                  {testErrorType === 'api_key'
+                    ? 'API 키 오류'
                     : testErrorType === 'model'
-                      ? 'bg-orange-500/15 text-orange-600'
-                      : 'bg-red-500/15 text-red-600'
-                }`}>
-                  {testErrorType === 'api_key' ? 'API 키 오류' : testErrorType === 'model' ? '모델 오류' : '오류'}
+                      ? '모델 오류'
+                      : '오류'}
                 </span>
                 {testError}
               </p>
@@ -703,7 +736,9 @@ export function AgentForm({ initialData, isEdit }: Props) {
             </div>
             <button
               type="button"
-              onClick={() => setForm((f) => ({ ...f, is_system_prompt_public: !f.is_system_prompt_public }))}
+              onClick={() =>
+                setForm((f) => ({ ...f, is_system_prompt_public: !f.is_system_prompt_public }))
+              }
               className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
                 form.is_system_prompt_public ? 'bg-primary' : 'bg-gray-600'
               }`}

@@ -34,7 +34,9 @@ export function RankingTable({ seasonId, myAgentIds = [] }: Props) {
       <div className="bg-bg-surface rounded-xl p-10 brutal-border brutal-shadow-sm flex flex-col items-center gap-3 text-center">
         <Trophy size={36} className="text-text-muted opacity-40" />
         <p className="text-text-muted text-sm font-semibold m-0">랭킹 데이터가 없습니다.</p>
-        <p className="text-text-muted text-xs m-0">아직 완료된 매치가 없거나 해당 시즌 기록이 없습니다.</p>
+        <p className="text-text-muted text-xs m-0">
+          아직 완료된 매치가 없거나 해당 시즌 기록이 없습니다.
+        </p>
       </div>
     );
   }
@@ -86,15 +88,31 @@ function RankingRow({
   return (
     <tr
       className={`border-b border-border last:border-b-0 hover:bg-bg-hover transition-colors ${
-        isMyAgent ? 'bg-primary/5 border-l-2 border-l-primary' :
-        rank === 1 ? 'bg-yellow-50' : rank === 2 ? 'bg-slate-100' : rank === 3 ? 'bg-orange-50' : ''
+        isMyAgent
+          ? 'bg-primary/5 border-l-2 border-l-primary'
+          : rank === 1
+            ? 'bg-yellow-50'
+            : rank === 2
+              ? 'bg-slate-100'
+              : rank === 3
+                ? 'bg-orange-50'
+                : ''
       }`}
     >
       <td className="px-4 py-2.5">
         {rank <= 3 ? (
-          <Trophy size={18} className={
-            rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-slate-400' : rank === 3 ? 'text-amber-600' : ''
-          } />
+          <Trophy
+            size={18}
+            className={
+              rank === 1
+                ? 'text-yellow-500'
+                : rank === 2
+                  ? 'text-slate-400'
+                  : rank === 3
+                    ? 'text-amber-600'
+                    : ''
+            }
+          />
         ) : (
           <span className="text-text-muted">{rank}</span>
         )}
@@ -117,7 +135,9 @@ function RankingRow({
           {entry.provider} / {entry.model_id}
         </div>
       </td>
-      <td className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate">{entry.owner_nickname}</td>
+      <td className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate">
+        {entry.owner_nickname}
+      </td>
       <td className="px-4 py-2.5 text-right">
         <span className="flex items-center justify-end gap-1 font-bold text-primary">
           <TrendingUp size={12} />

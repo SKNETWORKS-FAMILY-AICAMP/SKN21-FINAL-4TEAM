@@ -240,7 +240,10 @@ export default function AdminDebatePage() {
 
   // 대기 정리 상태
   const [cleaning, setCleaning] = useState(false);
-  const [cleanupResult, setCleanupResult] = useState<{ deleted_queue_entries: number; fixed_stuck_matches: number } | null>(null);
+  const [cleanupResult, setCleanupResult] = useState<{
+    deleted_queue_entries: number;
+    fixed_stuck_matches: number;
+  } | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -254,7 +257,10 @@ export default function AdminDebatePage() {
   });
 
   const fetchData = () => {
-    api.get<DebateStats>('/admin/debate/stats').then(setStats).catch(() => {});
+    api
+      .get<DebateStats>('/admin/debate/stats')
+      .then(setStats)
+      .catch(() => {});
     api
       .get<{ items: Topic[]; total: number }>('/topics?page_size=100')
       .then((r) => setTopics(r.items))
@@ -282,8 +288,14 @@ export default function AdminDebatePage() {
       })
       .catch(() => {});
 
-    api.get<{ items: Season[] }>('/admin/debate/seasons').then((r) => setSeasons(r.items)).catch(() => {});
-    api.get<{ items: Tournament[] }>('/tournaments?limit=20').then((r) => setTournaments(r.items)).catch(() => {});
+    api
+      .get<{ items: Season[] }>('/admin/debate/seasons')
+      .then((r) => setSeasons(r.items))
+      .catch(() => {});
+    api
+      .get<{ items: Tournament[] }>('/tournaments?limit=20')
+      .then((r) => setTournaments(r.items))
+      .catch(() => {});
   };
 
   const handleOpenDebug = async (matchId: string) => {
@@ -503,11 +515,18 @@ export default function AdminDebatePage() {
   };
 
   const handleCleanup = async () => {
-    if (!confirm('대기 중인 모든 큐 항목을 삭제하고, pending/waiting_agent 매치를 error로 처리합니다. 계속하시겠습니까?')) return;
+    if (
+      !confirm(
+        '대기 중인 모든 큐 항목을 삭제하고, pending/waiting_agent 매치를 error로 처리합니다. 계속하시겠습니까?',
+      )
+    )
+      return;
     setCleaning(true);
     setCleanupResult(null);
     try {
-      const result = await api.post<{ deleted_queue_entries: number; fixed_stuck_matches: number }>('/admin/debate/cleanup');
+      const result = await api.post<{ deleted_queue_entries: number; fixed_stuck_matches: number }>(
+        '/admin/debate/cleanup',
+      );
       setCleanupResult(result);
       fetchData();
       setTimeout(() => setCleanupResult(null), 5000);
@@ -540,7 +559,8 @@ export default function AdminDebatePage() {
         <div className="flex items-center gap-2">
           {cleanupResult && (
             <span className="text-xs text-green-400">
-              큐 {cleanupResult.deleted_queue_entries}건 삭제, 매치 {cleanupResult.fixed_stuck_matches}건 정리 완료
+              큐 {cleanupResult.deleted_queue_entries}건 삭제, 매치{' '}
+              {cleanupResult.fixed_stuck_matches}건 정리 완료
             </span>
           )}
           <button
@@ -662,7 +682,9 @@ export default function AdminDebatePage() {
               </div>
 
               <div>
-                <label className="block text-xs text-text-muted mb-1">턴 토큰 한도 (100–2000)</label>
+                <label className="block text-xs text-text-muted mb-1">
+                  턴 토큰 한도 (100–2000)
+                </label>
                 <input
                   type="number"
                   min={100}
@@ -797,10 +819,14 @@ export default function AdminDebatePage() {
                       {t.scheduled_start_at || t.scheduled_end_at ? (
                         <div className="flex flex-col gap-0.5">
                           {t.scheduled_start_at && (
-                            <span>시작: {toLocalDatetime(t.scheduled_start_at).replace('T', ' ')}</span>
+                            <span>
+                              시작: {toLocalDatetime(t.scheduled_start_at).replace('T', ' ')}
+                            </span>
                           )}
                           {t.scheduled_end_at && (
-                            <span>종료: {toLocalDatetime(t.scheduled_end_at).replace('T', ' ')}</span>
+                            <span>
+                              종료: {toLocalDatetime(t.scheduled_end_at).replace('T', ' ')}
+                            </span>
                           )}
                         </div>
                       ) : (
@@ -880,7 +906,10 @@ export default function AdminDebatePage() {
 
         <div className="flex gap-2 mb-3 flex-wrap">
           <div className="relative flex-1 min-w-[160px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+            />
             <input
               type="text"
               placeholder="에이전트명/소유자 검색..."
@@ -994,7 +1023,10 @@ export default function AdminDebatePage() {
 
         <div className="flex gap-2 mb-3 flex-wrap">
           <div className="relative flex-1 min-w-[160px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+            />
             <input
               type="text"
               placeholder="에이전트명 검색..."
@@ -1088,7 +1120,7 @@ export default function AdminDebatePage() {
                             <Ban size={9} />
                             {m.blocked_turns_count}
                           </span>
-                        ) : (m.penalty_a > 0 || m.penalty_b > 0) ? (
+                        ) : m.penalty_a > 0 || m.penalty_b > 0 ? (
                           <span className="inline-flex items-center gap-0.5 text-[10px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
                             <AlertTriangle size={9} />
                             벌점
@@ -1182,9 +1214,7 @@ export default function AdminDebatePage() {
               </div>
             </div>
 
-            {forceMatchError && (
-              <p className="text-xs text-red-400 mt-3">{forceMatchError}</p>
-            )}
+            {forceMatchError && <p className="text-xs text-red-400 mt-3">{forceMatchError}</p>}
 
             <div className="flex gap-2 mt-4">
               <button
@@ -1204,11 +1234,7 @@ export default function AdminDebatePage() {
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold
                   hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
               >
-                {forceMatching ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Zap size={14} />
-                )}
+                {forceMatching ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                 {forceMatching ? '매칭 중...' : '매치 시작'}
               </button>
             </div>
@@ -1224,7 +1250,10 @@ export default function AdminDebatePage() {
             시즌 관리
           </h2>
           <button
-            onClick={() => { setShowSeasonForm(!showSeasonForm); setSeasonError(null); }}
+            onClick={() => {
+              setShowSeasonForm(!showSeasonForm);
+              setSeasonError(null);
+            }}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
           >
             {showSeasonForm ? <X size={15} /> : <Plus size={15} />}
@@ -1233,48 +1262,76 @@ export default function AdminDebatePage() {
         </div>
 
         {seasonError && (
-          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">{seasonError}</p>
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">
+            {seasonError}
+          </p>
         )}
 
         {showSeasonForm && (
-          <form onSubmit={handleSeasonCreate} className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3">
+          <form
+            onSubmit={handleSeasonCreate}
+            className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3"
+          >
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-text-muted mb-1">시즌 번호</label>
-                <input type="number" min={1} required value={seasonForm.season_number}
-                  onChange={(e) => setSeasonForm({ ...seasonForm, season_number: Number(e.target.value) })}
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={seasonForm.season_number}
+                  onChange={(e) =>
+                    setSeasonForm({ ...seasonForm, season_number: Number(e.target.value) })
+                  }
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
                 <label className="block text-xs text-text-muted mb-1">시즌 제목</label>
-                <input type="text" required maxLength={100} placeholder="예: Season 1" value={seasonForm.title}
+                <input
+                  type="text"
+                  required
+                  maxLength={100}
+                  placeholder="예: Season 1"
+                  value={seasonForm.title}
                   onChange={(e) => setSeasonForm({ ...seasonForm, title: e.target.value })}
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
                 <label className="block text-xs text-text-muted mb-1">시작일</label>
-                <input type="datetime-local" required value={seasonForm.start_at}
+                <input
+                  type="datetime-local"
+                  required
+                  value={seasonForm.start_at}
                   onChange={(e) => setSeasonForm({ ...seasonForm, start_at: e.target.value })}
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
                 <label className="block text-xs text-text-muted mb-1">종료일</label>
-                <input type="datetime-local" required value={seasonForm.end_at}
+                <input
+                  type="datetime-local"
+                  required
+                  value={seasonForm.end_at}
                   onChange={(e) => setSeasonForm({ ...seasonForm, end_at: e.target.value })}
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowSeasonForm(false)}
-                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors">
+              <button
+                type="button"
+                onClick={() => setShowSeasonForm(false)}
+                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors"
+              >
                 취소
               </button>
-              <button type="submit" disabled={seasonSubmitting}
-                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <button
+                type="submit"
+                disabled={seasonSubmitting}
+                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
                 {seasonSubmitting ? '생성 중...' : '시즌 생성'}
               </button>
             </div>
@@ -1286,16 +1343,28 @@ export default function AdminDebatePage() {
         ) : (
           <div className="space-y-2">
             {seasons.map((s) => (
-              <div key={s.id} className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg">
+              <div
+                key={s.id}
+                className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg"
+              >
                 <div>
-                  <span className="text-sm font-semibold text-text">S{s.season_number} — {s.title}</span>
-                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                    s.status === 'active' ? 'bg-green-500/10 text-green-500' :
-                    s.status === 'upcoming' ? 'bg-blue-500/10 text-blue-400' :
-                    'bg-text-muted/10 text-text-muted'
-                  }`}>{SEASON_STATUS_LABELS[s.status] ?? s.status}</span>
+                  <span className="text-sm font-semibold text-text">
+                    S{s.season_number} — {s.title}
+                  </span>
+                  <span
+                    className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      s.status === 'active'
+                        ? 'bg-green-500/10 text-green-500'
+                        : s.status === 'upcoming'
+                          ? 'bg-blue-500/10 text-blue-400'
+                          : 'bg-text-muted/10 text-text-muted'
+                    }`}
+                  >
+                    {SEASON_STATUS_LABELS[s.status] ?? s.status}
+                  </span>
                   <p className="text-[11px] text-text-muted mt-0.5">
-                    {new Date(s.start_at).toLocaleDateString('ko-KR')} ~ {new Date(s.end_at).toLocaleDateString('ko-KR')}
+                    {new Date(s.start_at).toLocaleDateString('ko-KR')} ~{' '}
+                    {new Date(s.end_at).toLocaleDateString('ko-KR')}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1305,7 +1374,11 @@ export default function AdminDebatePage() {
                       disabled={seasonActivatingId === s.id}
                       className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
                     >
-                      {seasonActivatingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                      {seasonActivatingId === s.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Play size={12} />
+                      )}
                       활성화
                     </button>
                   )}
@@ -1315,7 +1388,11 @@ export default function AdminDebatePage() {
                       disabled={seasonClosingId === s.id}
                       className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors"
                     >
-                      {seasonClosingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <StopCircle size={12} />}
+                      {seasonClosingId === s.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <StopCircle size={12} />
+                      )}
                       시즌 종료
                     </button>
                   )}
@@ -1325,7 +1402,11 @@ export default function AdminDebatePage() {
                       disabled={seasonDeletingId === s.id}
                       className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-border text-text-muted hover:text-danger hover:border-danger/40 disabled:opacity-50 transition-colors"
                     >
-                      {seasonDeletingId === s.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      {seasonDeletingId === s.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={12} />
+                      )}
                       삭제
                     </button>
                   )}
@@ -1344,7 +1425,10 @@ export default function AdminDebatePage() {
             토너먼트 관리
           </h2>
           <button
-            onClick={() => { setShowTournamentForm(!showTournamentForm); setTournamentError(null); }}
+            onClick={() => {
+              setShowTournamentForm(!showTournamentForm);
+              setTournamentError(null);
+            }}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
           >
             {showTournamentForm ? <X size={15} /> : <Plus size={15} />}
@@ -1353,14 +1437,24 @@ export default function AdminDebatePage() {
         </div>
 
         {tournamentError && (
-          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">{tournamentError}</p>
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-3">
+            {tournamentError}
+          </p>
         )}
 
         {showTournamentForm && (
-          <form onSubmit={handleTournamentCreate} className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3">
+          <form
+            onSubmit={handleTournamentCreate}
+            className="mb-4 bg-bg border border-border rounded-lg p-4 space-y-3"
+          >
             <div>
               <label className="block text-xs text-text-muted mb-1">토너먼트 제목</label>
-              <input type="text" required maxLength={200} placeholder="예: 2025 AI 토론 챔피언십" value={tournamentForm.title}
+              <input
+                type="text"
+                required
+                maxLength={200}
+                placeholder="예: 2025 AI 토론 챔피언십"
+                value={tournamentForm.title}
                 onChange={(e) => setTournamentForm({ ...tournamentForm, title: e.target.value })}
                 className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
               />
@@ -1368,20 +1462,29 @@ export default function AdminDebatePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-text-muted mb-1">토론 주제</label>
-                <select required value={tournamentForm.topic_id}
-                  onChange={(e) => setTournamentForm({ ...tournamentForm, topic_id: e.target.value })}
+                <select
+                  required
+                  value={tournamentForm.topic_id}
+                  onChange={(e) =>
+                    setTournamentForm({ ...tournamentForm, topic_id: e.target.value })
+                  }
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 >
                   <option value="">주제 선택...</option>
                   {topics.map((t) => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-text-muted mb-1">대진 규모</label>
-                <select value={tournamentForm.bracket_size}
-                  onChange={(e) => setTournamentForm({ ...tournamentForm, bracket_size: Number(e.target.value) })}
+                <select
+                  value={tournamentForm.bracket_size}
+                  onChange={(e) =>
+                    setTournamentForm({ ...tournamentForm, bracket_size: Number(e.target.value) })
+                  }
                   className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
                 >
                   <option value={4}>4강</option>
@@ -1391,12 +1494,18 @@ export default function AdminDebatePage() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowTournamentForm(false)}
-                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors">
+              <button
+                type="button"
+                onClick={() => setShowTournamentForm(false)}
+                className="text-sm px-4 py-1.5 rounded-lg border border-border text-text-muted hover:text-text transition-colors"
+              >
                 취소
               </button>
-              <button type="submit" disabled={tournamentSubmitting}
-                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <button
+                type="submit"
+                disabled={tournamentSubmitting}
+                className="text-sm px-4 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
                 {tournamentSubmitting ? '생성 중...' : '토너먼트 생성'}
               </button>
             </div>
@@ -1408,17 +1517,28 @@ export default function AdminDebatePage() {
         ) : (
           <div className="space-y-2">
             {tournaments.map((t) => (
-              <div key={t.id} className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg">
+              <div
+                key={t.id}
+                className="flex items-center justify-between p-3 bg-bg border border-border rounded-lg"
+              >
                 <div>
                   <span className="text-sm font-semibold text-text">{t.title}</span>
-                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                    t.status === 'in_progress' ? 'bg-yellow-500/10 text-yellow-500' :
-                    t.status === 'registration' ? 'bg-blue-500/10 text-blue-400' :
-                    t.status === 'completed' ? 'bg-green-500/10 text-green-500' :
-                    'bg-text-muted/10 text-text-muted'
-                  }`}>{TOURNAMENT_STATUS_LABELS[t.status] ?? t.status}</span>
+                  <span
+                    className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      t.status === 'in_progress'
+                        ? 'bg-yellow-500/10 text-yellow-500'
+                        : t.status === 'registration'
+                          ? 'bg-blue-500/10 text-blue-400'
+                          : t.status === 'completed'
+                            ? 'bg-green-500/10 text-green-500'
+                            : 'bg-text-muted/10 text-text-muted'
+                    }`}
+                  >
+                    {TOURNAMENT_STATUS_LABELS[t.status] ?? t.status}
+                  </span>
                   <p className="text-[11px] text-text-muted mt-0.5">
-                    {t.bracket_size}강 · {t.current_round > 0 ? `${t.current_round}라운드 진행 중` : '라운드 시작 전'}
+                    {t.bracket_size}강 ·{' '}
+                    {t.current_round > 0 ? `${t.current_round}라운드 진행 중` : '라운드 시작 전'}
                   </p>
                 </div>
                 {t.status === 'registration' && (
@@ -1427,7 +1547,11 @@ export default function AdminDebatePage() {
                     disabled={tournamentStartingId === t.id}
                     className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
                   >
-                    {tournamentStartingId === t.id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                    {tournamentStartingId === t.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Play size={12} />
+                    )}
                     토너먼트 시작
                   </button>
                 )}
@@ -1474,15 +1598,10 @@ export default function AdminDebatePage() {
       />
 
       {/* 디버그 모달 */}
-      {debugData && (
-        <DebateDebugModal data={debugData} onClose={() => setDebugData(null)} />
-      )}
+      {debugData && <DebateDebugModal data={debugData} onClose={() => setDebugData(null)} />}
 
       {/* 에이전트 상세 모달 */}
-      <AgentDetailModal
-        agentId={selectedAgentId}
-        onClose={() => setSelectedAgentId(null)}
-      />
+      <AgentDetailModal agentId={selectedAgentId} onClose={() => setSelectedAgentId(null)} />
     </div>
   );
 }

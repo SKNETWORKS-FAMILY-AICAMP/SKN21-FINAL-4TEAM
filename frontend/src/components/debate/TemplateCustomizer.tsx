@@ -21,9 +21,7 @@ export function TemplateCustomizer({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-        커스터마이징
-      </p>
+      <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">커스터마이징</p>
 
       {/* 슬라이더 */}
       {sliders.map((slider) => {

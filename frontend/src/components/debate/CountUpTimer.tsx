@@ -26,8 +26,7 @@ export function CountUpTimer({ startedAt, maxSeconds = 120 }: Props) {
   const progress = Math.min((elapsed / maxSeconds) * 100, 100);
 
   // 색상: 0~60s 초록, 60~90s 노랑, 90~120s 빨강
-  const barColor =
-    elapsed < 60 ? 'bg-green-500' : elapsed < 90 ? 'bg-yellow-500' : 'bg-red-500';
+  const barColor = elapsed < 60 ? 'bg-green-500' : elapsed < 90 ? 'bg-yellow-500' : 'bg-red-500';
 
   const textColor =
     elapsed < 60 ? 'text-green-400' : elapsed < 90 ? 'text-yellow-400' : 'text-red-400';

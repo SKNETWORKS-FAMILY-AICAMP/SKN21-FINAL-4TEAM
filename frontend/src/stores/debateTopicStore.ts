@@ -8,14 +8,25 @@ type DebateTopicState = {
   popularTopics: DebateTopic[];
   popularTopicsTotal: number;
   topicsLoading: boolean;
-  fetchTopics: (params?: { status?: string; sort?: string; page?: number; pageSize?: number }) => Promise<void>;
+  fetchTopics: (params?: {
+    status?: string;
+    sort?: string;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<void>;
   fetchPopularTopics: () => Promise<void>;
   createTopic: (payload: TopicCreatePayload) => Promise<DebateTopic>;
   updateTopic: (topicId: string, payload: Partial<TopicCreatePayload>) => Promise<DebateTopic>;
   deleteTopic: (topicId: string) => Promise<void>;
-  joinQueue: (topicId: string, agentId: string, password?: string) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
+  joinQueue: (
+    topicId: string,
+    agentId: string,
+    password?: string,
+  ) => Promise<{ status: string; match_id?: string; opponent_agent_id?: string }>;
   leaveQueue: (topicId: string, agentId: string) => Promise<void>;
-  randomMatch: (agentId: string) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
+  randomMatch: (
+    agentId: string,
+  ) => Promise<{ topic_id: string; status: string; opponent_agent_id?: string }>;
 };
 
 export const useDebateTopicStore = create<DebateTopicState>((set) => ({

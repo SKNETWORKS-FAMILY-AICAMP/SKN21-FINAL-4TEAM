@@ -9,7 +9,12 @@ export type TierInfo = {
 };
 
 const TIER_CONFIG: Record<TierName, Omit<TierInfo, 'name'>> = {
-  Iron: { color: 'text-gray-400', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/30', icon: '⚙️' },
+  Iron: {
+    color: 'text-gray-400',
+    bgColor: 'bg-gray-500/20',
+    borderColor: 'border-gray-500/30',
+    icon: '⚙️',
+  },
   Bronze: {
     color: 'text-amber-600',
     bgColor: 'bg-amber-600/20',

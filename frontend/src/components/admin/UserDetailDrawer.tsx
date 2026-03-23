@@ -2,8 +2,19 @@
 
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
-  X, User, Shield, ShieldCheck, CreditCard, MessageSquare, CalendarDays, Crown, Gem,
-  ShieldAlert, Check, Pencil, Copy,
+  X,
+  User,
+  Shield,
+  ShieldCheck,
+  CreditCard,
+  MessageSquare,
+  CalendarDays,
+  Crown,
+  Gem,
+  ShieldAlert,
+  Check,
+  Pencil,
+  Copy,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from '@/stores/toastStore';
@@ -41,8 +52,11 @@ type Props = {
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '-';
   return new Date(iso).toLocaleDateString('ko-KR', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -76,19 +90,33 @@ function ageBadge(ag: string) {
   }
 }
 
-function StatMini({ icon: Icon, label, value }: { icon: typeof User; label: string; value: string | number }) {
+function StatMini({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof User;
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="flex flex-col gap-1 p-3 bg-bg rounded-lg">
       <div className="flex items-center gap-1.5 text-text-muted">
         <Icon size={14} />
         <span className="text-xs">{label}</span>
       </div>
-      <span className="text-lg font-bold text-text">{typeof value === 'number' ? value.toLocaleString() : value}</span>
+      <span className="text-lg font-bold text-text">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </span>
     </div>
   );
 }
 
-export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose, onUserUpdated }: Props) {
+export const UserDetailDrawer = memo(function UserDetailDrawer({
+  userId,
+  onClose,
+  onUserUpdated,
+}: Props) {
   const isSuperAdmin = useUserStore((s) => s.isSuperAdmin);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -100,28 +128,37 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
   const [quota, setQuota] = useState<QuotaInfo>(undefined as unknown as QuotaInfo);
   const [quotaLoaded, setQuotaLoaded] = useState(false);
   const [editingQuota, setEditingQuota] = useState(false);
-  const [quotaForm, setQuotaForm] = useState({ daily_token_limit: 100000, monthly_token_limit: 2000000 });
+  const [quotaForm, setQuotaForm] = useState({
+    daily_token_limit: 100000,
+    monthly_token_limit: 2000000,
+  });
   const [savingQuota, setSavingQuota] = useState(false);
 
-  const fetchDetail = useCallback(async (id: string) => {
-    setLoading(true);
-    try {
-      const data = await api.get<AdminUserDetail>(`/admin/users/${id}`);
-      setDetail(data);
-    } catch {
-      toast.error('사용자 정보를 불러올 수 없습니다');
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }, [onClose]);
+  const fetchDetail = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        const data = await api.get<AdminUserDetail>(`/admin/users/${id}`);
+        setDetail(data);
+      } catch {
+        toast.error('사용자 정보를 불러올 수 없습니다');
+        onClose();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onClose],
+  );
 
   const fetchQuota = useCallback(async (id: string) => {
     try {
       const data = await api.get<QuotaInfo>(`/admin/usage/quotas/${id}`);
       setQuota(data);
       if (data) {
-        setQuotaForm({ daily_token_limit: data.daily_token_limit, monthly_token_limit: data.monthly_token_limit });
+        setQuotaForm({
+          daily_token_limit: data.daily_token_limit,
+          monthly_token_limit: data.monthly_token_limit,
+        });
       }
     } catch {
       setQuota(null);
@@ -158,7 +195,8 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
     setRoleChanging(true);
     try {
       await api.put(`/admin/users/${detail.id}/role`, { role: newRole });
-      const roleLabel = { superadmin: '슈퍼관리자', admin: '관리자', user: '사용자' }[newRole] ?? newRole;
+      const roleLabel =
+        { superadmin: '슈퍼관리자', admin: '관리자', user: '사용자' }[newRole] ?? newRole;
       toast.success(`역할을 ${roleLabel}(으)로 변경했습니다`);
       await fetchDetail(detail.id);
       onUserUpdated();
@@ -173,10 +211,9 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
     if (!detail) return;
     setSavingQuota(true);
     try {
-      const updated = await api.put<QuotaInfo & { daily_token_limit: number; monthly_token_limit: number; is_active: boolean }>(
-        `/admin/usage/quotas/${detail.id}`,
-        quotaForm,
-      );
+      const updated = await api.put<
+        QuotaInfo & { daily_token_limit: number; monthly_token_limit: number; is_active: boolean }
+      >(`/admin/usage/quotas/${detail.id}`, quotaForm);
       setQuota(updated);
       setEditingQuota(false);
       toast.success('쿼터를 저장했습니다');
@@ -255,7 +292,10 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                     <span className="font-mono text-[11px] text-text-secondary">{detail.id}</span>
                     <button
                       type="button"
-                      onClick={() => { navigator.clipboard.writeText(detail.id); toast.success('UUID 복사됨'); }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(detail.id);
+                        toast.success('UUID 복사됨');
+                      }}
                       className="p-1 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors border-none bg-transparent cursor-pointer"
                       title="복사"
                     >
@@ -282,7 +322,9 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">성인인증</span>
-                  <span className="text-text">{detail.adult_verified_at ? formatDate(detail.adult_verified_at) : '미인증'}</span>
+                  <span className="text-text">
+                    {detail.adult_verified_at ? formatDate(detail.adult_verified_at) : '미인증'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">가입일</span>
@@ -310,7 +352,9 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
               <div className="space-y-2 text-sm mb-3">
                 <div className="flex justify-between">
                   <span className="text-text-muted">잔액</span>
-                  <span className="text-text font-semibold">{detail.credit_balance.toLocaleString()} 대화석</span>
+                  <span className="text-text font-semibold">
+                    {detail.credit_balance.toLocaleString()} 대화석
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">마지막 충전</span>
@@ -363,7 +407,10 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                     <button
                       onClick={() => {
                         if (quota) {
-                          setQuotaForm({ daily_token_limit: quota.daily_token_limit, monthly_token_limit: quota.monthly_token_limit });
+                          setQuotaForm({
+                            daily_token_limit: quota.daily_token_limit,
+                            monthly_token_limit: quota.monthly_token_limit,
+                          });
                         }
                         setEditingQuota(true);
                       }}
@@ -382,7 +429,9 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                         type="number"
                         min={0}
                         value={quotaForm.daily_token_limit}
-                        onChange={(e) => setQuotaForm({ ...quotaForm, daily_token_limit: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setQuotaForm({ ...quotaForm, daily_token_limit: Number(e.target.value) })
+                        }
                         className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text"
                       />
                     </div>
@@ -392,7 +441,12 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                         type="number"
                         min={0}
                         value={quotaForm.monthly_token_limit}
-                        onChange={(e) => setQuotaForm({ ...quotaForm, monthly_token_limit: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setQuotaForm({
+                            ...quotaForm,
+                            monthly_token_limit: Number(e.target.value),
+                          })
+                        }
                         className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-text"
                       />
                     </div>
@@ -417,15 +471,25 @@ export const UserDetailDrawer = memo(function UserDetailDrawer({ userId, onClose
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-text-muted">일일 한도</span>
-                      <span className="font-mono text-text">{quota.daily_token_limit.toLocaleString()} 토큰</span>
+                      <span className="font-mono text-text">
+                        {quota.daily_token_limit.toLocaleString()} 토큰
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-text-muted">월간 한도</span>
-                      <span className="font-mono text-text">{quota.monthly_token_limit.toLocaleString()} 토큰</span>
+                      <span className="font-mono text-text">
+                        {quota.monthly_token_limit.toLocaleString()} 토큰
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-text-muted">상태</span>
-                      <span className={quota.is_active ? 'text-success text-xs font-semibold' : 'text-text-muted text-xs'}>
+                      <span
+                        className={
+                          quota.is_active
+                            ? 'text-success text-xs font-semibold'
+                            : 'text-text-muted text-xs'
+                        }
+                      >
                         {quota.is_active ? '활성' : '비활성'}
                       </span>
                     </div>

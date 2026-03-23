@@ -41,7 +41,10 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
 
   // turnIdx: 현재 타이핑 중인 replayIndex, text: 타이핑된 부분 텍스트
   // turnIdx가 replayIndex와 다를 때 displayClaim을 적용하지 않아 stale text 방지
-  const [replayTyped, setReplayTyped] = useState<{ turnIdx: number; text: string }>({ turnIdx: -1, text: '' });
+  const [replayTyped, setReplayTyped] = useState<{ turnIdx: number; text: string }>({
+    turnIdx: -1,
+    text: '',
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastTurnRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -79,7 +82,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
     const behavior = streamingTurnRef.current ? 'instant' : 'smooth';
     bottomRef.current?.scrollIntoView({ behavior });
   }, [turns.length]);
-
 
   // 리플레이 진행 시 현재 턴으로 자동 스크롤
   useEffect(() => {
@@ -161,7 +163,6 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
       {/* 리플레이 컨트롤 */}
       <ReplayControls />
 
-
       {match.status === 'waiting_agent' && (
         <div className="text-center py-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-600 text-sm">
@@ -188,14 +189,15 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
 
       {visibleTurns.map((turn, idx) => {
         const review =
-          turnReviewMap.get(`${turn.turn_number}:${turn.speaker}`) ??
-          turn.review_result ??
-          null;
+          turnReviewMap.get(`${turn.turn_number}:${turn.speaker}`) ?? turn.review_result ?? null;
         const isLastTurn = idx === visibleTurns.length - 1;
         // 리플레이 마지막 턴: turnIdx가 현재 replayIndex와 일치할 때만 부분 텍스트 전달
         // (불일치 시 stale text가 다른 턴에 잠깐 보이는 버그 방지)
         const displayClaim =
-          replayMode && isLastTurn && replayTyped.turnIdx === replayIndex && replayTyped.text !== turn.claim
+          replayMode &&
+          isLastTurn &&
+          replayTyped.turnIdx === replayIndex &&
+          replayTyped.text !== turn.claim
             ? replayTyped.text
             : undefined;
         return (
@@ -225,14 +227,19 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
           agentBImageUrl={match.agent_b.image_url}
           onTypingDone={() => flushPendingTurn(streamingTurn.turn_number, streamingTurn.speaker)}
           turnComplete={pendingTurnLogs.some(
-            (t) => t.turn_number === streamingTurn.turn_number && t.speaker === streamingTurn.speaker,
+            (t) =>
+              t.turn_number === streamingTurn.turn_number && t.speaker === streamingTurn.speaker,
           )}
         />
       )}
 
-      {streaming && !streamingTurn && !debateShowAll && (
-        nextSpeaker ? (
-          <div className={`flex ${nextSpeaker === 'agent_b' ? 'justify-end' : 'justify-start'} px-2`}>
+      {streaming &&
+        !streamingTurn &&
+        !debateShowAll &&
+        (nextSpeaker ? (
+          <div
+            className={`flex ${nextSpeaker === 'agent_b' ? 'justify-end' : 'justify-start'} px-2`}
+          >
             <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-bg-surface border border-border text-sm text-text-muted">
               <span className="font-medium text-text">
                 {nextSpeaker === 'agent_a' ? match.agent_a.name : match.agent_b.name}
@@ -249,11 +256,8 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
             </div>
           </div>
         ) : (
-          <div className="text-center text-xs text-primary animate-pulse py-2">
-            토론 진행 중...
-          </div>
-        )
-      )}
+          <div className="text-center text-xs text-primary animate-pulse py-2">토론 진행 중...</div>
+        ))}
 
       <div ref={bottomRef} />
       <ScrollToTop />

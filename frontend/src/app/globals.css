@@ -13,7 +13,7 @@
   --color-text-muted: #64748b;
   --color-border: #334155;
   --color-border-input: #475569;
-  --color-primary: #14B8A6;
+  --color-primary: #14b8a6;
   --color-primary-dark: #0d9488;
 }
 
@@ -28,7 +28,7 @@
   --color-text-muted: #94a3b8;
   --color-border: #e2e8f0;
   --color-border-input: #cbd5e1;
-  --color-primary: #14B8A6;
+  --color-primary: #14b8a6;
   --color-primary-dark: #0d9488;
 }
 
@@ -152,14 +152,18 @@
     background-color: #ffffff;
     color: #000000;
   }
-  .nemo-button-white:hover { transform: translate(-1px, -1px); }
+  .nemo-button-white:hover {
+    transform: translate(-1px, -1px);
+  }
 
   .nemo-button-dark {
     @apply flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-black cursor-pointer transition-all duration-150 border-none;
     background-color: #000000;
     color: #ffffff;
   }
-  .nemo-button-dark:hover { transform: translate(-1px, -1px); }
+  .nemo-button-dark:hover {
+    transform: translate(-1px, -1px);
+  }
 
   .nemo-button-orange {
     @apply flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-black cursor-pointer transition-all duration-150;
@@ -168,7 +172,9 @@
     border: 2px solid #000000;
     box-shadow: 4px 4px 0px #000000;
   }
-  .nemo-button-orange:hover { transform: translate(-1px, -1px); }
+  .nemo-button-orange:hover {
+    transform: translate(-1px, -1px);
+  }
 
   .nemo-button-brutal {
     @apply flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium cursor-pointer transition-colors duration-200;
@@ -176,7 +182,9 @@
     color: var(--color-text);
     border: 1px solid var(--color-border);
   }
-  .nemo-button-brutal:hover { background-color: var(--color-bg-hover); }
+  .nemo-button-brutal:hover {
+    background-color: var(--color-bg-hover);
+  }
 }
 
 @layer utilities {
@@ -218,16 +226,32 @@
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
   @keyframes slideInFromBottom {
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
   @keyframes animateIn {
-    from { opacity: 0; transform: translateY(40px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 

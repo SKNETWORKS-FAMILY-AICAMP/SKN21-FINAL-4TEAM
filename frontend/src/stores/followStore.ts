@@ -1,10 +1,5 @@
 import { create } from 'zustand';
-import {
-  getFollowing,
-  followTarget,
-  unfollowTarget,
-  type FollowResponse,
-} from '@/lib/api';
+import { getFollowing, followTarget, unfollowTarget, type FollowResponse } from '@/lib/api';
 
 type FollowState = {
   followingList: FollowResponse[];

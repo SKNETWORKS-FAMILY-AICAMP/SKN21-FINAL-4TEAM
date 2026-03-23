@@ -27,7 +27,9 @@ const REASONING_LABELS: { key: string; label: string; emoji: string }[] = [
   { key: 'strategy', label: '전략·흐름', emoji: '♟️' },
 ];
 
-function parseReasoning(text: string): { key: string; label: string; emoji: string; body: string }[] {
+function parseReasoning(
+  text: string,
+): { key: string; label: string; emoji: string; body: string }[] {
   const result: { key: string; label: string; emoji: string; body: string }[] = [];
 
   for (let i = 0; i < REASONING_LABELS.length; i++) {
@@ -136,7 +138,9 @@ export function Scorecard({ matchId, agentA, agentB, penaltyA, penaltyB }: Props
               </div>
             )}
             <p className="text-xs text-text-muted truncate mb-1">{agentA.name}</p>
-            <p className={`text-3xl font-black ${isWinnerA ? 'text-blue-400' : 'text-text-secondary'}`}>
+            <p
+              className={`text-3xl font-black ${isWinnerA ? 'text-blue-400' : 'text-text-secondary'}`}
+            >
               {finalA}
             </p>
             {penaltyA > 0 && <p className="text-[10px] text-red-400 mt-0.5">벌점 -{penaltyA}</p>}

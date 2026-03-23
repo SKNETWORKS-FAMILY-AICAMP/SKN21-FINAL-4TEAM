@@ -86,7 +86,10 @@ export function TopHeader() {
                 {/* 메뉴 */}
                 <div className="py-1">
                   <button
-                    onClick={() => { setDropdownOpen(false); router.push('/mypage'); }}
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      router.push('/mypage');
+                    }}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-bold text-text hover:bg-bg-hover transition-colors cursor-pointer border-none bg-transparent text-left"
                   >
                     <UserCircle size={16} className="text-primary shrink-0" />
@@ -121,8 +124,12 @@ export function TopHeader() {
                 <LogOut size={32} />
               </div>
             </div>
-            <h3 className="text-xl font-black text-center text-text mb-2">로그아웃 하시겠습니까?</h3>
-            <p className="text-sm font-bold text-center text-text-muted mb-8">안전하게 세션이 종료됩니다.</p>
+            <h3 className="text-xl font-black text-center text-text mb-2">
+              로그아웃 하시겠습니까?
+            </h3>
+            <p className="text-sm font-bold text-center text-text-muted mb-8">
+              안전하게 세션이 종료됩니다.
+            </p>
             <div className="flex flex-col gap-3">
               <button
                 onClick={confirmLogout}

@@ -93,7 +93,10 @@ export function AgentDetailModal({ agentId, onClose }: Props) {
   const winRate = totalGames > 0 && detail ? Math.round((detail.wins / totalGames) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+      onClick={onClose}
+    >
       <div
         className="bg-bg-surface border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -107,14 +110,20 @@ export function AgentDetailModal({ agentId, onClose }: Props) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-text-muted text-sm">로딩 중...</div>
+          <div className="flex items-center justify-center h-48 text-text-muted text-sm">
+            로딩 중...
+          </div>
         ) : detail ? (
           <div className="p-6 space-y-6">
             {/* 에이전트 기본 정보 */}
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-xl border border-border bg-bg overflow-hidden shrink-0 flex items-center justify-center text-3xl">
                 {detail.image_url ? (
-                  <img src={detail.image_url} alt={detail.name} className="w-full h-full object-cover" />
+                  <img
+                    src={detail.image_url}
+                    alt={detail.name}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   '🤖'
                 )}
@@ -156,7 +165,10 @@ export function AgentDetailModal({ agentId, onClose }: Props) {
                 { label: '패', value: detail.losses, color: 'text-red-400' },
                 { label: '승률', value: `${winRate}%`, color: 'text-yellow-400' },
               ].map((stat) => (
-                <div key={stat.label} className="bg-bg border border-border rounded-xl p-3 text-center">
+                <div
+                  key={stat.label}
+                  className="bg-bg border border-border rounded-xl p-3 text-center"
+                >
                   <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
                   <p className="text-[11px] text-text-muted">{stat.label}</p>
                 </div>
@@ -165,12 +177,16 @@ export function AgentDetailModal({ agentId, onClose }: Props) {
 
             {/* 소유자 정보 */}
             <div className="bg-bg border border-border rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">소유자</h4>
+              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+                소유자
+              </h4>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-text">{detail.owner.nickname}</p>
                   <p className="text-xs text-text-muted">ID: {detail.owner.id ?? '-'}</p>
-                  <p className="text-xs text-text-muted">가입일: {formatDate(detail.owner.created_at)}</p>
+                  <p className="text-xs text-text-muted">
+                    가입일: {formatDate(detail.owner.created_at)}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-text">{detail.owner.agent_count}</p>
@@ -200,7 +216,11 @@ export function AgentDetailModal({ agentId, onClose }: Props) {
                           {v.wins}W {v.losses}L {v.draws}D
                         </span>
                       </div>
-                      {expandedVersion === v.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      {expandedVersion === v.id ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )}
                     </button>
                     {expandedVersion === v.id && (
                       <div className="px-4 py-3 bg-bg border-t border-border">

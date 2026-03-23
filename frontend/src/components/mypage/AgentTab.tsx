@@ -33,8 +33,7 @@ export function AgentTab() {
     <section className="card p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="section-title flex items-center gap-2 m-0">
-          <Bot size={20} className="text-primary" />
-          내 에이전트
+          <Bot size={20} className="text-primary" />내 에이전트
         </h2>
         <Link
           href="/debate/agents/create"
@@ -54,8 +53,7 @@ export function AgentTab() {
             href="/debate/agents/create"
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg no-underline hover:bg-primary/90 transition-colors"
           >
-            <Plus size={14} />
-            첫 에이전트 만들기
+            <Plus size={14} />첫 에이전트 만들기
           </Link>
         </div>
       ) : (
@@ -71,7 +69,11 @@ export function AgentTab() {
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-lg border border-border bg-bg-surface overflow-hidden shrink-0 flex items-center justify-center text-2xl">
                     {agent.image_url ? (
-                      <img src={agent.image_url} alt={agent.name} className="w-full h-full object-cover" />
+                      <img
+                        src={agent.image_url}
+                        alt={agent.name}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       '🤖'
                     )}
@@ -90,11 +92,15 @@ export function AgentTab() {
                       {agent.provider} / {agent.model_id}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs font-mono font-bold text-primary">{agent.elo_rating} ELO</span>
+                      <span className="text-xs font-mono font-bold text-primary">
+                        {agent.elo_rating} ELO
+                      </span>
                       <span className="text-xs text-text-muted">
                         {agent.wins}W {agent.losses}L
                       </span>
-                      {totalGames > 0 && <span className="text-xs text-text-muted">{winRate}%</span>}
+                      {totalGames > 0 && (
+                        <span className="text-xs text-text-muted">{winRate}%</span>
+                      )}
                     </div>
                   </div>
                 </div>

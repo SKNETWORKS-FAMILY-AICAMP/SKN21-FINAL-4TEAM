@@ -31,7 +31,6 @@ const PLATFORM_ITEMS: MenuItem[] = [
   { href: '/community', label: 'Community', icon: Users },
 ];
 
-
 type TopicCountResponse = { items: unknown[]; total: number };
 
 export const UserSidebar = memo(function UserSidebar() {
@@ -65,7 +64,6 @@ export const UserSidebar = memo(function UserSidebar() {
     return () => clearInterval(interval);
   }, []);
 
-
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
     if (href === '/debate') {
@@ -97,10 +95,14 @@ export const UserSidebar = memo(function UserSidebar() {
           md:sticky md:translate-x-0 md:min-h-screen`}
       >
         {/* 로고 헤더 */}
-        <div className={`px-4 py-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+        <div
+          className={`px-4 py-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+        >
           {!sidebarCollapsed ? (
             <Link href="/" className="flex-1 no-underline group select-none">
-              <p className="text-xl font-bold text-text m-0 leading-tight tracking-tight group-hover:text-primary transition-colors">NEMo</p>
+              <p className="text-xl font-bold text-text m-0 leading-tight tracking-tight group-hover:text-primary transition-colors">
+                NEMo
+              </p>
               <p className="text-[10px] font-black m-0 text-primary tracking-widest">AI DEBATE</p>
             </Link>
           ) : (
@@ -163,8 +165,6 @@ export const UserSidebar = memo(function UserSidebar() {
               })}
             </div>
           </div>
-
-
         </nav>
 
         {/* 관리자 링크 */}
@@ -184,8 +184,13 @@ export const UserSidebar = memo(function UserSidebar() {
 
         {/* 통계 */}
         {!sidebarCollapsed && (
-          <div className="px-3 py-3 bg-bg rounded-xl mx-3 border-2 border-[#1db865]" style={{ marginBottom: '25px' }}>
-            <p className="text-[10px] font-black text-text-muted uppercase tracking-widest px-1 mb-2">통계</p>
+          <div
+            className="px-3 py-3 bg-bg rounded-xl mx-3 border-2 border-[#1db865]"
+            style={{ marginBottom: '25px' }}
+          >
+            <p className="text-[10px] font-black text-text-muted uppercase tracking-widest px-1 mb-2">
+              통계
+            </p>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] font-bold text-text-secondary flex items-center gap-1.5">
@@ -208,7 +213,6 @@ export const UserSidebar = memo(function UserSidebar() {
             </div>
           </div>
         )}
-
       </aside>
     </>
   );

@@ -73,10 +73,7 @@ export default function WaitingRoomPage() {
       return;
     }
 
-    Promise.all([
-      api.get<DebateTopic>(`/topics/${topicId}`),
-      api.get<Agent>(`/agents/${agentId}`),
-    ])
+    Promise.all([api.get<DebateTopic>(`/topics/${topicId}`), api.get<Agent>(`/agents/${agentId}`)])
       .then(([t, a]) => {
         setTopic(t);
         setMyAgent(a);
@@ -163,8 +160,12 @@ export default function WaitingRoomPage() {
       }
 
       api
-        .get<{ status: string; match_id?: string; opponent_agent_id?: string; opponent_is_ready?: boolean }>
-          (`/topics/${topicId}/queue/status?agent_id=${agentId}`)
+        .get<{
+          status: string;
+          match_id?: string;
+          opponent_agent_id?: string;
+          opponent_is_ready?: boolean;
+        }>(`/topics/${topicId}/queue/status?agent_id=${agentId}`)
         .then((res) => {
           if (res.status === 'matched' && res.match_id) {
             handleMatched(res.match_id, res.opponent_agent_id ?? '', false);
@@ -177,7 +178,7 @@ export default function WaitingRoomPage() {
         })
         .catch(() => setTimeout(connectSSE, 2000));
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId, agentId]);
 
   const startCountdown = useCallback((seconds: number) => {

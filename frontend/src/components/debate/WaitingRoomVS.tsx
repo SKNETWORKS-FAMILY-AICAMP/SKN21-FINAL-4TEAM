@@ -91,9 +91,7 @@ export function WaitingRoomVS({
                 VS
               </span>
               <CountUpTimer startedAt={startedAt} maxSeconds={120} />
-              {!hasOpponent && (
-                <p className="text-xs text-text-muted">상대를 찾는 중...</p>
-              )}
+              {!hasOpponent && <p className="text-xs text-text-muted">상대를 찾는 중...</p>}
             </>
           )}
         </div>

@@ -4,8 +4,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Bot, TrendingUp, Trophy, Clock, Edit,
-  Globe, EyeOff, ChevronDown, Swords, Shield,
+  ArrowLeft,
+  Bot,
+  TrendingUp,
+  Trophy,
+  Clock,
+  Edit,
+  Globe,
+  EyeOff,
+  ChevronDown,
+  Swords,
+  Shield,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { DebateAgent, AgentVersion } from '@/stores/debateAgentStore';
@@ -60,7 +69,9 @@ function ResultBadge({ result }: { result: 'win' | 'loss' | 'draw' | null }) {
   };
   const labels = { win: 'W', loss: 'L', draw: 'D' };
   return (
-    <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold border ${styles[result]}`}>
+    <span
+      className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold border ${styles[result]}`}
+    >
       {labels[result]}
     </span>
   );
@@ -71,7 +82,9 @@ function EloDelta({ delta }: { delta: number | null }) {
   const positive = delta > 0;
   const zero = delta === 0;
   return (
-    <span className={`text-[11px] font-semibold ${positive ? 'text-green-500' : zero ? 'text-text-muted' : 'text-red-400'}`}>
+    <span
+      className={`text-[11px] font-semibold ${positive ? 'text-green-500' : zero ? 'text-text-muted' : 'text-red-400'}`}
+    >
       {positive ? `+${delta}` : delta}
     </span>
   );
@@ -128,12 +141,21 @@ export default function AgentProfilePage() {
       .then((a) => {
         setAgent(a);
         if (a.active_series_id) {
-          api.get<PromotionSeries>(`/agents/${id}/series`).then(setActiveSeries).catch(() => {});
+          api
+            .get<PromotionSeries>(`/agents/${id}/series`)
+            .then(setActiveSeries)
+            .catch(() => {});
         }
       })
       .catch(() => setError('에이전트 정보를 불러오지 못했습니다.'));
-    api.get<AgentVersion[]>(`/agents/${id}/versions`).then(setVersions).catch(() => {});
-    api.get<H2HEntry[]>(`/agents/${id}/head-to-head`).then(setH2h).catch(() => {});
+    api
+      .get<AgentVersion[]>(`/agents/${id}/versions`)
+      .then(setVersions)
+      .catch(() => {});
+    api
+      .get<H2HEntry[]>(`/agents/${id}/head-to-head`)
+      .then(setH2h)
+      .catch(() => {});
     loadMatches(0, true);
   }, [id, loadMatches]);
 
@@ -168,7 +190,8 @@ export default function AgentProfilePage() {
   }
 
   const totalGames = agent.wins + agent.losses + agent.draws;
-  const winRate = (agent as any).win_rate ?? (totalGames > 0 ? Math.round((agent.wins / totalGames) * 100) : 0);
+  const winRate =
+    (agent as any).win_rate ?? (totalGames > 0 ? Math.round((agent.wins / totalGames) * 100) : 0);
   const isOwner = !!user && agent.owner_id === user.id;
 
   return (
@@ -177,8 +200,7 @@ export default function AgentProfilePage() {
         href="/debate/agents"
         className="flex items-center gap-1 text-sm text-text-muted no-underline hover:text-text mb-4"
       >
-        <ArrowLeft size={14} />
-        내 에이전트
+        <ArrowLeft size={14} />내 에이전트
       </Link>
 
       {/* ── 프로필 헤더 ── */}
@@ -187,7 +209,11 @@ export default function AgentProfilePage() {
           <div className="flex items-center gap-3">
             <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden">
               {agent.image_url ? (
-                <img src={agent.image_url} alt={agent.name} className="w-full h-full object-cover" />
+                <img
+                  src={agent.image_url}
+                  alt={agent.name}
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <Bot size={26} />
               )}
@@ -220,9 +246,15 @@ export default function AgentProfilePage() {
                 }`}
               >
                 {agent.is_profile_public ? (
-                  <><Globe size={13} />갤러리 공개</>
+                  <>
+                    <Globe size={13} />
+                    갤러리 공개
+                  </>
                 ) : (
-                  <><EyeOff size={13} />갤러리 비공개</>
+                  <>
+                    <EyeOff size={13} />
+                    갤러리 비공개
+                  </>
                 )}
               </button>
             )}
@@ -293,7 +325,8 @@ export default function AgentProfilePage() {
           <div className="flex flex-col gap-2">
             {h2h.map((entry) => {
               const h2hTotal = entry.wins + entry.losses + entry.draws;
-              const h2hRate = entry.win_rate ?? (h2hTotal > 0 ? Math.round((entry.wins / h2hTotal) * 100) : 0);
+              const h2hRate =
+                entry.win_rate ?? (h2hTotal > 0 ? Math.round((entry.wins / h2hTotal) * 100) : 0);
               return (
                 <div
                   key={entry.opponent_id}
@@ -432,8 +465,7 @@ export default function AgentProfilePage() {
                   </p>
                   <div className="flex items-center gap-3 mt-1.5">
                     <span className="text-[11px] text-text-muted">
-                      <span className="text-green-500">{v.wins}W</span>
-                      {' '}{v.draws}D{' '}
+                      <span className="text-green-500">{v.wins}W</span> {v.draws}D{' '}
                       <span className="text-red-400">{v.losses}L</span>
                     </span>
                     {vTotal > 0 && (

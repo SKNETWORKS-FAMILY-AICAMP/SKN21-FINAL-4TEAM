@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { Loader2, FileText, Trophy, AlertTriangle, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Loader2,
+  FileText,
+  Trophy,
+  AlertTriangle,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 
 type SummaryData = {
   status: 'ready' | 'generating' | 'unavailable';
@@ -141,7 +149,10 @@ export function SummaryReport({ matchId, agentAName = 'Agent A', agentBName = 'A
       )}
 
       {/* 에이전트별 핵심 논거 비교 */}
-      <Section title="에이전트별 핵심 논거" icon={<span className="text-base leading-none">🧠</span>}>
+      <Section
+        title="에이전트별 핵심 논거"
+        icon={<span className="text-base leading-none">🧠</span>}
+      >
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-[11px] font-black text-blue-400 mb-2 truncate">{agentAName}</p>
@@ -156,10 +167,7 @@ export function SummaryReport({ matchId, agentAName = 'Agent A', agentBName = 'A
 
       {/* 승부 전환점 */}
       {turningPoints.length > 0 && (
-        <Section
-          title="승부 전환점"
-          icon={<Trophy size={12} className="text-yellow-400" />}
-        >
+        <Section title="승부 전환점" icon={<Trophy size={12} className="text-yellow-400" />}>
           <ul className="space-y-2">
             {turningPoints.map((point, i) => (
               <li key={i} className="flex gap-2.5 text-sm text-text leading-relaxed">

@@ -23,7 +23,9 @@ export class AgentWebSocket {
   private readonly agentId: string;
   private readonly token: string;
   private readonly onMessage: (data: Record<string, unknown>) => void;
-  private readonly onStatusChange: (status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting') => void;
+  private readonly onStatusChange: (
+    status: 'connecting' | 'connected' | 'disconnected' | 'reconnecting',
+  ) => void;
   private readonly maxRetries: number;
   private readonly baseDelay: number;
   private readonly maxDelay: number;

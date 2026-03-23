@@ -57,10 +57,7 @@ export function ProfileTab() {
       setConfirmPassword('');
       setPasswordChanged(false);
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : '비밀번호 변경에 실패했습니다.';
+      const message = err instanceof ApiError ? err.message : '비밀번호 변경에 실패했습니다.';
       addToast('error', message);
     } finally {
       setPasswordLoading(false);
@@ -117,7 +114,10 @@ export function ProfileTab() {
     );
   }
 
-  const ageInfo = AGE_GROUP_LABELS[user.ageGroup] ?? { label: user.ageGroup, color: 'bg-text-muted' };
+  const ageInfo = AGE_GROUP_LABELS[user.ageGroup] ?? {
+    label: user.ageGroup,
+    color: 'bg-text-muted',
+  };
 
   return (
     <>
@@ -134,7 +134,9 @@ export function ProfileTab() {
               <span className="text-xs text-gray-500 font-semibold uppercase">
                 {ROLE_LABELS[user.role] ?? user.role}
               </span>
-              <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${ageInfo.color}`}>
+              <span
+                className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${ageInfo.color}`}
+              >
                 {ageInfo.label}
               </span>
             </div>
@@ -163,7 +165,9 @@ export function ProfileTab() {
           <div className="flex items-center gap-3">
             <Shield size={16} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-500 w-24 font-semibold">역할</span>
-            <span className="text-sm text-black font-medium">{ROLE_LABELS[user.role] ?? user.role}</span>
+            <span className="text-sm text-black font-medium">
+              {ROLE_LABELS[user.role] ?? user.role}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <Shield size={16} className="text-gray-400 shrink-0" />
@@ -271,12 +275,16 @@ export function ProfileTab() {
                 required
                 minLength={6}
                 className={`w-full bg-gray-50 border-2 rounded-xl px-4 py-3 text-sm text-black focus:outline-none focus:border-primary ${
-                  confirmPassword && newPassword !== confirmPassword ? 'border-red-500' : 'border-black'
+                  confirmPassword && newPassword !== confirmPassword
+                    ? 'border-red-500'
+                    : 'border-black'
                 } ${confirmPassword && newPassword === confirmPassword && newPassword.length >= 6 ? 'border-green-500' : ''}`}
                 placeholder="새 비밀번호 다시 입력"
               />
               {confirmPassword && newPassword !== confirmPassword && (
-                <span className="text-red-500 text-xs font-semibold">비밀번호가 일치하지 않습니다</span>
+                <span className="text-red-500 text-xs font-semibold">
+                  비밀번호가 일치하지 않습니다
+                </span>
               )}
               {confirmPassword && newPassword === confirmPassword && newPassword.length >= 6 && (
                 <span className="text-green-500 text-xs font-semibold">비밀번호가 일치합니다</span>
@@ -318,9 +326,7 @@ export function ProfileTab() {
             </div>
           </form>
         ) : (
-          <p className="text-sm text-gray-500 m-0">
-            보안을 위해 주기적으로 비밀번호를 변경하세요.
-          </p>
+          <p className="text-sm text-gray-500 m-0">보안을 위해 주기적으로 비밀번호를 변경하세요.</p>
         )}
       </div>
 
@@ -345,14 +351,22 @@ export function ProfileTab() {
 
       {/* 회원탈퇴 확인 모달 */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="bg-white brutal-border brutal-shadow-lg w-full max-w-sm p-8 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="bg-white brutal-border brutal-shadow-lg w-full max-w-sm p-8 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-center mb-6">
               <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 brutal-border border-red-200">
                 <UserX size={32} />
               </div>
             </div>
-            <h3 className="text-xl font-black text-center text-black mb-2">정말 탈퇴하시겠습니까?</h3>
+            <h3 className="text-xl font-black text-center text-black mb-2">
+              정말 탈퇴하시겠습니까?
+            </h3>
             <p className="text-sm font-bold text-center text-gray-500 mb-8">
               모든 데이터가 삭제되며 복구할 수 없습니다.
             </p>

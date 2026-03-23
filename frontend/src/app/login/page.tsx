@@ -87,11 +87,23 @@ export default function LoginPage() {
       } else {
         // 클라이언트 측 사전 검증
         const loginIdErr = validateLoginId(loginId.trim());
-        if (loginIdErr) { setError(loginIdErr); return; }
+        if (loginIdErr) {
+          setError(loginIdErr);
+          return;
+        }
         const nicknameErr = validateNickname(nickname.trim());
-        if (nicknameErr) { setError(nicknameErr); return; }
-        if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); return; }
-        if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); return; }
+        if (nicknameErr) {
+          setError(nicknameErr);
+          return;
+        }
+        if (password.length < 6) {
+          setError('비밀번호는 6자 이상이어야 합니다');
+          return;
+        }
+        if (password !== confirmPassword) {
+          setError('비밀번호가 일치하지 않습니다');
+          return;
+        }
 
         await api.post('/auth/register', {
           login_id: loginId.trim(),
@@ -115,7 +127,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen" style={{ background: 'linear-gradient(135deg, #FFFBF1 0%, #e8f4fd 50%, #d4ecff 100%)' }}>
+    <div
+      className="flex justify-center items-center min-h-screen"
+      style={{ background: 'linear-gradient(135deg, #FFFBF1 0%, #e8f4fd 50%, #d4ecff 100%)' }}
+    >
       <div className="bg-white rounded-2xl py-10 px-6 md:px-10 w-full max-w-[440px] mx-4 brutal-border brutal-shadow-sm">
         {/* 로고 */}
         <div className="flex justify-center mb-3">
@@ -132,7 +147,10 @@ export default function LoginPage() {
                 ? 'text-primary border-b-2 border-primary -mb-[2px]'
                 : 'text-gray-400 hover:text-gray-600'
             }`}
-            onClick={() => { setMode('login'); setError(''); }}
+            onClick={() => {
+              setMode('login');
+              setError('');
+            }}
           >
             로그인
           </button>
@@ -142,7 +160,10 @@ export default function LoginPage() {
                 ? 'text-primary border-b-2 border-primary -mb-[2px]'
                 : 'text-gray-400 hover:text-gray-600'
             }`}
-            onClick={() => { setMode('register'); setError(''); }}
+            onClick={() => {
+              setMode('register');
+              setError('');
+            }}
           >
             회원가입
           </button>
@@ -227,7 +248,9 @@ export default function LoginPage() {
                     />
                   ))}
                 </div>
-                <span className="text-xs text-gray-500 font-semibold">{passwordStrength.label}</span>
+                <span className="text-xs text-gray-500 font-semibold">
+                  {passwordStrength.label}
+                </span>
               </div>
             )}
           </div>
@@ -243,11 +266,15 @@ export default function LoginPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 className={`w-full bg-gray-50 border-2 rounded-xl px-4 py-3 text-sm text-black focus:outline-none focus:border-primary ${
-                  confirmPassword && password !== confirmPassword ? 'border-red-500' : 'border-black'
+                  confirmPassword && password !== confirmPassword
+                    ? 'border-red-500'
+                    : 'border-black'
                 } ${confirmPassword && password === confirmPassword && password.length >= 6 ? 'border-green-500' : ''}`}
               />
               {confirmPassword && password !== confirmPassword && (
-                <span className="text-red-500 text-xs font-semibold">비밀번호가 일치하지 않습니다</span>
+                <span className="text-red-500 text-xs font-semibold">
+                  비밀번호가 일치하지 않습니다
+                </span>
               )}
               {confirmPassword && password === confirmPassword && password.length >= 6 && (
                 <span className="text-green-500 text-xs font-semibold">비밀번호가 일치합니다</span>

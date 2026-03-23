@@ -31,12 +31,24 @@ const MODE_OPTIONS = [
   { value: 'cross_exam', label: '교차 심문' },
 ];
 
-
-const STATUS_CONFIG: Record<string, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
-  open:        { label: 'LIVE',  dotColor: 'bg-red-500', bgColor: 'bg-red-500/10',  textColor: 'text-red-500' },
-  in_progress: { label: '대기중', dotColor: '',           bgColor: 'bg-gray-500/10', textColor: 'text-gray-500' },
-  scheduled:   { label: '예정',  dotColor: '',           bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
-  closed:      { label: '종료',  dotColor: '',           bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; dotColor: string; bgColor: string; textColor: string }
+> = {
+  open: {
+    label: 'LIVE',
+    dotColor: 'bg-red-500',
+    bgColor: 'bg-red-500/10',
+    textColor: 'text-red-500',
+  },
+  in_progress: {
+    label: '대기중',
+    dotColor: '',
+    bgColor: 'bg-gray-500/10',
+    textColor: 'text-gray-500',
+  },
+  scheduled: { label: '예정', dotColor: '', bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
+  closed: { label: '종료', dotColor: '', bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
 };
 
 const defaultForm = {
@@ -94,7 +106,6 @@ export default function DebateTopicsPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editShowAdvanced, setEditShowAdvanced] = useState(false);
 
-
   // 초기 로드
   useEffect(() => {
     fetchMyAgents();
@@ -124,7 +135,7 @@ export default function DebateTopicsPage() {
           lastScrollTime = now;
           setIsRefreshing(true);
           setTimeout(() => {
-            setPage(prev => prev + 1);
+            setPage((prev) => prev + 1);
             setIsRefreshing(false);
           }, 800);
         }
@@ -291,7 +302,9 @@ export default function DebateTopicsPage() {
             className="bg-bg-surface border-2 border-black rounded-lg px-2 py-1.5 text-xs text-text focus:outline-none shrink-0 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
             {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
         </div>
@@ -316,8 +329,7 @@ export default function DebateTopicsPage() {
             href="/debate/agents"
             className="px-4 py-2 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2"
           >
-            <Plus size={16} />
-            내 에이전트
+            <Plus size={16} />내 에이전트
           </Link>
         </div>
       </div>
@@ -327,7 +339,6 @@ export default function DebateTopicsPage() {
         {/* 토픽 리스트 섹션 */}
         <div className="lg:col-span-2">
           <div id="topic-list">
-
             <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-4 gap-5">
               {topicsLoading && topics.length === 0 ? (
                 Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
@@ -339,7 +350,8 @@ export default function DebateTopicsPage() {
               ) : (
                 topics.map((topic) => {
                   const config = STATUS_CONFIG[topic.status] || STATUS_CONFIG.closed;
-                  const categoryLabel = MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
+                  const categoryLabel =
+                    MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
                   return (
                     <Link
                       key={topic.id}
@@ -348,8 +360,14 @@ export default function DebateTopicsPage() {
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}>
-                            {config.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`} />}
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${config.bgColor} ${config.textColor} border border-black/5`}
+                          >
+                            {config.dotColor && (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse`}
+                              />
+                            )}
                             {config.label}
                           </span>
                         </div>
@@ -396,23 +414,45 @@ export default function DebateTopicsPage() {
               ) : (
                 ranking.slice(0, 12).map((r, idx) => {
                   const rank = idx + 1;
-                  const rankColorClass = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-amber-600' : 'text-gray-400';
-                  const bgColor = rank === 1 ? 'bg-yellow-500/15' : rank === 2 ? 'bg-slate-400/15' : rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+                  const rankColorClass =
+                    rank === 1
+                      ? 'text-yellow-500'
+                      : rank === 2
+                        ? 'text-gray-400'
+                        : rank === 3
+                          ? 'text-amber-600'
+                          : 'text-gray-400';
+                  const bgColor =
+                    rank === 1
+                      ? 'bg-yellow-500/15'
+                      : rank === 2
+                        ? 'bg-slate-400/15'
+                        : rank === 3
+                          ? 'bg-amber-600/15'
+                          : 'bg-bg';
                   return (
                     <Link
                       key={r.id}
                       href={`/debate/agents/${r.id}`}
                       className={`flex items-center gap-3 px-3 py-2 rounded-xl no-underline hover:opacity-80 transition-opacity ${bgColor}`}
                     >
-                      <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColorClass}`}>
+                      <span
+                        className={`text-lg font-black w-5 text-center shrink-0 ${rankColorClass}`}
+                      >
                         {rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : rank}
                       </span>
                       <div className="flex-1 min-w-0 flex flex-col justify-center">
-                        <p className="text-sm font-black text-text m-0 truncate leading-tight">{r.name}</p>
-                        <p className="text-[10px] text-gray-400 m-0 leading-tight">@{r.owner_nickname}</p>
+                        <p className="text-sm font-black text-text m-0 truncate leading-tight">
+                          {r.name}
+                        </p>
+                        <p className="text-[10px] text-gray-400 m-0 leading-tight">
+                          @{r.owner_nickname}
+                        </p>
                       </div>
                       <div className="flex items-center shrink-0">
-                        <span className="text-sm font-black text-primary tracking-tighter">{r.elo_rating}</span>
+                        <span className="text-sm font-black text-primary tracking-tighter">
+                          {r.elo_rating}
+                        </span>
                       </div>
                     </Link>
                   );
@@ -435,7 +475,10 @@ export default function DebateTopicsPage() {
                   누구나 토론 주제를 제안할 수 있어요
                 </p>
               </div>
-              <button onClick={closeModal} className="text-text-muted hover:text-text transition-colors">
+              <button
+                onClick={closeModal}
+                className="text-text-muted hover:text-text transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -775,7 +818,9 @@ export default function DebateTopicsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))}
+                      onClick={() =>
+                        setEditForm((f) => ({ ...f, tools_enabled: !f.tools_enabled }))
+                      }
                       className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
                         editForm.tools_enabled ? 'bg-primary' : 'bg-gray-600'
                       }`}

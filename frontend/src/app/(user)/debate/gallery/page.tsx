@@ -223,65 +223,65 @@ export default function GalleryPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto py-12 px-6">
-        {/* Header */}
-        <div className="flex flex-col gap-2 mb-8">
-          <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
-            <LayoutGrid size={20} className="text-primary" />
-            에이전트 갤러리
-          </h1>
-          <p className="text-xs text-text-muted font-medium ml-1">
-            개성 넘치는 AI 에이전트들을 둘러보고 마음에 드는 에이전트를 복제해 보세요.
-          </p>
-        </div>
+      {/* Header */}
+      <div className="flex flex-col gap-2 mb-8">
+        <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
+          <LayoutGrid size={20} className="text-primary" />
+          에이전트 갤러리
+        </h1>
+        <p className="text-xs text-text-muted font-medium ml-1">
+          개성 넘치는 AI 에이전트들을 둘러보고 마음에 드는 에이전트를 복제해 보세요.
+        </p>
+      </div>
 
-        <div className="flex items-center justify-between text-sm font-bold text-text-muted mb-2">
-          {loading ? (
-            <span className="h-4 w-16 rounded bg-bg-hover animate-pulse inline-block" />
-          ) : (
-            <span>총 {total}개</span>
-          )}
-          <div className="flex items-center gap-2 p-1 bg-bg-surface rounded-xl brutal-border border-2 border-black">
-            <TabButton
-              active={activeTab === 'elo'}
-              onClick={() => setActiveTab('elo')}
-              label="ELO 순"
-            />
-            <TabButton
-              active={activeTab === 'wins'}
-              onClick={() => setActiveTab('wins')}
-              label="승리 수"
-            />
-            <TabButton
-              active={activeTab === 'recent'}
-              onClick={() => setActiveTab('recent')}
-              label="최신 순"
-            />
-          </div>
-        </div>
-
-        {/* Grid */}
+      <div className="flex items-center justify-between text-sm font-bold text-text-muted mb-2">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        ) : agents.length === 0 ? (
-          <div className="py-20 text-center text-sm text-text-muted">
-            아직 등록된 에이전트가 없습니다.
-          </div>
+          <span className="h-4 w-16 rounded bg-bg-hover animate-pulse inline-block" />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agents.map((agent) => (
-              <div
-                key={agent.id}
-                className={cloningId === agent.id ? 'opacity-50 pointer-events-none' : ''}
-              >
-                <AgentCardView agent={agent} onClone={handleClone} />
-              </div>
-            ))}
-          </div>
+          <span>총 {total}개</span>
         )}
+        <div className="flex items-center gap-2 p-1 bg-bg-surface rounded-xl brutal-border border-2 border-black">
+          <TabButton
+            active={activeTab === 'elo'}
+            onClick={() => setActiveTab('elo')}
+            label="ELO 순"
+          />
+          <TabButton
+            active={activeTab === 'wins'}
+            onClick={() => setActiveTab('wins')}
+            label="승리 수"
+          />
+          <TabButton
+            active={activeTab === 'recent'}
+            onClick={() => setActiveTab('recent')}
+            label="최신 순"
+          />
+        </div>
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : agents.length === 0 ? (
+        <div className="py-20 text-center text-sm text-text-muted">
+          아직 등록된 에이전트가 없습니다.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className={cloningId === agent.id ? 'opacity-50 pointer-events-none' : ''}
+            >
+              <AgentCardView agent={agent} onClone={handleClone} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

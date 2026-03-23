@@ -23,7 +23,10 @@ export function SettingsTab() {
   const [models, setModels] = useState<LLMModel[]>([]);
 
   useEffect(() => {
-    api.get<LLMModel[]>('/models').then(setModels).catch(() => toast.error('모델 목록을 불러오지 못했습니다'));
+    api
+      .get<LLMModel[]>('/models')
+      .then(setModels)
+      .catch(() => toast.error('모델 목록을 불러오지 못했습니다'));
   }, []);
 
   return (

@@ -183,7 +183,9 @@ function TurnDebugCard({
         className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-black/5 transition-colors"
       >
         {/* 턴 번호 */}
-        <span className="text-[11px] font-mono text-text-muted w-8 shrink-0">T{turn.turn_number}</span>
+        <span className="text-[11px] font-mono text-text-muted w-8 shrink-0">
+          T{turn.turn_number}
+        </span>
 
         {/* 발화자 배지 */}
         <span
@@ -210,8 +212,7 @@ function TurnDebugCard({
         {/* 벌점 배지 */}
         {turn.penalty_total > 0 && (
           <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded shrink-0">
-            <AlertTriangle size={9} />
-            -{turn.penalty_total}
+            <AlertTriangle size={9} />-{turn.penalty_total}
           </span>
         )}
 
@@ -339,8 +340,7 @@ function TurnDebugCard({
           {turn.tool_used && (
             <div className="bg-emerald-500/5 rounded-lg p-2.5 border border-emerald-500/20">
               <p className="text-[10px] font-semibold text-emerald-500 mb-1 flex items-center gap-1">
-                <Wrench size={10} />
-                툴 사용: {turn.tool_used}
+                <Wrench size={10} />툴 사용: {turn.tool_used}
               </p>
               {turn.tool_result && (
                 <pre className="text-[11px] text-text-secondary font-mono whitespace-pre-wrap break-all">
@@ -533,9 +533,7 @@ export function DebateDebugModal({ data, onClose }: Props) {
         {/* ── 턴 목록 ── */}
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {filteredTurns.length === 0 ? (
-            <p className="text-sm text-text-muted text-center py-10">
-              해당 조건의 턴이 없습니다.
-            </p>
+            <p className="text-sm text-text-muted text-center py-10">해당 조건의 턴이 없습니다.</p>
           ) : (
             filteredTurns.map((turn) => (
               <TurnDebugCard
@@ -566,8 +564,7 @@ export function DebateDebugModal({ data, onClose }: Props) {
                 <div className="grid grid-cols-2 gap-3">
                   {(['agent_a', 'agent_b'] as const).map((side) => {
                     const scores = match.scorecard![side];
-                    const agentName =
-                      side === 'agent_a' ? match.agent_a.name : match.agent_b.name;
+                    const agentName = side === 'agent_a' ? match.agent_a.name : match.agent_b.name;
                     const total = Object.values(scores).reduce((a, b) => a + b, 0);
                     const isWinner =
                       side === 'agent_a'

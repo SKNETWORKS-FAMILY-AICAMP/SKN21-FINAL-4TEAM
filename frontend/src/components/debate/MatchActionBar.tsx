@@ -16,7 +16,13 @@ type Props = {
   topicTitle?: string | null;
 };
 
-export function MatchActionBar({ matchId, matchStatus, agentAName, agentBName, topicTitle }: Props) {
+export function MatchActionBar({
+  matchId,
+  matchStatus,
+  agentAName,
+  agentBName,
+  topicTitle,
+}: Props) {
   const turns = useDebateStore((s) => s.turns);
   const startReplay = useDebateStore((s) => s.startReplay);
   const debateShowAll = useDebateStore((s) => s.debateShowAll);

@@ -13,7 +13,9 @@ export function Footer() {
       <div className="max-w-[960px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
         <div className="space-y-4">
           <Link href="/" className="no-underline group inline-block">
-            <span className="text-2xl font-black text-text tracking-tighter leading-none group-hover:text-primary transition-colors">NEMo</span>
+            <span className="text-2xl font-black text-text tracking-tighter leading-none group-hover:text-primary transition-colors">
+              NEMo
+            </span>
           </Link>
           <div className="text-[13px] text-text-muted space-y-1 font-bold">
             <p>서울시 금천구 가산디지털1로 25</p>

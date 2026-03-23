@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Swords, Check, X, AlertCircle, Eye, EyeOff,
-} from 'lucide-react';
+import { Swords, Check, X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { login, register, checkNickname, checkLoginId } from '@/lib/auth';
 import { useUserStore } from '@/stores/userStore';
 import { api } from '@/lib/api';
@@ -142,13 +140,31 @@ export default function HomePage() {
 
     if (mode === 'register') {
       const loginIdValidationError = validateLoginId(loginId.trim());
-      if (loginIdValidationError) { setError(loginIdValidationError); return; }
-      if (loginIdStatus !== 'available') { setError('아이디 중복 확인이 필요합니다'); return; }
+      if (loginIdValidationError) {
+        setError(loginIdValidationError);
+        return;
+      }
+      if (loginIdStatus !== 'available') {
+        setError('아이디 중복 확인이 필요합니다');
+        return;
+      }
       const nicknameValidationError = validateNickname(nickname.trim());
-      if (nicknameValidationError) { setError(nicknameValidationError); return; }
-      if (nicknameStatus !== 'available') { setError('닉네임 중복 확인이 필요합니다'); return; }
-      if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다'); return; }
-      if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다'); return; }
+      if (nicknameValidationError) {
+        setError(nicknameValidationError);
+        return;
+      }
+      if (nicknameStatus !== 'available') {
+        setError('닉네임 중복 확인이 필요합니다');
+        return;
+      }
+      if (password.length < 6) {
+        setError('비밀번호는 6자 이상이어야 합니다');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('비밀번호가 일치하지 않습니다');
+        return;
+      }
     }
 
     setLoading(true);
@@ -157,17 +173,26 @@ export default function HomePage() {
         const res = await login(loginId, password);
         setToken(res.access_token);
         const user = await api.get<{
-          id: string; login_id: string; nickname: string; email: string | null;
+          id: string;
+          login_id: string;
+          nickname: string;
+          email: string | null;
           role: 'user' | 'admin' | 'superadmin';
-          age_group: string; adult_verified_at: string | null;
+          age_group: string;
+          adult_verified_at: string | null;
           preferred_llm_model_id: string | null;
-          credit_balance?: number; subscription_plan_key?: string | null;
+          credit_balance?: number;
+          subscription_plan_key?: string | null;
           created_at: string;
         }>('/auth/me');
         setUser({
-          id: user.id, login_id: user.login_id, nickname: user.nickname,
-          email: user.email ?? null, role: user.role,
-          ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
+          id: user.id,
+          login_id: user.login_id,
+          nickname: user.nickname,
+          email: user.email ?? null,
+          role: user.role,
+          ageGroup: user.age_group,
+          adultVerifiedAt: user.adult_verified_at,
           preferredLlmModelId: user.preferred_llm_model_id,
           creditBalance: user.credit_balance ?? 0,
           subscriptionPlanKey: user.subscription_plan_key ?? null,
@@ -178,17 +203,26 @@ export default function HomePage() {
         const res = await register(loginId.trim(), nickname.trim(), password, email || undefined);
         setToken(res.access_token);
         const user = await api.get<{
-          id: string; login_id: string; nickname: string; email: string | null;
+          id: string;
+          login_id: string;
+          nickname: string;
+          email: string | null;
           role: 'user' | 'admin' | 'superadmin';
-          age_group: string; adult_verified_at: string | null;
+          age_group: string;
+          adult_verified_at: string | null;
           preferred_llm_model_id: string | null;
-          credit_balance?: number; subscription_plan_key?: string | null;
+          credit_balance?: number;
+          subscription_plan_key?: string | null;
           created_at: string;
         }>('/auth/me');
         setUser({
-          id: user.id, login_id: user.login_id, nickname: user.nickname,
-          email: user.email ?? null, role: user.role,
-          ageGroup: user.age_group, adultVerifiedAt: user.adult_verified_at,
+          id: user.id,
+          login_id: user.login_id,
+          nickname: user.nickname,
+          email: user.email ?? null,
+          role: user.role,
+          ageGroup: user.age_group,
+          adultVerifiedAt: user.adult_verified_at,
           preferredLlmModelId: user.preferred_llm_model_id,
           creditBalance: user.credit_balance ?? 0,
           subscriptionPlanKey: user.subscription_plan_key ?? null,
@@ -313,9 +347,7 @@ export default function HomePage() {
                   )}
                 </button>
               </div>
-              {nicknameError && (
-                <span className="text-danger-text text-xs">{nicknameError}</span>
-              )}
+              {nicknameError && <span className="text-danger-text text-xs">{nicknameError}</span>}
               {nicknameStatus === 'available' && (
                 <span className="text-success text-xs">사용 가능한 닉네임입니다</span>
               )}

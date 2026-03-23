@@ -11,7 +11,6 @@ type MonitoringStats = {
   weekly?: { new_users?: number };
 };
 
-
 type DashboardData = {
   users: number | null;
   newUsersWeekly: number | null;

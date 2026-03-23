@@ -23,10 +23,7 @@ export function ShareButton({ url, title = 'AI 토론' }: Props) {
   const handleTwitter = () => {
     const text = encodeURIComponent(title);
     const encodedUrl = encodeURIComponent(url);
-    window.open(
-      `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
-      '_blank',
-    );
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`, '_blank');
     setOpen(false);
   };
 
@@ -49,11 +46,7 @@ export function ShareButton({ url, title = 'AI 토론' }: Props) {
               onClick={handleCopy}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-bg text-text-muted hover:text-text transition-colors"
             >
-              {copied ? (
-                <Check size={14} className="text-green-400" />
-              ) : (
-                <Share2 size={14} />
-              )}
+              {copied ? <Check size={14} className="text-green-400" /> : <Share2 size={14} />}
               {copied ? '복사됨!' : '링크 복사'}
             </button>
             <button

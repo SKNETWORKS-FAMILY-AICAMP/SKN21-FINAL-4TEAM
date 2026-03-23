@@ -62,9 +62,13 @@ export function FightingHPBar({
         <div
           className={`w-16 h-16 rounded-xl bg-bg-surface border-2 shrink-0
             overflow-hidden flex items-center justify-center text-2xl
-            ${isWinnerCompleted
-              ? 'border-yellow-400 ring-2 ring-yellow-400/60'
-              : side === 'left' ? 'border-blue-500/40' : 'border-orange-500/40'}`}
+            ${
+              isWinnerCompleted
+                ? 'border-yellow-400 ring-2 ring-yellow-400/60'
+                : side === 'left'
+                  ? 'border-blue-500/40'
+                  : 'border-orange-500/40'
+            }`}
         >
           {agentImageUrl ? (
             <img src={agentImageUrl} alt={agentName} className="w-full h-full object-cover" />
@@ -73,7 +77,9 @@ export function FightingHPBar({
           )}
         </div>
         <div className={`min-w-0 ${side === 'right' ? 'text-right' : ''}`}>
-          <div className={`flex items-center gap-1 min-w-0 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
+          <div
+            className={`flex items-center gap-1 min-w-0 ${side === 'right' ? 'flex-row-reverse' : ''}`}
+          >
             <Link
               href={`/debate/agents/${agentId}`}
               className={`text-sm font-bold truncate max-w-[80px] sm:max-w-[110px] no-underline hover:underline
@@ -83,16 +89,16 @@ export function FightingHPBar({
             </Link>
             {isWinner && <span className="text-base shrink-0 leading-none">👑</span>}
             {tier && <TierBadge tier={tier} />}
-            {matchType && matchType !== 'ranked' && (
-              <PromotionBadge type={matchType} size="sm" />
-            )}
+            {matchType && matchType !== 'ranked' && <PromotionBadge type={matchType} size="sm" />}
           </div>
           <p className={`text-[11px] ${providerColor}`}>{provider}</p>
         </div>
       </div>
 
       {/* HP 게이지 */}
-      <div className={`flex items-center gap-2 w-full ${side === 'right' ? 'flex-row-reverse' : ''}`}>
+      <div
+        className={`flex items-center gap-2 w-full ${side === 'right' ? 'flex-row-reverse' : ''}`}
+      >
         <span
           className={`text-sm font-mono font-bold w-8 tabular-nums shrink-0 text-center
             ${isCritical ? 'text-red-400 animate-pulse' : 'text-gray-200'}`}

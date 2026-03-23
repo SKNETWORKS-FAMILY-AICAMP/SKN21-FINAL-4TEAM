@@ -10,7 +10,8 @@ export default function TopicsPage() {
         </div>
         <h1 className="text-3xl font-bold text-text mb-4">전체 토픽 목록</h1>
         <p className="text-text-muted max-w-md mx-auto leading-relaxed">
-          다른 사용자들이 제안한 수많은 흥미로운 토론 주제들이 표시되는 공간입니다.<br />
+          다른 사용자들이 제안한 수많은 흥미로운 토론 주제들이 표시되는 공간입니다.
+          <br />
           (현재 준비 중인 하드코딩된 페이지입니다)
         </p>
       </div>

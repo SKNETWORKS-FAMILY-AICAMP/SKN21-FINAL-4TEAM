@@ -37,29 +37,55 @@ type UserListResponse = {
 function formatDate(iso: string | null) {
   if (!iso) return '-';
   return new Date(iso).toLocaleDateString('ko-KR', {
-    year: 'numeric', month: 'long', day: 'numeric',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
 }
 
 function AgeBadge({ ageGroup }: { ageGroup: string }) {
   switch (ageGroup) {
     case 'adult_verified':
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-success/15 text-success">성인인증</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-success/15 text-success">
+          성인인증
+        </span>
+      );
     case 'minor_safe':
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-warning/15 text-warning">청소년</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-warning/15 text-warning">
+          청소년
+        </span>
+      );
     default:
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-bg-hover text-text-muted">미인증</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-bg-hover text-text-muted">
+          미인증
+        </span>
+      );
   }
 }
 
 function RoleBadge({ role }: { role: string }) {
   switch (role) {
     case 'superadmin':
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-purple-500/15 text-purple-400">슈퍼관리자</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-purple-500/15 text-purple-400">
+          슈퍼관리자
+        </span>
+      );
     case 'admin':
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-primary/15 text-primary">관리자</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-primary/15 text-primary">
+          관리자
+        </span>
+      );
     default:
-      return <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-bg-hover text-text-muted">사용자</span>;
+      return (
+        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-bg-hover text-text-muted">
+          사용자
+        </span>
+      );
   }
 }
 
@@ -185,12 +211,16 @@ export default function AdminUsersPage() {
     {
       key: 'adult_verified_at' as const,
       label: '성인인증일',
-      render: (v: unknown) => <span className="text-text-secondary text-xs">{formatDate(v as string | null)}</span>,
+      render: (v: unknown) => (
+        <span className="text-text-secondary text-xs">{formatDate(v as string | null)}</span>
+      ),
     },
     {
       key: 'created_at' as const,
       label: '가입일',
-      render: (v: unknown) => <span className="text-text-secondary text-xs">{formatDate(v as string)}</span>,
+      render: (v: unknown) => (
+        <span className="text-text-secondary text-xs">{formatDate(v as string)}</span>
+      ),
     },
   ];
 
@@ -214,11 +244,7 @@ export default function AdminUsersPage() {
           value={stats?.superadmin_count ?? '-'}
           icon={<Crown size={20} />}
         />
-        <StatCard
-          title="관리자"
-          value={stats?.admin_count ?? '-'}
-          icon={<Shield size={20} />}
-        />
+        <StatCard title="관리자" value={stats?.admin_count ?? '-'} icon={<Shield size={20} />} />
         <StatCard
           title="성인인증"
           value={stats?.adult_verified_count ?? '-'}
@@ -247,7 +273,10 @@ export default function AdminUsersPage() {
       <div className="flex gap-2 mb-4 flex-wrap">
         <select
           value={roleFilter}
-          onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
+          onChange={(e) => {
+            setRoleFilter(e.target.value);
+            setPage(0);
+          }}
           className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
         >
           <option value="">전체 역할</option>
@@ -257,7 +286,10 @@ export default function AdminUsersPage() {
         </select>
         <select
           value={ageGroupFilter}
-          onChange={(e) => { setAgeGroupFilter(e.target.value); setPage(0); }}
+          onChange={(e) => {
+            setAgeGroupFilter(e.target.value);
+            setPage(0);
+          }}
           className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
         >
           <option value="">전체 연령</option>
@@ -267,7 +299,10 @@ export default function AdminUsersPage() {
         </select>
         <select
           value={sortBy}
-          onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
+          onChange={(e) => {
+            setSortBy(e.target.value);
+            setPage(0);
+          }}
           className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
         >
           <option value="">가입일순</option>

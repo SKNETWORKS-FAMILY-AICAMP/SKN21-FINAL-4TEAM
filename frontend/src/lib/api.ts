@@ -35,7 +35,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     // 401 → 세션 만료. 로그인 페이지가 아닌 경우에만 이동 (무한 루프 방지)
-    if (response.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    if (
+      response.status === 401 &&
+      typeof window !== 'undefined' &&
+      window.location.pathname !== '/login'
+    ) {
       // 다른 기기 로그인으로 세션이 교체된 경우 사유를 저장해 로그인 페이지에서 표시
       if (response.headers.get('X-Error-Code') === 'AUTH_SESSION_REPLACED') {
         sessionStorage.setItem('auth_redirect_reason', 'session_replaced');
@@ -61,14 +65,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 type RequestOptions = { signal?: AbortSignal };
 
 export const api = {
-  get: <T>(path: string, options?: RequestOptions) =>
-    request<T>(path, { signal: options?.signal }),
+  get: <T>(path: string, options?: RequestOptions) => request<T>(path, { signal: options?.signal }),
   post: <T>(path: string, data?: unknown, options?: RequestOptions) =>
-    request<T>(path, { method: 'POST', body: data ? JSON.stringify(data) : undefined, signal: options?.signal }),
+    request<T>(path, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+      signal: options?.signal,
+    }),
   put: <T>(path: string, data?: unknown, options?: RequestOptions) =>
-    request<T>(path, { method: 'PUT', body: data ? JSON.stringify(data) : undefined, signal: options?.signal }),
+    request<T>(path, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+      signal: options?.signal,
+    }),
   patch: <T>(path: string, data?: unknown, options?: RequestOptions) =>
-    request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined, signal: options?.signal }),
+    request<T>(path, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+      signal: options?.signal,
+    }),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { method: 'DELETE', signal: options?.signal }),
   upload: <T>(path: string, file: File, fieldName = 'file') => {
@@ -86,7 +101,10 @@ function buildQuery(params?: Record<string, string | number | boolean | undefine
   if (!params) return '';
   const entries = Object.entries(params).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return '';
-  return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+  return (
+    '?' +
+    entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
+  );
 }
 
 // ── Follow API ────────────────────────────────────────────────────────────────
@@ -138,8 +156,7 @@ export const getNotifications = (params?: {
 
 export const getUnreadCount = () => api.get<{ count: number }>('/notifications/unread-count');
 
-export const markNotificationRead = (id: string) =>
-  api.put<void>(`/notifications/${id}/read`, {});
+export const markNotificationRead = (id: string) => api.put<void>(`/notifications/${id}/read`, {});
 
 export const markAllNotificationsRead = () => api.put<void>('/notifications/read-all', {});
 
@@ -211,5 +228,3 @@ export type MyCommunityStatsResponse = {
 export const fetchHotTopics = () => api.get<HotTopicItem[]>('/community/hot-topics');
 
 export const fetchMyCommunityStats = () => api.get<MyCommunityStatsResponse>('/community/my-stats');
-
-

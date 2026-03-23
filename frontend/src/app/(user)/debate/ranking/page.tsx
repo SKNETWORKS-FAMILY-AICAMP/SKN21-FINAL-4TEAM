@@ -200,7 +200,10 @@ function ColumnSkeleton() {
       </div>
       <div className="bg-bg-surface brutal-border border-4 rounded-[32px] overflow-hidden">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0">
+          <div
+            key={i}
+            className="flex items-center gap-4 p-5 border-b-2 border-black last:border-b-0"
+          >
             <div className="w-10 h-6 bg-bg-hover rounded animate-pulse" />
             <div className="flex-1 space-y-2">
               <div className="h-4 bg-bg-hover rounded animate-pulse" />
@@ -348,13 +351,21 @@ export default function RankingPage() {
             ) : (
               activeItems.map((item, idx) => {
                 const bgColor =
-                  item.rank === 1 ? 'bg-yellow-500/15' :
-                  item.rank === 2 ? 'bg-slate-400/15' :
-                  item.rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+                  item.rank === 1
+                    ? 'bg-yellow-500/15'
+                    : item.rank === 2
+                      ? 'bg-slate-400/15'
+                      : item.rank === 3
+                        ? 'bg-amber-600/15'
+                        : 'bg-bg';
                 const rankColor =
-                  item.rank === 1 ? 'text-yellow-500' :
-                  item.rank === 2 ? 'text-gray-400' :
-                  item.rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                  item.rank === 1
+                    ? 'text-yellow-500'
+                    : item.rank === 2
+                      ? 'text-gray-400'
+                      : item.rank === 3
+                        ? 'text-amber-600'
+                        : 'text-gray-400';
                 const isSelected = selectedItem?.id === item.id;
                 return (
                   <div
@@ -366,14 +377,20 @@ export default function RankingPage() {
                       {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
                     </span>
                     <div className="flex-1 min-w-0 flex flex-col justify-center">
-                      <p className="text-sm font-black text-text m-0 truncate leading-tight">{item.name}</p>
-                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
+                      <p className="text-sm font-black text-text m-0 truncate leading-tight">
+                        {item.name}
+                      </p>
+                      <p className="text-[10px] text-gray-400 m-0 leading-tight">
+                        @{item.subtitle}
+                      </p>
                     </div>
                     <div className="flex items-center shrink-0">
                       <span className="text-sm font-black text-primary tracking-tighter">
-                        {item.category === 'agent' ? item.elo.toLocaleString() :
-                         item.category === 'debate' ? `${item.winRate}%` :
-                         `${item.agentCount ?? 0}개`}
+                        {item.category === 'agent'
+                          ? item.elo.toLocaleString()
+                          : item.category === 'debate'
+                            ? `${item.winRate}%`
+                            : `${item.agentCount ?? 0}개`}
                       </span>
                     </div>
                   </div>
@@ -424,8 +441,10 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
           <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl border-2 border-black flex items-center justify-center text-3xl flex-shrink-0 shadow-[3px_3px_0_0_rgba(0,0,0,0.4)] overflow-hidden">
             {item.image_url ? (
               <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+            ) : item.category === 'llm' ? (
+              '🧠'
             ) : (
-              item.category === 'llm' ? '🧠' : '🤖'
+              '🤖'
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -436,7 +455,9 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
               </span>
             </div>
             <p className="text-sm font-bold opacity-80 m-0">{item.subtitle}</p>
-            <p className="text-xs font-medium opacity-60 m-0">#{item.rank}위 · {getCategoryLabel(item.category)}</p>
+            <p className="text-xs font-medium opacity-60 m-0">
+              #{item.rank}위 · {getCategoryLabel(item.category)}
+            </p>
           </div>
         </div>
       </div>
@@ -445,17 +466,37 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {item.category === 'llm' ? (
           <>
-            <StatCard label="사용 에이전트" value={`${item.agentCount ?? 0}개`} icon={<Users size={14} />} />
-            <StatCard label="승률" value={item.win_rate != null ? `${item.winRate}%` : '-'} icon={<Star size={14} />} />
-            <StatCard label="승/패" value={`${item.wins}W ${item.losses}L`} icon={<Trophy size={14} />} />
-            <StatCard label="비용 (1K)" value={item.costPer1k ?? '-'} icon={<DollarSign size={14} />} />
+            <StatCard
+              label="사용 에이전트"
+              value={`${item.agentCount ?? 0}개`}
+              icon={<Users size={14} />}
+            />
+            <StatCard
+              label="승률"
+              value={item.win_rate != null ? `${item.winRate}%` : '-'}
+              icon={<Star size={14} />}
+            />
+            <StatCard
+              label="승/패"
+              value={`${item.wins}W ${item.losses}L`}
+              icon={<Trophy size={14} />}
+            />
+            <StatCard
+              label="비용 (1K)"
+              value={item.costPer1k ?? '-'}
+              icon={<DollarSign size={14} />}
+            />
           </>
         ) : (
           <>
             <StatCard label="ELO" value={item.elo.toLocaleString()} icon={<Zap size={14} />} />
             <StatCard label="승률" value={`${item.winRate}%`} icon={<Star size={14} />} />
             <StatCard label="승리" value={item.wins.toLocaleString()} icon={<Trophy size={14} />} />
-            <StatCard label="패배" value={item.losses.toLocaleString()} icon={<Swords size={14} />} />
+            <StatCard
+              label="패배"
+              value={item.losses.toLocaleString()}
+              icon={<Swords size={14} />}
+            />
           </>
         )}
       </div>
@@ -468,9 +509,17 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
             전적 현황
           </h3>
           <div className="space-y-2">
-            <SpecRow icon={<Zap size={14} />} label="ELO 레이팅" value={item.elo.toLocaleString()} />
+            <SpecRow
+              icon={<Zap size={14} />}
+              label="ELO 레이팅"
+              value={item.elo.toLocaleString()}
+            />
             <SpecRow icon={<Star size={14} />} label="승률" value={`${item.winRate}%`} />
-            <SpecRow icon={<Trophy size={14} />} label="승/패" value={`${item.wins}승 ${item.losses}패`} />
+            <SpecRow
+              icon={<Trophy size={14} />}
+              label="승/패"
+              value={`${item.wins}승 ${item.losses}패`}
+            />
           </div>
         </div>
       )}
@@ -483,7 +532,11 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
           </h3>
           <div className="space-y-2">
             <SpecRow icon={<MessageSquare size={14} />} label="최대 토큰" value={item.maxTokens} />
-            <SpecRow icon={<DollarSign size={14} />} label="비용 (1K 평균)" value={item.costPer1k} />
+            <SpecRow
+              icon={<DollarSign size={14} />}
+              label="비용 (1K 평균)"
+              value={item.costPer1k}
+            />
           </div>
         </div>
       )}
@@ -493,7 +546,9 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
         <div className="min-w-0 mr-3">
           <h4 className="text-sm font-black m-0 truncate">{item.name}</h4>
           <p className="text-xs font-bold opacity-60 m-0">
-            {item.category === 'llm' ? '이 모델로 새 에이전트를 만들 수 있습니다.' : '에이전트 프로필에서 전적을 확인하세요.'}
+            {item.category === 'llm'
+              ? '이 모델로 새 에이전트를 만들 수 있습니다.'
+              : '에이전트 프로필에서 전적을 확인하세요.'}
           </p>
         </div>
         <button
@@ -548,13 +603,21 @@ function CompactColumn({
           ) : (
             items.map((item, idx) => {
               const bgColor =
-                item.rank === 1 ? 'bg-yellow-500/15' :
-                item.rank === 2 ? 'bg-slate-400/15' :
-                item.rank === 3 ? 'bg-amber-600/15' : 'bg-bg';
+                item.rank === 1
+                  ? 'bg-yellow-500/15'
+                  : item.rank === 2
+                    ? 'bg-slate-400/15'
+                    : item.rank === 3
+                      ? 'bg-amber-600/15'
+                      : 'bg-bg';
               const rankColor =
-                item.rank === 1 ? 'text-yellow-500' :
-                item.rank === 2 ? 'text-gray-400' :
-                item.rank === 3 ? 'text-amber-600' : 'text-gray-400';
+                item.rank === 1
+                  ? 'text-yellow-500'
+                  : item.rank === 2
+                    ? 'text-gray-400'
+                    : item.rank === 3
+                      ? 'text-amber-600'
+                      : 'text-gray-400';
               return (
                 <div
                   key={item.id}
@@ -565,11 +628,15 @@ function CompactColumn({
                     {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
                   </span>
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <p className="text-sm font-black text-text m-0 truncate leading-tight">{item.name}</p>
+                    <p className="text-sm font-black text-text m-0 truncate leading-tight">
+                      {item.name}
+                    </p>
                     <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
                   </div>
                   <div className="flex items-center shrink-0">
-                    <span className="text-sm font-black text-primary tracking-tighter">{statValue(item)}</span>
+                    <span className="text-sm font-black text-primary tracking-tighter">
+                      {statValue(item)}
+                    </span>
                   </div>
                 </div>
               );
@@ -601,15 +668,7 @@ function StatCard({
   );
 }
 
-function SpecRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function SpecRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3 p-3 bg-bg-hover rounded-xl border border-border">
       <div className="text-text-muted opacity-60 flex-shrink-0">{icon}</div>

@@ -63,9 +63,7 @@ export default function FollowingPage() {
             type="button"
             onClick={() => setTab(t.key)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-              tab === t.key
-                ? 'bg-primary text-white'
-                : 'text-text-muted hover:text-text'
+              tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text'
             }`}
           >
             {t.label}

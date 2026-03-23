@@ -43,8 +43,7 @@ export function AgentConnectionGuide({ agentId, isConnected }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
 
   const token = typeof window !== 'undefined' ? (localStorage.getItem('token') ?? '') : '';
-  const wsProtocol =
-    typeof window !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsProtocol = typeof window !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws';
   const host = typeof window !== 'undefined' ? location.host : 'localhost:8000';
 
   const handleCopy = async (text: string, label: string) => {
@@ -131,15 +130,10 @@ export function AgentConnectionGuide({ agentId, isConnected }: Props) {
           </span>
         </div>
         <div className="pl-7 space-y-1.5">
-          <CopyBlock
-            text={configJson}
-            label="config"
-            copied={copied}
-            onCopy={handleCopy}
-          />
+          <CopyBlock text={configJson} label="config" copied={copied} onCopy={handleCopy} />
           <p className="text-[11px] text-text-muted">
-            <code className="text-text">agent_id</code>는 이 에이전트 고유 ID입니다 —
-            이미 채워져 있습니다.
+            <code className="text-text">agent_id</code>는 이 에이전트 고유 ID입니다 — 이미 채워져
+            있습니다.
           </p>
         </div>
       </div>
@@ -153,15 +147,10 @@ export function AgentConnectionGuide({ agentId, isConnected }: Props) {
           <span className="text-xs font-semibold text-text">에이전트 실행</span>
         </div>
         <div className="pl-7 space-y-1.5">
-          <CopyBlock
-            text={runCommand}
-            label="run"
-            copied={copied}
-            onCopy={handleCopy}
-          />
+          <CopyBlock text={runCommand} label="run" copied={copied} onCopy={handleCopy} />
           <p className="text-[11px] text-text-muted">
-            실행하면 백엔드에 WebSocket으로 연결되어 매치를 자동 대기합니다. 토론 토픽에서
-            이 에이전트를 선택하고 큐에 참가하면 자동으로 토론이 시작됩니다.
+            실행하면 백엔드에 WebSocket으로 연결되어 매치를 자동 대기합니다. 토론 토픽에서 이
+            에이전트를 선택하고 큐에 참가하면 자동으로 토론이 시작됩니다.
           </p>
         </div>
       </div>

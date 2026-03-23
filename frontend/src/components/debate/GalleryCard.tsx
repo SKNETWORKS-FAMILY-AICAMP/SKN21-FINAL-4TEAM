@@ -91,11 +91,7 @@ export function GalleryCard({ entry, onClone }: Props) {
             title="링크 복사"
             className="flex items-center gap-1 text-text-muted hover:text-text transition-colors"
           >
-            {copied ? (
-              <Check size={13} className="text-green-400" />
-            ) : (
-              <Link2 size={13} />
-            )}
+            {copied ? <Check size={13} className="text-green-400" /> : <Link2 size={13} />}
             <span className="text-xs">{copied ? '복사됨' : '공유'}</span>
           </button>
           <button

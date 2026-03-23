@@ -5,7 +5,18 @@ import { api } from '@/lib/api';
 import { StatCard } from '@/components/admin/StatCard';
 import { DataTable } from '@/components/admin/DataTable';
 import { SkeletonStat } from '@/components/ui/Skeleton';
-import { Coins, Hash, CalendarDays, ShieldAlert, Pencil, Check, X, Loader2, Search, User } from 'lucide-react';
+import {
+  Coins,
+  Hash,
+  CalendarDays,
+  ShieldAlert,
+  Pencil,
+  Check,
+  X,
+  Loader2,
+  Search,
+  User,
+} from 'lucide-react';
 
 type UsagePeriod = {
   input_tokens: number;
@@ -54,11 +65,7 @@ type UserSearchResult = {
   login_id: string;
 };
 
-function UserSearchInput({
-  onSelect,
-}: {
-  onSelect: (user: UserSearchResult) => void;
-}) {
+function UserSearchInput({ onSelect }: { onSelect: (user: UserSearchResult) => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -68,10 +75,16 @@ function UserSearchInput({
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const search = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    if (!q.trim()) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
     setSearching(true);
     try {
-      const data = await api.get<UserSearchResult[]>(`/admin/usage/user-search?q=${encodeURIComponent(q)}`);
+      const data = await api.get<UserSearchResult[]>(
+        `/admin/usage/user-search?q=${encodeURIComponent(q)}`,
+      );
       setResults(data);
       setOpen(true);
     } catch {
@@ -166,13 +179,22 @@ export default function AdminUsagePage() {
       .then(setSummary)
       .catch(() => {})
       .finally(() => setLoading(false));
-    api.get<QuotaEntry[]>('/admin/usage/quotas').then(setQuotas).catch(() => {});
-    api.get<{ items: LLMModel[] }>('/admin/models').then((r) => setModels(r.items)).catch(() => {});
+    api
+      .get<QuotaEntry[]>('/admin/usage/quotas')
+      .then(setQuotas)
+      .catch(() => {});
+    api
+      .get<{ items: LLMModel[] }>('/admin/models')
+      .then((r) => setModels(r.items))
+      .catch(() => {});
   }, []);
 
   const startEdit = (q: QuotaEntry) => {
     setEditingId(q.user_id);
-    setEditForm({ daily_token_limit: q.daily_token_limit, monthly_token_limit: q.monthly_token_limit });
+    setEditForm({
+      daily_token_limit: q.daily_token_limit,
+      monthly_token_limit: q.monthly_token_limit,
+    });
   };
 
   const saveQuota = async (userId: string) => {
@@ -193,10 +215,7 @@ export default function AdminUsagePage() {
     if (!selectedUser) return;
     setSavingId('new');
     try {
-      const created = await api.put<QuotaEntry>(
-        `/admin/usage/quotas/${selectedUser.id}`,
-        editForm,
-      );
+      const created = await api.put<QuotaEntry>(`/admin/usage/quotas/${selectedUser.id}`, editForm);
       setQuotas((prev) => [...prev, created]);
       setSelectedUser(null);
       setShowAddForm(false);
@@ -304,15 +323,21 @@ export default function AdminUsagePage() {
                     <td className="py-2 pr-4 font-medium text-text">{m.display_name}</td>
                     <td className="py-2 pr-4 text-text-secondary">{m.provider}</td>
                     <td className="py-2 pr-4 font-mono text-xs text-text-muted">{m.model_id}</td>
-                    <td className="py-2 pr-4 text-right font-mono text-xs">${m.input_cost_per_1m.toFixed(2)}/1M</td>
-                    <td className="py-2 pr-4 text-right font-mono text-xs">${m.output_cost_per_1m.toFixed(2)}/1M</td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs">
+                      ${m.input_cost_per_1m.toFixed(2)}/1M
+                    </td>
+                    <td className="py-2 pr-4 text-right font-mono text-xs">
+                      ${m.output_cost_per_1m.toFixed(2)}/1M
+                    </td>
                     <td className="py-2 pr-4 text-right text-xs text-text-muted">
                       {(m.max_context_length / 1000).toFixed(0)}K
                     </td>
                     <td className="py-2 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
-                        m.is_active ? 'bg-success/10 text-success' : 'bg-border text-text-muted'
-                      }`}>
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          m.is_active ? 'bg-success/10 text-success' : 'bg-border text-text-muted'
+                        }`}
+                      >
                         {m.is_active ? '활성' : '비활성'}
                       </span>
                     </td>
@@ -353,7 +378,9 @@ export default function AdminUsagePage() {
                 type="number"
                 min={0}
                 value={editForm.daily_token_limit}
-                onChange={(e) => setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })
+                }
                 className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text w-36 focus:outline-none focus:border-primary"
               />
             </div>
@@ -363,7 +390,9 @@ export default function AdminUsagePage() {
                 type="number"
                 min={0}
                 value={editForm.monthly_token_limit}
-                onChange={(e) => setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })
+                }
                 className="bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text w-36 focus:outline-none focus:border-primary"
               />
             </div>
@@ -415,7 +444,10 @@ export default function AdminUsagePage() {
                             min={0}
                             value={editForm.daily_token_limit}
                             onChange={(e) =>
-                              setEditForm({ ...editForm, daily_token_limit: Number(e.target.value) })
+                              setEditForm({
+                                ...editForm,
+                                daily_token_limit: Number(e.target.value),
+                              })
                             }
                             className="w-28 bg-bg border border-primary/40 rounded px-2 py-1 text-sm text-text text-right focus:outline-none"
                           />
@@ -426,7 +458,10 @@ export default function AdminUsagePage() {
                             min={0}
                             value={editForm.monthly_token_limit}
                             onChange={(e) =>
-                              setEditForm({ ...editForm, monthly_token_limit: Number(e.target.value) })
+                              setEditForm({
+                                ...editForm,
+                                monthly_token_limit: Number(e.target.value),
+                              })
                             }
                             className="w-32 bg-bg border border-primary/40 rounded px-2 py-1 text-sm text-text text-right focus:outline-none"
                           />

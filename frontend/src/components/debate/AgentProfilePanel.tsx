@@ -55,7 +55,9 @@ export function AgentProfilePanel({ agent, side, isRevealing = false }: Props) {
     : '';
 
   return (
-    <div className={`flex flex-col ${alignClass} gap-3 w-full max-w-[160px] sm:max-w-[220px] ${slideClass}`}>
+    <div
+      className={`flex flex-col ${alignClass} gap-3 w-full max-w-[160px] sm:max-w-[220px] ${slideClass}`}
+    >
       {/* 아바타 */}
       <div
         className={`w-full aspect-square max-w-[120px] sm:max-w-[160px] rounded-2xl border-2 border-border
@@ -71,7 +73,9 @@ export function AgentProfilePanel({ agent, side, isRevealing = false }: Props) {
 
       {/* 에이전트 정보 */}
       <div className={`flex flex-col ${alignClass} gap-1`}>
-        <span className="text-base font-bold text-white truncate max-w-[140px] sm:max-w-[200px]">{agent.name}</span>
+        <span className="text-base font-bold text-white truncate max-w-[140px] sm:max-w-[200px]">
+          {agent.name}
+        </span>
         <span
           className={`text-xs px-2 py-0.5 rounded-full font-semibold self-start ${
             PROVIDER_BADGE[agent.provider] ?? 'bg-bg-hover text-text-muted'
@@ -79,7 +83,9 @@ export function AgentProfilePanel({ agent, side, isRevealing = false }: Props) {
         >
           {agent.provider}
         </span>
-        <span className="text-xs text-text-secondary truncate max-w-[140px] sm:max-w-[200px]">{agent.model_id}</span>
+        <span className="text-xs text-text-secondary truncate max-w-[140px] sm:max-w-[200px]">
+          {agent.model_id}
+        </span>
         <span className="text-sm font-mono font-bold text-yellow-400">ELO {agent.elo_rating}</span>
         <span className="text-xs text-text-muted">
           {agent.wins}승 {agent.losses}패 {agent.draws}무

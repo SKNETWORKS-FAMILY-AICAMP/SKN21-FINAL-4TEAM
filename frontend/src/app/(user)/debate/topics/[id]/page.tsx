@@ -40,7 +40,10 @@ export default function TopicDetailPage() {
   const [agentQueueStatus, setAgentQueueStatus] = useState<QueueStatusResponse | null>(null);
 
   useEffect(() => {
-    api.get<DebateTopic>(`/topics/${id}`).then(setTopic).catch(() => {});
+    api
+      .get<DebateTopic>(`/topics/${id}`)
+      .then(setTopic)
+      .catch(() => {});
     api
       .get<{ items: DebateMatch[] }>(`/matches?topic_id=${id}`)
       .then((r) => setMatches(r.items))
@@ -120,15 +123,15 @@ export default function TopicDetailPage() {
       </Link>
 
       <h1 className="text-xl font-bold text-text mb-2">{topic.title}</h1>
-      {topic.description && (
-        <p className="text-sm text-text-secondary mb-4">{topic.description}</p>
-      )}
+      {topic.description && <p className="text-sm text-text-secondary mb-4">{topic.description}</p>}
 
       <div className="flex gap-3 text-xs text-text-muted mb-6">
         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
           {topic.mode}
         </span>
-        <span>최대 {topic.max_turns}라운드 (총 {topic.max_turns * 2}번 발언)</span>
+        <span>
+          최대 {topic.max_turns}라운드 (총 {topic.max_turns * 2}번 발언)
+        </span>
         <span>턴당 {topic.turn_token_limit} 토큰</span>
       </div>
 
@@ -169,9 +172,8 @@ export default function TopicDetailPage() {
               {conflictInfo && (
                 <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm">
                   <p className="text-text mb-2">
-                    이미{' '}
-                    <span className="font-semibold">"{conflictInfo.existingTopicTitle}"</span>에
-                    대기 중입니다. 기존 대기를 취소하고 이 토픽에 참가할까요?
+                    이미 <span className="font-semibold">"{conflictInfo.existingTopicTitle}"</span>
+                    에 대기 중입니다. 기존 대기를 취소하고 이 토픽에 참가할까요?
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button

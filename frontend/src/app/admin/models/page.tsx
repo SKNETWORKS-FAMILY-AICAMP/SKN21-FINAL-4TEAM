@@ -74,13 +74,16 @@ export default function AdminModelsPage() {
     setLoading(true);
     try {
       const [modelsRes, statsRes] = await Promise.all([
-        api.get<{ items: Omit<LLMModel, 'total_requests' | 'total_tokens' | 'total_cost'>[]; total: number }>('/admin/models'),
-        api.get<ModelUsageStats[]>('/admin/models/usage-stats').catch(() => [] as ModelUsageStats[]),
+        api.get<{
+          items: Omit<LLMModel, 'total_requests' | 'total_tokens' | 'total_cost'>[];
+          total: number;
+        }>('/admin/models'),
+        api
+          .get<ModelUsageStats[]>('/admin/models/usage-stats')
+          .catch(() => [] as ModelUsageStats[]),
       ]);
 
-      const statsMap = new Map(
-        statsRes.map((s: ModelUsageStats) => [s.llm_model_id, s]),
-      );
+      const statsMap = new Map(statsRes.map((s: ModelUsageStats) => [s.llm_model_id, s]));
 
       const merged = (modelsRes.items ?? []).map((m) => {
         const stats = statsMap.get(m.id);

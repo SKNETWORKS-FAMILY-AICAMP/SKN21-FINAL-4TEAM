@@ -126,10 +126,7 @@ export function UsageTab() {
         ? (summary.monthly_input_tokens ?? 0) + (summary.monthly_output_tokens ?? 0)
         : (summary.total_input_tokens ?? 0) + (summary.total_output_tokens ?? 0);
 
-  const totalCredits = summary.by_model.reduce(
-    (sum, m) => sum + getModelCredits(m, period),
-    0,
-  );
+  const totalCredits = summary.by_model.reduce((sum, m) => sum + getModelCredits(m, period), 0);
 
   return (
     <>
@@ -181,10 +178,7 @@ export function UsageTab() {
               const credits = getModelCredits(m, period);
 
               return (
-                <tr
-                  key={m.model_name}
-                  className="border-b border-border/50 last:border-0"
-                >
+                <tr key={m.model_name} className="border-b border-border/50 last:border-0">
                   <td className="py-3 px-4">
                     <div className="font-medium text-text">{m.model_name}</div>
                     <div className="text-[11px] text-text-muted">

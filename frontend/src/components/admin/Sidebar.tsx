@@ -47,10 +47,7 @@ export const Sidebar = memo(function Sidebar() {
     <>
       {/* 모바일 백드롭 */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[79] md:hidden"
-          onClick={closeSidebar}
-        />
+        <div className="fixed inset-0 bg-black/50 z-[79] md:hidden" onClick={closeSidebar} />
       )}
 
       <aside

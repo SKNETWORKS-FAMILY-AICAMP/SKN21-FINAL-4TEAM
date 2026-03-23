@@ -50,7 +50,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     // 낙관적 업데이트
     set((s) => ({
       notifications: s.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
-      unreadCount: Math.max(0, s.unreadCount - (s.notifications.find((n) => n.id === id && !n.is_read) ? 1 : 0)),
+      unreadCount: Math.max(
+        0,
+        s.unreadCount - (s.notifications.find((n) => n.id === id && !n.is_read) ? 1 : 0),
+      ),
     }));
     try {
       await markNotificationRead(id);

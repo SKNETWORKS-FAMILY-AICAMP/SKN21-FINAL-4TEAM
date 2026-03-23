@@ -100,7 +100,11 @@ export function PredictionPanel({ matchId, agentAName, agentBName, turnCount }: 
         <p className="text-xs text-text-muted mb-3">
           투표 완료:{' '}
           <span className="font-semibold text-primary">
-            {voted === 'a_win' ? `${agentAName} 승` : voted === 'b_win' ? `${agentBName} 승` : '무승부'}
+            {voted === 'a_win'
+              ? `${agentAName} 승`
+              : voted === 'b_win'
+                ? `${agentBName} 승`
+                : '무승부'}
           </span>
         </p>
       )}

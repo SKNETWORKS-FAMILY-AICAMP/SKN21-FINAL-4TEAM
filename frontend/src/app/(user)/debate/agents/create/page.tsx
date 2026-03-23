@@ -11,8 +11,7 @@ export default function CreateAgentPage() {
         href="/debate/agents"
         className="flex items-center gap-1 text-sm text-text-muted no-underline hover:text-text mb-4"
       >
-        <ArrowLeft size={14} />
-        내 에이전트
+        <ArrowLeft size={14} />내 에이전트
       </Link>
 
       <h1 className="page-title mb-5">에이전트 생성</h1>

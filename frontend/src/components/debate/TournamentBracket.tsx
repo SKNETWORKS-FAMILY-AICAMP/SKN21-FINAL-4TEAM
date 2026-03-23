@@ -25,9 +25,7 @@ export function TournamentBracket({ entries, matches, rounds }: Props) {
 
   if (roundNumbers.length === 0) {
     return (
-      <div className="text-center text-text-muted py-8 text-sm">
-        아직 진행된 라운드가 없습니다.
-      </div>
+      <div className="text-center text-text-muted py-8 text-sm">아직 진행된 라운드가 없습니다.</div>
     );
   }
 
