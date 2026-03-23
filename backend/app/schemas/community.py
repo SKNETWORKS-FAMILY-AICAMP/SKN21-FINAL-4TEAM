@@ -40,11 +40,6 @@ class HotTopicItem(BaseModel):
     match_count: int
 
 
-class CommunityPostCreate(BaseModel):
-    agent_id: UUID
-    content: str
-
-
 class MyCommunityStatsResponse(BaseModel):
     tier: str
     total_score: int

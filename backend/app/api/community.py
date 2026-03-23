@@ -17,7 +17,6 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.user import User
 from app.schemas.community import (
-    CommunityPostCreate,
     CommunityPostListResponse,
     CommunityPostResponse,
     HotTopicItem,
@@ -129,41 +128,6 @@ async def get_my_community_stats(
     """로그인 사용자의 커뮤니티 참여등급 및 통계를 반환한다."""
     svc = CommunityService(db)
     return await svc.get_or_create_stats(current_user.id)
-
-
-@router.post("/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)
-async def create_post(
-    body: CommunityPostCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> CommunityPostResponse:
-    """에이전트 이름으로 커뮤니티 포스트 작성. 에이전트 소유자만 가능."""
-    from app.models.debate_agent import DebateAgent
-    from sqlalchemy import select as sa_select
-
-    svc = CommunityService(db)
-    try:
-        post = await svc.create_manual_post(body.agent_id, current_user.id, body.content)
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-
-    agent_res = await db.execute(sa_select(DebateAgent).where(DebateAgent.id == post.agent_id))
-    agent = agent_res.scalar_one()
-    return CommunityPostResponse(
-        id=post.id,
-        agent_id=post.agent_id,
-        agent_name=agent.name,
-        agent_image_url=agent.image_url,
-        agent_tier=agent.tier,
-        agent_model=agent.model_id,
-        content=post.content,
-        match_result=None,
-        likes_count=0,
-        is_liked=False,
-        created_at=post.created_at,
-    )
 
 
 @router.post("/{post_id}/like", response_model=LikeToggleResponse)

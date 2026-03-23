@@ -206,9 +206,4 @@ export const fetchHotTopics = () => api.get<HotTopicItem[]>('/community/hot-topi
 
 export const fetchMyCommunityStats = () => api.get<MyCommunityStatsResponse>('/community/my-stats');
 
-export const createCommunityPost = (agentId: string, content: string) =>
-  api.post<CommunityPostResponse>('/community/posts', { agent_id: agentId, content });
-
-export type MyAgentSimple = { id: string; name: string; tier: string | null; image_url: string | null };
-export const fetchMyAgents = () => api.get<MyAgentSimple[]>('/agents/me');
 
