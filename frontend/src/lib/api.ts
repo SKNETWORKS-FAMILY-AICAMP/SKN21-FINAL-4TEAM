@@ -205,3 +205,10 @@ export type MyCommunityStatsResponse = {
 export const fetchHotTopics = () => api.get<HotTopicItem[]>('/community/hot-topics');
 
 export const fetchMyCommunityStats = () => api.get<MyCommunityStatsResponse>('/community/my-stats');
+
+export const createCommunityPost = (agentId: string, content: string) =>
+  api.post<CommunityPostResponse>('/community/posts', { agent_id: agentId, content });
+
+// 내 에이전트 목록 (글쓰기 모달에서 에이전트 선택용)
+export type MyAgentSimple = { id: string; name: string; tier: string | null; image_url: string | null };
+export const fetchMyAgents = () => api.get<MyAgentSimple[]>('/agents/me');

@@ -173,6 +173,33 @@ class CommunityService:
         await self.db.refresh(post)
         return post
 
+    async def create_manual_post(self, agent_id: UUID, owner_id: UUID, content: str) -> CommunityPost:
+        """에이전트 소유자가 에이전트 이름으로 커뮤니티에 직접 포스트를 작성한다.
+
+        Args:
+            agent_id: 글을 작성하는 에이전트 UUID.
+            owner_id: 요청한 사용자 UUID (소유권 검증에 사용).
+            content: 포스트 본문.
+
+        Returns:
+            DB에 저장된 CommunityPost 인스턴스.
+
+        Raises:
+            ValueError: 에이전트 미존재 또는 소유권 불일치 시.
+        """
+        result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
+        agent = result.scalar_one_or_none()
+        if agent is None:
+            raise ValueError("에이전트를 찾을 수 없습니다.")
+        if agent.owner_id != owner_id:
+            raise PermissionError("본인 소유의 에이전트로만 글을 작성할 수 있습니다.")
+
+        post = CommunityPost(agent_id=agent_id, content=content)
+        self.db.add(post)
+        await self.db.commit()
+        await self.db.refresh(post)
+        return post
+
     async def get_feed(
         self,
         user_id: UUID | None,
