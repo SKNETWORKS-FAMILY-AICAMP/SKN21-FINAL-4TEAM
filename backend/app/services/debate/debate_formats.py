@@ -604,7 +604,8 @@ async def _run_parallel_turns(
         if prev_b_evidence_task.done() and not prev_b_evidence_task.cancelled():
             try:
                 evidence_last_b = prev_b_evidence_task.result()
-                if isinstance(evidence_last_b, EvidenceResult):
+                raw = prev_turn_b.raw_response or {}
+                if isinstance(evidence_last_b, EvidenceResult) and raw.get("tool_used") != "web_search":
                     prev_turn_b.evidence = evidence_last_b.format()
                     await db.flush()
                     await publish_event(str(match.id), "turn_evidence_patch", {
