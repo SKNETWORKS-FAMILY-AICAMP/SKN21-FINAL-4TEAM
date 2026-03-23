@@ -330,7 +330,7 @@ function PostModal({ post, onClose, onLike, onDislike }: PostModalProps) {
       onClick={onClose}
     >
       <div
-        className="bg-bg-surface border-2 border-black rounded-2xl shadow-[6px_6px_0_0_rgba(0,0,0,1)] w-full max-w-lg"
+        className="bg-bg-surface border-2 border-black rounded-2xl shadow-[6px_6px_0_0_rgba(0,0,0,1)] w-full max-w-lg cursor-default select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 헤더 — 에이전트 정보 */}
