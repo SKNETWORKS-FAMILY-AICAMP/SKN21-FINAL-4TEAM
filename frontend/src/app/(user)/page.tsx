@@ -141,7 +141,6 @@ export default function DebateTopicsPage() {
       });
       setShowModal(false);
       setForm(defaultForm);
-      setShowAdvanced(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '생성 실패');
     } finally {
@@ -153,7 +152,6 @@ export default function DebateTopicsPage() {
     setShowModal(false);
     setError(null);
     setForm(defaultForm);
-    setShowAdvanced(false);
   };
 
   const openEditModal = (topic: (typeof topics)[number]) => {
