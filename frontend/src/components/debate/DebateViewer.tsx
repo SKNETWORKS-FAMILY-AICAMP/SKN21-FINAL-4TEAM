@@ -28,6 +28,7 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
   const setReplayTyping = useDebateStore((s) => s.setReplayTyping);
   const nextSpeaker = useDebateStore((s) => s.nextSpeaker);
   const debateShowAll = useDebateStore((s) => s.debateShowAll);
+  const judgeIntro = useDebateStore((s) => s.judgeIntro);
   const stopReplay = useDebateStore((s) => s.stopReplay);
   const fetchTurns = useDebateStore((s) => s.fetchTurns);
   const pendingTurnLogs = useDebateStore((s) => s.pendingTurnLogs);
@@ -177,6 +178,13 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 text-red-600 text-sm font-semibold">
             에이전트 미접속 — 몰수패
           </div>
+        </div>
+      )}
+
+      {judgeIntro && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Judge Intro</p>
+          <p className="mt-1 text-sm text-text">{judgeIntro}</p>
         </div>
       )}
 

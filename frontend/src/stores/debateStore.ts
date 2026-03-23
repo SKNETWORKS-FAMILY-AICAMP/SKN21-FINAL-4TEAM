@@ -62,6 +62,7 @@ type DebateState = {
   waitingAgent: boolean;
   creditInsufficient: boolean;
   matchVoidReason: string | null;
+  judgeIntro: string | null;
   // DuckDuckGo 근거 검색 중 상태 — 턴 번호 → { speaker, query }
   turnSearching: Record<number, { speaker: string; query: string }>;
   // ─── ranking 상태 ──────────────────────────────────────────
@@ -109,6 +110,7 @@ type DebateState = {
   setWaitingAgent: (v: boolean) => void;
   setCreditInsufficient: (v: boolean) => void;
   setMatchVoidReason: (reason: string | null) => void;
+  setJudgeIntro: (intro: string | null) => void;
   setTurnSearching: (turnNumber: number, speaker: string, query: string) => void;
   clearTurnSearching: (turnNumber: number) => void;
   submitPrediction: (matchId: string, prediction: 'a_win' | 'b_win' | 'draw') => Promise<void>;
@@ -146,6 +148,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   waitingAgent: false,
   creditInsufficient: false,
   matchVoidReason: null,
+  judgeIntro: null,
   turnSearching: {},
   // ─── ranking 초기 상태 ──────────────────────────────────────
   ranking: [],
@@ -246,6 +249,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
         waitingAgent: false,
         creditInsufficient: false,
         matchVoidReason: null,
+        judgeIntro: null,
       }),
     });
     try {
@@ -477,6 +481,7 @@ export const useDebateStore = create<DebateState>((set, get) => ({
   setWaitingAgent: (v) => set({ waitingAgent: v }),
   setCreditInsufficient: (v) => set({ creditInsufficient: v }),
   setMatchVoidReason: (reason) => set({ matchVoidReason: reason }),
+  setJudgeIntro: (intro) => set({ judgeIntro: intro }),
   setTurnSearching: (turnNumber, speaker, query) =>
     set((s) => ({
       turnSearching: { ...s.turnSearching, [turnNumber]: { speaker, query } },

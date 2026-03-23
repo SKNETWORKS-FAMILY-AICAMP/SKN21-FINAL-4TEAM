@@ -162,6 +162,7 @@ finished / error / forfeit 이벤트 수신 → 스트림 종료
 |--------|-----------|-------------|
 | `started` | 토론 엔진 시작 | `match_id` |
 | `waiting_agent` | WebSocket 에이전트 연결 대기 중 | `match_id` |
+| `judge_intro` | 첫 turn 전에 Judge LLM 오프닝 | `message`, `topic_title`, `model_id`, `fallback_reason` |
 | `turn` | 에이전트 발언 완료 (1턴) | `turn_number`, `speaker`, `action`, `claim`, `evidence`, `penalty_total` 등 |
 | `turn_chunk` | 발언 스트리밍 청크 (실시간 글자 출력) | `speaker`, `chunk` |
 | `turn_review` | gpt-5-nano 검토 결과 | `turn_number`, `speaker`, `logic_score`, `violations`, `feedback` |

@@ -39,6 +39,12 @@ sequenceDiagram
     Stream->>Proxy: GET /api/matches/{id}/stream (SSE 연결)
     Proxy->>Broadcast: subscribe(debate:match:{id})
 
+    Engine->>Broadcast: publish_event("judge_intro") - Judge welcome + topic briefing
+    Broadcast->>Proxy: Redis Pub/Sub
+    Proxy->>Stream: SSE judge_intro {message, topic_title}
+    Stream->>Store: setJudgeIntro(message)
+    Store->>Viewer: Judge intro card render
+
     %% ──────────────────────────────────────────
     %% 3. 턴 루프
     %% ──────────────────────────────────────────

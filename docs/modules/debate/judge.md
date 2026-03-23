@@ -1,5 +1,9 @@
 # DebateJudge
 
+> 2026-03-23 업데이트: `generate_intro(...)` 추가.
+> 토론 시작 전에 Judge LLM은 `judge_intro`에서 SSE event (환영 인사 + 주제 브리핑)를 진행한다.
+> 마지막 judge LLM 판정은 수정하지 않았음.
+
 > LLM 2-stage 방식 토론 최종 판정기
 
 **파일 경로:** `backend/app/services/debate/judge.py`
