@@ -121,6 +121,10 @@ class OpenAIProvider(BaseProvider):
             body["temperature"] = kwargs.get("temperature", 0.7)
         if "response_format" in kwargs:
             body["response_format"] = kwargs["response_format"]
+        if "tools" in kwargs:
+            body["tools"] = kwargs["tools"]
+        if "tool_choice" in kwargs:
+            body["tool_choice"] = kwargs["tool_choice"]
         response = await self._get_http().post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -135,8 +139,17 @@ class OpenAIProvider(BaseProvider):
             )
         data = response.json()
         choice = data["choices"][0]
+        message = choice["message"]
+        if message.get("tool_calls"):
+            return {
+                "content": message.get("content") or "",
+                "tool_calls": message["tool_calls"],
+                "input_tokens": data["usage"]["prompt_tokens"],
+                "output_tokens": data["usage"]["completion_tokens"],
+                "finish_reason": choice.get("finish_reason", "tool_calls"),
+            }
         return {
-            "content": choice["message"]["content"],
+            "content": message.get("content") or "",
             "input_tokens": data["usage"]["prompt_tokens"],
             "output_tokens": data["usage"]["completion_tokens"],
             "finish_reason": choice["finish_reason"],

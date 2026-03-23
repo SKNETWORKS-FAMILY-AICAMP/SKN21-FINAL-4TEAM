@@ -79,6 +79,8 @@ class GoogleProvider(BaseProvider):
         }
         if system_prompt:
             body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        if "tools" in kwargs:
+            body["tools"] = kwargs["tools"]
         response = await self._get_http().post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent",
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
@@ -93,14 +95,30 @@ class GoogleProvider(BaseProvider):
             )
         data = response.json()
         candidate = data["candidates"][0]
-        content_text = "".join(part["text"] for part in candidate["content"]["parts"] if "text" in part)
+        parts = candidate["content"]["parts"]
+        func_calls = [p for p in parts if "functionCall" in p]
+        text_parts = [p["text"] for p in parts if "text" in p]
+        content_text = "".join(text_parts)
         usage_meta = data.get("usageMetadata", {})
-        return {
+        result = {
             "content": content_text,
             "input_tokens": usage_meta.get("promptTokenCount", 0),
             "output_tokens": usage_meta.get("candidatesTokenCount", 0),
             "finish_reason": candidate.get("finishReason", "STOP"),
         }
+        if func_calls:
+            result["tool_calls"] = [
+                {
+                    "id": f"call_{i}",
+                    "type": "function",
+                    "function": {
+                        "name": fc["functionCall"]["name"],
+                        "arguments": json.dumps(fc["functionCall"]["args"]),
+                    },
+                }
+                for i, fc in enumerate(func_calls)
+            ]
+        return result
 
     async def _stream_impl(
         self,
@@ -138,6 +156,8 @@ class GoogleProvider(BaseProvider):
         }
         if system_prompt:
             body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        if "tools" in kwargs:
+            body["tools"] = kwargs["tools"]
         async with self._get_http().stream(
             "POST",
             f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:streamGenerateContent",
@@ -160,23 +180,36 @@ class GoogleProvider(BaseProvider):
     @staticmethod
     def _to_gemini_format(messages: list[dict]) -> tuple[str, list[dict]]:
         """OpenAI 형식 messages를 Gemini contents 형식으로 변환한다.
-
-        Gemini API는 role이 'user'와 'model'만 허용하며,
-        system 메시지는 systemInstruction으로 별도 전달해야 한다.
-        OpenAI의 'assistant' role은 Gemini의 'model'로 변환한다.
-
-        Args:
-            messages: OpenAI 형식 메시지 목록 (system/user/assistant role 포함 가능).
-
-        Returns:
-            (system_prompt, contents) 튜플.
-            system_prompt는 system 메시지를 합친 문자열, contents는 Gemini contents 형식 목록.
-        """
+        tool_calls/tool role 메시지를 Gemini 네이티브 형식으로 변환한다."""
         system_parts = []
         contents = []
         for msg in messages:
             if msg["role"] == "system":
                 system_parts.append(msg["content"])
+            elif msg["role"] == "assistant" and msg.get("tool_calls"):
+                # OpenAI assistant+tool_calls → Gemini model+functionCall parts
+                parts = []
+                if msg.get("content"):
+                    parts.append({"text": msg["content"]})
+                for tc in msg["tool_calls"]:
+                    parts.append({
+                        "functionCall": {
+                            "name": tc["function"]["name"],
+                            "args": json.loads(tc["function"]["arguments"]),
+                        }
+                    })
+                contents.append({"role": "model", "parts": parts})
+            elif msg["role"] == "tool":
+                # OpenAI tool role → Gemini user+functionResponse part
+                contents.append({
+                    "role": "user",
+                    "parts": [{
+                        "functionResponse": {
+                            "name": "web_search",
+                            "response": {"content": msg["content"]},
+                        }
+                    }],
+                })
             elif msg["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
             else:

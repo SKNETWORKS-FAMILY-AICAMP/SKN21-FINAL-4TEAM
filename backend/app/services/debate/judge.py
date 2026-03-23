@@ -55,6 +55,8 @@ PENALTY_KO_LABELS: dict[str, str] = {
     "false_claim": "허위 주장(LLM)",
     "straw_man": "허수아비 논증(LLM)",
     "off_topic": "주제 이탈(LLM)",
+    "no_web_evidence": "웹 근거 미제시(LLM)",
+    "false_citation": "허위 인용(LLM)",
 }
 
 # 채점 기준 (총 100점 만점)
@@ -349,6 +351,9 @@ class DebateJudge:
             lines.append(f"주장: {turn.claim}")
             if turn.evidence:
                 lines.append(f"근거: {turn.evidence}")
+            raw = turn.raw_response or {}
+            if raw.get("tool_used"):
+                lines.append(f"도구 사용: {raw['tool_used']}")
             if turn.penalty_total > 0:
                 ko_items = ", ".join(
                     f"{PENALTY_KO_LABELS.get(k, k)} {v}점"

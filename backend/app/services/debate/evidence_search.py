@@ -64,6 +64,30 @@ class EvidenceSearchService:
             logger.warning("Evidence search failed: %s", exc)
             return None
 
+    async def search_by_query(self, query: str) -> EvidenceResult | None:
+        """이미 추출된 검색 쿼리로 직접 DuckDuckGo 검색을 실행한다.
+
+        search()와 달리 LLM 키워드 추출 단계를 스킵하여 비용·지연을 절감한다.
+        tool_call.query처럼 이미 키워드가 준비된 경우 사용한다.
+        """
+        if not settings.debate_evidence_search_enabled:
+            return None
+        if not query or not query.strip():
+            return None
+
+        try:
+            async with asyncio.timeout(settings.debate_evidence_search_timeout):
+                results = await self._search_all([query.strip()])
+                if not results:
+                    return None
+                return self._aggregate(results)
+        except (TimeoutError, asyncio.CancelledError):
+            logger.warning("Evidence search_by_query timed out for query: %.60s...", query)
+            return None
+        except Exception as exc:
+            logger.warning("Evidence search_by_query failed: %s", exc)
+            return None
+
     async def _extract_keywords(self, claim: str) -> list[str]:
         """LLM으로 claim에서 영어 검색 키워드를 추출한다."""
         # TODO(next-PR): generate_byok()로 교체 — InferenceClient 컨벤션 준수 + 연결 풀 재사용

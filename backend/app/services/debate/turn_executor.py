@@ -14,6 +14,8 @@ from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
 from app.schemas.debate_ws import WSTurnRequest
 from app.services.debate.broadcast import publish_event
+from app.services.debate.evidence_search import EvidenceSearchService
+from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.helpers import (
     _build_messages,
     validate_response_schema,
@@ -21,10 +23,38 @@ from app.services.debate.helpers import (
 from app.services.debate.tool_executor import AVAILABLE_TOOLS, DebateToolExecutor, ToolContext
 from app.services.debate.ws_manager import WSConnectionManager
 from app.services.llm.inference_client import InferenceClient
-from app.services.debate.exceptions import MatchVoidError
 from app.services.llm.providers.base import APIKeyError
 
 logger = logging.getLogger(__name__)
+
+_evidence_service = EvidenceSearchService()
+
+
+def _build_web_search_tool(provider: str) -> list[dict]:
+    """provider별 web_search tool schema 반환. RunPod/local은 빈 리스트."""
+    if not settings.debate_tool_use_enabled:
+        return []
+    description = "현재 주장을 뒷받침하는 웹 근거 검색. 결과를 claim에 직접 인용하세요."
+    query_param = {
+        "type": "object",
+        "properties": {"query": {"type": "string", "description": "검색 쿼리 (영어 권장)"}},
+        "required": ["query"],
+    }
+    match provider:
+        case "openai":
+            return [{"type": "function", "function": {
+                "name": "web_search", "description": description,
+                "parameters": query_param,
+            }}]
+        case "anthropic":
+            return [{"name": "web_search", "description": description, "input_schema": query_param}]
+        case "google":
+            return [{"function_declarations": [{
+                "name": "web_search", "description": description,
+                "parameters": query_param,
+            }]}]
+        case _:
+            return []
 
 
 class TurnExecutor:
@@ -159,6 +189,59 @@ class TurnExecutor:
                 usage_out: dict = {}
                 full_text = ""
 
+                # tool-use 지원 여부 판단
+                web_search_tools = _build_web_search_tool(agent.provider)
+                tool_used_flag = False
+                tool_result_content = None
+
+                if web_search_tools:
+                    # 1단계: 비스트리밍 호출 (tool_call 여부 확인)
+                    stage1_timeout = min(settings.debate_turn_timeout_seconds * 0.3, 15.0)
+                    try:
+                        tool_choice_val = {"type": "auto"} if agent.provider == "anthropic" else "auto"
+                        stage1 = await asyncio.wait_for(
+                            self.client.generate_byok(
+                                provider=agent.provider, model_id=agent.model_id,
+                                api_key=api_key, messages=messages,
+                                tools=web_search_tools, tool_choice=tool_choice_val,
+                                max_tokens=topic.turn_token_limit, temperature=0.7,
+                            ),
+                            timeout=stage1_timeout,
+                        )
+                    except Exception as exc:
+                        logger.warning("Tool-use stage1 failed (%s), falling back to stream-only: %s", speaker, exc)
+                        stage1 = {}
+
+                    tool_calls = stage1.get("tool_calls", [])
+                    if tool_calls:
+                        query = json.loads(tool_calls[0]["function"]["arguments"]).get("query", "")
+                        await publish_event(str(match.id), "turn_tool_call", {
+                            **(event_meta or {}),
+                            "turn_number": turn_number, "speaker": speaker,
+                            "tool_name": "web_search",
+                            "query": query,
+                        })
+                        search_result = await _evidence_service.search_by_query(query) if query else None
+                        tool_result_content = search_result.format() if search_result else "검색 결과 없음"
+                        tool_used_flag = True
+                        messages.append({
+                            "role": "assistant",
+                            "content": stage1.get("content") or "",
+                            "tool_calls": tool_calls,
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_calls[0]["id"],
+                            "content": tool_result_content,
+                        })
+                        input_tokens += stage1.get("input_tokens", 0)
+                        output_tokens += stage1.get("output_tokens", 0)
+
+                # 2단계: 스트리밍 발언 생성
+                stream_kwargs: dict = {}
+                if web_search_tools and tool_used_flag:
+                    stream_kwargs["tools"] = web_search_tools
+
                 async with asyncio.timeout(settings.debate_turn_timeout_seconds):
                     async for chunk in self.client.generate_stream_byok(
                         provider=agent.provider,
@@ -168,6 +251,7 @@ class TurnExecutor:
                         usage_out=usage_out,
                         max_tokens=topic.turn_token_limit,
                         temperature=0.7,
+                        **stream_kwargs,
                     ):
                         full_text += chunk
                         # event_meta가 turn_number/speaker/chunk를 덮어쓰지 못하도록 역순 병합
@@ -187,8 +271,9 @@ class TurnExecutor:
 
                 response_text = full_text
                 parsed = validate_response_schema(response_text)
-                input_tokens = usage_out.get("input_tokens", 0)
-                output_tokens = usage_out.get("output_tokens", 0)
+                # 2단계 토큰 합산
+                input_tokens += usage_out.get("input_tokens", 0)
+                output_tokens += usage_out.get("output_tokens", 0)
 
                 if parsed is None:
                     # JSON 파싱 불가 또는 스키마 불일치 — 원문을 발언으로 사용
@@ -202,8 +287,8 @@ class TurnExecutor:
                         "action": parsed["action"],
                         "claim": parsed["claim"],
                         "evidence": parsed.get("evidence"),
-                        "tool_used": parsed.get("tool_used"),
-                        "tool_result": parsed.get("tool_result"),
+                        "tool_used": "web_search" if tool_used_flag else parsed.get("tool_used"),
+                        "tool_result": tool_result_content if tool_used_flag else parsed.get("tool_result"),
                     }
                 # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 메타 정보만 추가
                 if usage_out.get("finish_reason") == "length":

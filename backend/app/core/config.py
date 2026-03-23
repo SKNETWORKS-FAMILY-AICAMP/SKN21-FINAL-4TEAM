@@ -147,6 +147,9 @@ class Settings(BaseSettings):
     # 요약 리포트
     debate_summary_enabled: bool = True             # 매치 종료 후 요약 리포트 자동 생성
 
+    # Tool-Use (LLM Function Calling)
+    debate_tool_use_enabled: bool = True      # API 에이전트 tool-use(web_search) 전체 ON/OFF
+
     # 근거 검색 (DuckDuckGo)
     debate_evidence_search_enabled: bool = True     # 턴 발언 후 웹 근거 자동 검색
     debate_evidence_search_timeout: int = 15        # 근거 검색 전체 타임아웃 (초)

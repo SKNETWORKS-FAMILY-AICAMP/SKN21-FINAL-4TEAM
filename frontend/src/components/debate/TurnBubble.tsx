@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useState } from 'react';
-import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight, Ban } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronRight, Ban, Loader2 } from 'lucide-react';
 import type { TurnLog, TurnReview } from '@/stores/debateStore';
 
 type Props = {
@@ -12,6 +12,7 @@ type Props = {
   agentBImageUrl?: string | null;
   review?: Pick<TurnReview, 'logic_score' | 'violations' | 'feedback' | 'blocked' | 'skipped'> | null;
   displayClaim?: string; // 리플레이 스트리밍 시 부분 텍스트 오버라이드
+  searching?: { speaker: string; query: string } | null;
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -78,7 +79,7 @@ function LogicScoreBar({ score }: { score: number | null }) {
 }
 
 // SSE 스트리밍 중 매 청크마다 완료된 턴이 불필요하게 재렌더링되는 것을 방지
-export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review, displayClaim }: Props) {
+export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBName, agentAImageUrl, agentBImageUrl, review, displayClaim, searching }: Props) {
   const isAgentA = turn.speaker === 'agent_a';
   const name = isAgentA ? agentAName : agentBName;
   const imageUrl = isAgentA ? agentAImageUrl : agentBImageUrl;
@@ -129,6 +130,14 @@ export const TurnBubble = memo(function TurnBubble({ turn, agentAName, agentBNam
             <span className="inline-block w-0.5 h-3.5 bg-primary animate-pulse ml-0.5 align-middle" />
           )}
         </p>
+
+        {/* 근거 검색 중 스피너 */}
+        {searching && (
+          <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-text-muted">
+            <Loader2 size={11} className="animate-spin text-primary" />
+            <span>근거 검색 중: &ldquo;{searching.query}&rdquo;</span>
+          </div>
+        )}
 
         {/* 근거 */}
         {turn.evidence && (() => {

@@ -78,6 +78,11 @@ class AnthropicProvider(BaseProvider):
         }
         if system_prompt:
             body["system"] = system_prompt
+        if "tools" in kwargs:
+            body["tools"] = kwargs["tools"]
+        if "tool_choice" in kwargs:
+            tc = kwargs["tool_choice"]
+            body["tool_choice"] = {"type": tc} if isinstance(tc, str) else tc
         response = await self._get_http().post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -95,13 +100,26 @@ class AnthropicProvider(BaseProvider):
                 request=response.request, response=response,
             )
         data = response.json()
-        content_text = "".join(block["text"] for block in data["content"] if block["type"] == "text")
-        return {
+        content_blocks = data.get("content", [])
+        text_blocks = [b["text"] for b in content_blocks if b.get("type") == "text"]
+        content_text = "".join(text_blocks)
+        tool_use_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
+        result = {
             "content": content_text,
             "input_tokens": data["usage"]["input_tokens"],
             "output_tokens": data["usage"]["output_tokens"],
             "finish_reason": data.get("stop_reason", "end_turn"),
         }
+        if tool_use_blocks:
+            result["tool_calls"] = [
+                {
+                    "id": b["id"],
+                    "type": "function",
+                    "function": {"name": b["name"], "arguments": json.dumps(b["input"])},
+                }
+                for b in tool_use_blocks
+            ]
+        return result
 
     async def _stream_impl(
         self,
@@ -139,6 +157,8 @@ class AnthropicProvider(BaseProvider):
         }
         if system_prompt:
             body["system"] = system_prompt
+        if "tools" in kwargs:
+            body["tools"] = kwargs["tools"]
         async with self._get_http().stream(
             "POST",
             "https://api.anthropic.com/v1/messages",
@@ -163,23 +183,36 @@ class AnthropicProvider(BaseProvider):
 
     @staticmethod
     def _split_system_messages(messages: list[dict]) -> tuple[str, list[dict]]:
-        """OpenAI 형식 messages에서 system 메시지를 분리한다.
-
-        Anthropic API는 system을 별도 파라미터로 전달해야 하므로
-        system 역할 메시지를 하나의 문자열로 합치고 나머지 메시지를 반환한다.
-
-        Args:
-            messages: OpenAI 형식 메시지 목록 (system 메시지 포함 가능).
-
-        Returns:
-            (system_prompt, api_messages) 튜플.
-            system_prompt는 system 메시지를 합친 문자열, api_messages는 나머지 메시지 목록.
-        """
+        """OpenAI 형식 messages에서 system 메시지를 분리하고,
+        tool_calls/tool role 메시지를 Anthropic 네이티브 형식으로 변환한다."""
         system_parts = []
         api_messages = []
         for msg in messages:
             if msg["role"] == "system":
                 system_parts.append(msg["content"])
+            elif msg["role"] == "assistant" and msg.get("tool_calls"):
+                # OpenAI assistant+tool_calls → Anthropic assistant+tool_use content blocks
+                content_blocks = []
+                if msg.get("content"):
+                    content_blocks.append({"type": "text", "text": msg["content"]})
+                for tc in msg["tool_calls"]:
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": tc["function"]["name"],
+                        "input": json.loads(tc["function"]["arguments"]),
+                    })
+                api_messages.append({"role": "assistant", "content": content_blocks})
+            elif msg["role"] == "tool":
+                # OpenAI tool role → Anthropic user+tool_result content block
+                api_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg["tool_call_id"],
+                        "content": msg["content"],
+                    }],
+                })
             else:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         return "\n\n".join(system_parts), api_messages

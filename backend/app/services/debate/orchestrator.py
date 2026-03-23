@@ -44,6 +44,9 @@ PENALTY_KO_LABELS: dict[str, str] = {
     "straw_man": "허수아비 논증(LLM)",
     "off_topic": "주제 이탈(LLM)",
     "repetition": "주장 반복(LLM)",   # 의미적 반복 탐지 — LLM 검토로 위임
+    # tool-use 관련 위반 (web_search 도구 제공 에이전트 전용)
+    "no_web_evidence": "웹 근거 미제시(LLM)",
+    "false_citation": "허위 인용(LLM)",
 }
 
 # 위반 유형 → 벌점 매핑 (LLM review_turn 탐지 기반)
@@ -56,14 +59,22 @@ LLM_VIOLATION_PENALTIES: dict[str, int] = {
     "straw_man": 6,          # 상대 주장 왜곡·과장 — 탐지 가능
     "off_topic": 5,          # 주제 이탈 — 탐지 가장 쉬움
     "repetition": 3,         # 이전 발언과 의미적으로 동일한 주장 반복
+    "no_web_evidence": 3,    # web_search 도구를 사용할 수 있었으나 근거 없이 주장만 나열
+    "false_citation": 8,     # web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우
 }
 
 # 단일 위반으로 차단이 발생하지 않도록 복합 누적 임계값 설정
 # prompt_injection은 이 임계값과 무관하게 항상 차단
 BLOCK_PENALTY_THRESHOLD = 15
 
+_ViolationType = Literal[
+    "prompt_injection", "ad_hominem", "straw_man", "off_topic",
+    "false_claim", "repetition", "no_web_evidence", "false_citation",
+]
+
+
 class ViolationItem(BaseModel):
-    type: Literal["prompt_injection", "ad_hominem", "straw_man", "off_topic", "false_claim", "repetition"]
+    type: _ViolationType
     severity: Literal["minor", "severe"]
     detail: str
 
@@ -230,6 +241,7 @@ class DebateOrchestrator:
         recent_history: list[str] | None = None,  # 최근 2턴 요약 (순환논증·패턴 탐지용)
         trace_id: str | None = None,
         orchestration_mode: str | None = None,
+        tools_available: bool = False,
     ) -> dict:
         """LLM으로 단일 턴 품질 검토. 위반 감지 + 벌점 산출 + 차단 여부 반환.
 
@@ -243,6 +255,17 @@ class DebateOrchestrator:
         else:
             # 비활성 롤백 경로: DEBATE_ORCHESTRATOR_OPTIMIZED=false 로 다운그레이드 시 활성화
             model_id = settings.debate_turn_review_model or settings.debate_orchestrator_model
+        system_prompt = REVIEW_SYSTEM_PROMPT
+        if tools_available:
+            system_prompt += (
+                "\n\n추가 위반 유형 (web_search 도구가 제공된 에이전트만 해당):\n"
+                "   - no_web_evidence: web_search 도구를 사용할 수 있었으나 근거 없이 주장만 나열한 경우\n"
+                "     minor: 주제 특성상 검색이 불필요한 일반론/가치판단\n"
+                "     severe: 구체적 사실/통계/사례 주장인데 근거 제시 없음\n"
+                "   - false_citation: web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우\n"
+                "     minor: 검색 결과를 약간 과장/단순화한 경우\n"
+                "     severe: 검색 결과에 없는 내용을 있다고 인용하거나 출처를 날조한 경우\n"
+            )
         user_content = (
             f"토론 주제: {topic}\n"
             f"발언자: {speaker} | 턴: {turn_number} | 액션: {action}\n"
@@ -257,7 +280,7 @@ class DebateOrchestrator:
             user_content += f"이전 발언 요약 (순환논증·패턴 탐지용):\n{history_text}\n"
 
         messages = [
-            {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ]
 

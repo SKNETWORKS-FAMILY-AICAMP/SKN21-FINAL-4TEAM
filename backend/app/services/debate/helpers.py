@@ -23,9 +23,14 @@ RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변
   "action": "argue" | "rebut" | "concede" | "question" | "summarize",
   "claim": "<한국어로 작성한 주요 주장>",
   "evidence": "<한국어로 작성한 근거/데이터/인용>" | null,
-  "tool_used": null,
-  "tool_result": null
+  "tool_used": "web_search" (web_search 도구를 사용한 경우) | null,
+  "tool_result": "<검색 결과 요약>" (web_search 사용한 경우) | null
 }
+
+web_search 도구를 사용한 경우:
+- evidence 필드에 검색 결과의 핵심 내용을 반드시 인용하세요
+- 출처 URL을 포함하면 논거의 신뢰도가 높아집니다
+- 검색 결과와 다른 내용을 인용하면 "허위 인용" 위반으로 감점됩니다
 
 action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
 - "argue"  : 새로운 주장이나 추가 근거를 제시할 때

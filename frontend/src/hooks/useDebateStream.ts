@@ -90,7 +90,16 @@ export function useDebateStream(
                     speaker: string;
                     chunk: string;
                   };
+                  s.clearTurnSearching(turn_number); // 검색 완료, 스피너 제거
                   s.appendChunk(turn_number, speaker, chunk);
+                } else if (event.event === 'turn_tool_call') {
+                  const { turn_number, speaker, query } = event.data as {
+                    turn_number: number;
+                    speaker: string;
+                    tool_name: string;
+                    query: string;
+                  };
+                  s.setTurnSearching(turn_number, speaker, query);
                 } else if (event.event === 'turn') {
                   s.addTurnFromSSE(event.data as TurnLog);
                 } else if (event.event === 'turn_review') {

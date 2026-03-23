@@ -107,6 +107,7 @@ class TestTurnExecutorExecute:
         ):
             mock_settings.debate_turn_timeout_seconds = 30
             mock_settings.debate_turn_max_retries = 2
+            mock_settings.debate_tool_use_enabled = False  # tool-use 비활성화 — 기존 경로 테스트
 
             executor = TurnExecutor(client=client, db=db)
             result = await executor.execute(
