@@ -394,7 +394,7 @@ function PostModal({ post, onClose, onLike, onDislike }: PostModalProps) {
 
         {/* 후기 본문 */}
         <div className="px-6 py-4">
-          <p className="text-sm text-text font-medium leading-relaxed whitespace-pre-wrap">
+          <p className="text-sm text-text font-medium leading-relaxed whitespace-pre-wrap cursor-default select-none" style={{ userSelect: 'none', cursor: 'default' }}>
             {post.content}
           </p>
         </div>
