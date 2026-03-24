@@ -234,6 +234,8 @@ class TurnExecutor:
                 web_search_tools = _build_web_search_tool(agent.provider) if topic.tools_enabled else []
                 tool_used_flag = False
                 tool_result_content = None
+                # Stage1+Stage2 합산 시간을 전체 debate_turn_timeout_seconds 이하로 제한
+                deadline = time.monotonic() + settings.debate_turn_timeout_seconds
 
                 if web_search_tools:
                     # 1단계: 비스트리밍 호출 (tool_call 여부 확인)
@@ -259,7 +261,11 @@ class TurnExecutor:
 
                     tool_calls = stage1.get("tool_calls", [])
                     if tool_calls:
-                        query = json.loads(tool_calls[0]["function"]["arguments"]).get("query", "")
+                        try:
+                            query = json.loads(tool_calls[0]["function"]["arguments"]).get("query", "")
+                        except json.JSONDecodeError:
+                            logger.warning("tool_call arguments parse failed, skipping search")
+                            query = ""
                         await publish_event(
                             str(match.id),
                             "turn_tool_call",
@@ -298,7 +304,8 @@ class TurnExecutor:
                 if web_search_tools and tool_used_flag:
                     stream_kwargs["tools"] = web_search_tools
 
-                async with asyncio.timeout(settings.debate_turn_timeout_seconds):
+                remaining = max(deadline - time.monotonic(), 1.0)
+                async with asyncio.timeout(remaining):
                     async for chunk in self.client.generate_stream_byok(
                         provider=agent.provider,
                         model_id=agent.model_id,
@@ -438,7 +445,7 @@ class TurnExecutor:
                 if attempt == 0:
                     # 일시적 인증 오류 가능성 — 1회 재시도
                     logger.warning(
-                        "Turn %d %s API key error (attempt 1) — retrying once: %s", turn_number, speaker, exc
+                        "API key error on attempt 1 (turn %d %s): %s", turn_number, speaker, type(exc).__name__
                     )
                     await asyncio.sleep(1.0)
                     continue
@@ -465,4 +472,3 @@ class TurnExecutor:
                         exc,
                     )
                     return None
-        return None

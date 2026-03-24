@@ -74,7 +74,7 @@ def _calculate_required_credits(
 
 
 class CreditInsufficientError(Exception):
-    """크레딧 부족 — credit_insufficient SSE가 이미 발행됐으므로 run_debate에서 error SSE 재발행 생략."""
+    """크레딧 부족 — credit_insufficient SSE가 이미 발행됐으며, run_debate에서 error SSE로 매치 종료를 추가 알림."""
 
 
 # 상단 import로 sub-module 심볼을 이 네임스페이스에 바인딩 — 테스트 import 경로 보호
@@ -184,6 +184,7 @@ class DebateEngine:
             await self._refund_credits(match)
             return
 
+        # is_test 매치는 플랫폼 크레딧으로 강제 실행
         use_platform = match.is_test
         api_key_a = _resolve_api_key(agent_a, force_platform=use_platform)
         api_key_b = _resolve_api_key(agent_b, force_platform=use_platform)
@@ -446,6 +447,8 @@ class DebateEngine:
         usage_batch: list[TokenUsageLog] = []
 
         match_format = getattr(match, "format", "1v1")
+        if match_format not in ("1v1", "multi"):
+            raise MatchVoidError(f"Unknown format: {match_format}")
         runner = get_format_runner(match_format)
 
         intro = await judge_instance.generate_intro(
@@ -524,6 +527,7 @@ class DebateEngine:
         except Exception as judge_exc:
             logger.error("Judge failed for match %s: %s — voiding match", match.id, judge_exc, exc_info=True)
             await self._void_match(match, f"judge_failed: {judge_exc}")
+            await self._refund_credits(match)
             return
 
         finalizer = MatchFinalizer(self.db)
@@ -566,7 +570,6 @@ async def run_debate(match_id: str) -> None:
             engine = DebateEngine(db)
             await engine.run(match_id)
         except CreditInsufficientError as exc:
-            # credit_insufficient SSE가 이미 발행됨 — error SSE 중복 발행 생략
             logger.warning("Match %s aborted: %s", match_id, exc)
             try:
                 await db.rollback()
@@ -578,6 +581,11 @@ async def run_debate(match_id: str) -> None:
                 await db.commit()
             except Exception:
                 logger.error("Failed to mark match %s as error after credit failure", match_id)
+            # credit_insufficient 이후 error 이벤트로 프론트에 매치 종료 명시적으로 알림
+            try:
+                await publish_event(match_id, "error", {"message": str(exc), "error_type": "credit_insufficient"})
+            except Exception:
+                logger.warning("Failed to publish error event after credit failure for match %s", match_id)
         except asyncio.CancelledError:
             logger.warning("Debate task cancelled for match %s — marking as error", match_id)
 

@@ -328,7 +328,7 @@ class DebateJudge:
                 judge_output_tokens += analysis_result.get("output_tokens", 0)
                 analysis_content = analysis_result.get("content", "")
                 if not analysis_content:
-                    logger.warning("Judge Stage 1 returned empty content for match %s", match.id)
+                    raise ValueError("Judge Stage 1 returned empty content")
 
                 # Stage 2: 분석 결과 기반 채점 — JSON 출력
                 # debate_log 재전송 생략: Stage 1이 이미 전체 대화를 분석했으므로 분석 결과만 전달
@@ -344,9 +344,9 @@ class DebateJudge:
                     max_tokens=settings.debate_judge_max_tokens,
                     temperature=settings.debate_judge_temperature,
                 )
-            judge_input_tokens += scoring_result.get("input_tokens", 0)
-            judge_output_tokens += scoring_result.get("output_tokens", 0)
-            raw_content = scoring_result.get("content", "")
+                judge_input_tokens += scoring_result.get("input_tokens", 0)
+                judge_output_tokens += scoring_result.get("output_tokens", 0)
+                raw_content = scoring_result.get("content", "")
             content = raw_content.strip()
             # LLM이 마크다운 코드블록으로 감싸 반환하는 경우 제거
             if content.startswith("```"):
@@ -368,10 +368,12 @@ class DebateJudge:
                 raw_content,
             )
             # 파싱 실패 시 각 항목 최대값의 절반으로 균등 점수 (무승부 폴백)
-            half_scores = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
+            # half_scores_a/b 독립 생성 — 공유 dict 참조 시 클램핑 로직이 한 쪽 수정으로 양쪽에 반영되는 버그 방지
+            half_scores_a = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
+            half_scores_b = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
             scorecard = {
-                "agent_a": half_scores,
-                "agent_b": half_scores,
+                "agent_a": half_scores_a,
+                "agent_b": half_scores_b,
                 "reasoning": "심판 채점 오류로 인해 동점 처리되었습니다.",
             }
             fallback_reason = "parse_error"
@@ -385,10 +387,11 @@ class DebateJudge:
                 exc,
                 exc_info=True,
             )
-            half_scores = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
+            half_scores_a = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
+            half_scores_b = {k: v // 2 for k, v in SCORING_CRITERIA.items()}
             scorecard = {
-                "agent_a": half_scores,
-                "agent_b": half_scores,
+                "agent_a": half_scores_a,
+                "agent_b": half_scores_b,
                 "reasoning": "판정 요청 오류로 인해 동점 처리되었습니다.",
             }
             fallback_reason = "request_error"

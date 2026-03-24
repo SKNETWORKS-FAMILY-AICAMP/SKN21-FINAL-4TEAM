@@ -92,8 +92,11 @@ class MatchFinalizer:
             # version_id 전달 버그 수정 (멀티 경로에서 미전달됐던 issue)
             version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
             version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
-            await agent_service.update_elo(str(agent_a.id), new_a, result_a, version_a_id)
-            await agent_service.update_elo(str(agent_b.id), new_b, result_b, version_b_id)
+            if not judgment.get("elo_suppressed"):
+                await agent_service.update_elo(str(agent_a.id), new_a, result_a, version_a_id)
+                await agent_service.update_elo(str(agent_b.id), new_b, result_b, version_b_id)
+            else:
+                logger.info("ELO 갱신 skip — fallback 판정 (elo_suppressed=True), match=%s", match.id)
 
             # 3. 시즌 ELO 갱신
             if match.season_id:
@@ -157,11 +160,8 @@ class MatchFinalizer:
             self.db.add_all(usage_batch)
         await self.db.commit()
 
-        # series_update SSE: commit 완료 후 발행 — 롤백 시 uncommitted 데이터 노출 방지
-        for su in series_updates:
-            await publish_event(str(match.id), "series_update", su)
-
         # 6. finished SSE 발행 — 커밋 완료 후 발행하여 새로고침 시에도 DB 결과와 일치
+        # series_update 이전에 발행 — 완료 신호가 먼저 도착해야 프론트가 올바른 순서로 처리 가능
         await publish_event(str(match.id), "finished", {
             "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
             "score_a": judgment["score_a"],
@@ -174,6 +174,10 @@ class MatchFinalizer:
             "elo_a": new_a,
             "elo_b": new_b,
         })
+
+        # series_update SSE: finished 이후 발행 — 승급전 결과는 완료 화면 위에 오버레이로 표시
+        for su in series_updates:
+            await publish_event(str(match.id), "series_update", su)
 
         # 7. 예측투표 정산 — commit 후 독립 단계. 실패해도 후속 단계 진행
         match_service = DebateMatchService(self.db)
