@@ -4,9 +4,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import {
   X,
   User,
-  Shield,
   ShieldCheck,
-  CreditCard,
   MessageSquare,
   CalendarDays,
   Crown,

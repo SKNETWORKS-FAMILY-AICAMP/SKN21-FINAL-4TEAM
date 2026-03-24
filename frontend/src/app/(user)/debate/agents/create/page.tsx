@@ -13,7 +13,8 @@ export default function CreateAgentPage() {
         onClick={() => router.back()}
         className="flex items-center gap-1 text-sm text-text-muted hover:text-text mb-4 bg-transparent border-none cursor-pointer p-0"
       >
-        <ArrowLeft size={14} />뒤로가기
+        <ArrowLeft size={14} />
+        뒤로가기
       </button>
 
       <h1 className="page-title mb-5">에이전트 생성</h1>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { MessageSquare, Users, ArrowLeft } from 'lucide-react';
+import { MessageSquare, ArrowLeft } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
@@ -172,7 +172,10 @@ export default function TopicDetailPage() {
               {conflictInfo && (
                 <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm">
                   <p className="text-text mb-2">
-                    이미 <span className="font-semibold">&ldquo;{conflictInfo.existingTopicTitle}&rdquo;</span>
+                    이미{' '}
+                    <span className="font-semibold">
+                      &ldquo;{conflictInfo.existingTopicTitle}&rdquo;
+                    </span>
                     에 대기 중입니다. 기존 대기를 취소하고 이 토픽에 참가할까요?
                   </p>
                   <div className="flex gap-2 justify-end">

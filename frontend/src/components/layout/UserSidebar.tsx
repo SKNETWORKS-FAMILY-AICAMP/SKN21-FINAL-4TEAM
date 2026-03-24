@@ -9,7 +9,6 @@ import {
   Swords,
   MessageSquare,
   Trophy,
-  BookOpen,
   List,
   Users,
   ShieldCheck,

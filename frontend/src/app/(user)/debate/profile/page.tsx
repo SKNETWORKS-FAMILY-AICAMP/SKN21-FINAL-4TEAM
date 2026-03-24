@@ -20,9 +20,6 @@ type MatchItem = {
   created_at: string;
 };
 
-function getInitials(name: string): string {
-  return name.slice(0, 2).toUpperCase();
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ko-KR', {

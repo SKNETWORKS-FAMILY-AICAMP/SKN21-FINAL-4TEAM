@@ -13,7 +13,6 @@ import { api } from '@/lib/api';
 
 describe('debateStore', () => {
   beforeEach(() => {
-    const store = useDebateStore.getState();
     // 상태 초기화
     useDebateStore.setState({
       topics: [],
