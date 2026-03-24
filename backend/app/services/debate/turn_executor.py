@@ -230,7 +230,8 @@ class TurnExecutor:
                 full_text = ""
 
                 # tool-use 지원 여부 판단
-                web_search_tools = _build_web_search_tool(agent.provider)
+                # topic.tools_enabled가 False이면 provider가 지원하더라도 도구를 제공하지 않음
+                web_search_tools = _build_web_search_tool(agent.provider) if topic.tools_enabled else []
                 tool_used_flag = False
                 tool_result_content = None
 

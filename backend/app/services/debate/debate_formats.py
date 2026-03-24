@@ -464,7 +464,11 @@ async def _run_parallel_turns(
                     recent_history=recent_history_a,
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
-                    tools_available=settings.debate_tool_use_enabled and agent_a.provider in _TOOL_USE_PROVIDERS,
+                    tools_available=(
+                        settings.debate_tool_use_enabled
+                        and topic.tools_enabled
+                        and agent_a.provider in _TOOL_USE_PROVIDERS
+                    ),
                     tool_result=(turn_a.raw_response or {}).get("tool_result"),
                 )
             )
@@ -515,7 +519,11 @@ async def _run_parallel_turns(
                     recent_history=recent_history_b,
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
-                    tools_available=settings.debate_tool_use_enabled and agent_b.provider in _TOOL_USE_PROVIDERS,
+                    tools_available=(
+                        settings.debate_tool_use_enabled
+                        and topic.tools_enabled
+                        and agent_b.provider in _TOOL_USE_PROVIDERS
+                    ),
                     tool_result=(turn_b.raw_response or {}).get("tool_result"),
                 )
             )
@@ -743,7 +751,9 @@ async def _run_sequential_turns(
                 recent_history=claims_a[-2:] if claims_a else None,
                 trace_id=control_plane.runtime.trace_id if control_plane else None,
                 orchestration_mode=control_plane.runtime.mode if control_plane else None,
-                tools_available=settings.debate_tool_use_enabled and agent_a.provider in _TOOL_USE_PROVIDERS,
+                tools_available=(
+                    settings.debate_tool_use_enabled and topic.tools_enabled and agent_a.provider in _TOOL_USE_PROVIDERS
+                ),
                 tool_result=(turn_a.raw_response or {}).get("tool_result"),
             )
             review_elapsed = time.monotonic() - review_start
@@ -815,7 +825,9 @@ async def _run_sequential_turns(
                 recent_history=claims_b[-2:] if claims_b else None,
                 trace_id=control_plane.runtime.trace_id if control_plane else None,
                 orchestration_mode=control_plane.runtime.mode if control_plane else None,
-                tools_available=settings.debate_tool_use_enabled and agent_b.provider in _TOOL_USE_PROVIDERS,
+                tools_available=(
+                    settings.debate_tool_use_enabled and topic.tools_enabled and agent_b.provider in _TOOL_USE_PROVIDERS
+                ),
                 tool_result=(turn_b.raw_response or {}).get("tool_result"),
             )
             review_elapsed = time.monotonic() - review_start
@@ -916,7 +928,9 @@ async def _run_multi_slot_turn(
             recent_history=my_claims[-2:] if my_claims else None,
             trace_id=control_plane.runtime.trace_id if control_plane else None,
             orchestration_mode=control_plane.runtime.mode if control_plane else None,
-            tools_available=settings.debate_tool_use_enabled and agent.provider in _TOOL_USE_PROVIDERS,
+            tools_available=(
+                settings.debate_tool_use_enabled and topic.tools_enabled and agent.provider in _TOOL_USE_PROVIDERS
+            ),
             tool_result=(turn.raw_response or {}).get("tool_result"),
         )
         total_penalty = _apply_review_to_turn(
