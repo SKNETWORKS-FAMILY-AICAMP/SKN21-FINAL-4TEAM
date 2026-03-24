@@ -418,12 +418,29 @@ class DebateEngine:
             api_key_b: B측 LLM API 키.
         """
         orchestrator = DebateOrchestrator(optimized=settings.debate_orchestrator_optimized, client=client)
+        judge_instance = DebateJudge(client=client)
         executor = TurnExecutor(client, self.db)
         model_cache: dict[str, LLMModel] = {}
         usage_batch: list[TokenUsageLog] = []
 
         match_format = getattr(match, "format", "1v1")
         runner = get_format_runner(match_format)
+
+        intro = await judge_instance.generate_intro(
+            topic,
+            agent_a_name=agent_a.name,
+            agent_b_name=agent_b.name,
+            trace_id=str(match.id),
+            orchestration_mode=match_format,
+        )
+        await publish_event(str(match.id), "judge_intro", {
+            "message": intro.get("message"),
+            "topic_title": topic.title,
+            "model_id": intro.get("model_id"),
+            "input_tokens": intro.get("input_tokens", 0),
+            "output_tokens": intro.get("output_tokens", 0),
+            "fallback_reason": intro.get("fallback_reason"),
+        })
 
         try:
             if match_format == "1v1":
@@ -457,7 +474,6 @@ class DebateEngine:
             .order_by(DebateTurnLog.turn_number, DebateTurnLog.speaker)
         )
         turns = list(turns_res.scalars().all())
-        judge_instance = DebateJudge(client=client)
         try:
             judgment = await judge_instance.judge(
                 match, turns, topic, agent_a_name=agent_a.name, agent_b_name=agent_b.name

@@ -134,6 +134,13 @@ JUDGE_SCORING_PROMPT = (
     + _build_score_format()
 )
 
+JUDGE_INTRO_SYSTEM_PROMPT = (
+    "당신은 AI 토론의 judge LLM이며 토론 시작 전 아래의 사항을 지켜야 합니다\n"
+    "1) 간단한 인사말\n"
+    "2) 토론 주제에 대한 간단한 설명 2-3 문장\n"
+    "명확하고 중립적인 언어로 120자 이내로 작성하시고 점수는 아직 매기지 마세요."
+)
+
 
 class DebateJudge:
     """LLM 2-stage 방식으로 토론 전체를 판정하는 심판 클래스.
@@ -156,6 +163,99 @@ class DebateJudge:
         if self._owns_client:
             await self.client.aclose()
 
+    def _resolve_model_id(self) -> str | None:
+        """Return configured judge model id if present."""
+        return self.judge_model_override or settings.debate_judge_model or settings.debate_orchestrator_model
+
+    @staticmethod
+    def _fallback_intro_message(topic: DebateTopic) -> str:
+        """Build a safe intro message when LLM intro generation fails."""
+        topic_description = (topic.description or "").strip()
+        if topic_description:
+            return (
+                f"토론장에 오신 것을 환영합니다. 오늘의 토론 주제는 '{topic.title}' 입니다. "
+                f"{topic_description[:220]} "
+                "Agent간 토론이 시작됩니다."
+            ).strip()
+        return f"'{topic.title}'이 있는지 확인 부탁드립니다."
+
+    async def generate_intro(
+        self,
+        topic: DebateTopic,
+        agent_a_name: str = "Agent A",
+        agent_b_name: str = "Agent B",
+        trace_id: str | None = None,
+        orchestration_mode: str | None = None,
+    ) -> dict:
+        """Generate pre-debate judge intro (welcome + short topic explanation)."""
+        model_id = self._resolve_model_id()
+        if not model_id:
+            logger.warning(
+                "Judge intro fallback(model_unset) | trace_id=%s mode=%s topic=%s",
+                trace_id,
+                orchestration_mode,
+                getattr(topic, "id", None),
+            )
+            return {
+                "message": self._fallback_intro_message(topic),
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "model_id": None,
+                "fallback_reason": "model_unset",
+            }
+
+        provider = _infer_provider(model_id)
+        api_key = _platform_api_key(provider)
+        intro_timeout = getattr(settings, "debate_judge_timeout_seconds", 120)
+        intro_max_tokens = min(getattr(settings, "debate_judge_max_tokens", 600), 220)
+        user_prompt = (
+            f"토론 주제: {topic.title}\n"
+            f"주제 설명: {topic.description or 'N/A'}\n"
+            f"참가자: {agent_a_name} vs {agent_b_name}"
+        )
+
+        try:
+            result = await asyncio.wait_for(
+                self.client.generate_byok(
+                    provider=provider,
+                    model_id=model_id,
+                    api_key=api_key,
+                    messages=[
+                        {"role": "system", "content": JUDGE_INTRO_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=intro_max_tokens,
+                    temperature=0.5,
+                ),
+                timeout=intro_timeout,
+            )
+            message = (result.get("content") or "").strip()
+            if not message:
+                raise ValueError("empty_intro")
+            return {
+                "message": message,
+                "input_tokens": result.get("input_tokens", 0),
+                "output_tokens": result.get("output_tokens", 0),
+                "model_id": model_id,
+                "fallback_reason": None,
+            }
+        except Exception as exc:
+            logger.warning(
+                "Judge intro fallback(request_error) | trace_id=%s mode=%s topic=%s model=%s err=%s",
+                trace_id,
+                orchestration_mode,
+                getattr(topic, "id", None),
+                model_id,
+                exc,
+            )
+            return {
+                "message": self._fallback_intro_message(topic),
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "model_id": model_id,
+                "fallback_reason": "request_error",
+            }
+
     async def judge(
         self,
         match: DebateMatch,
@@ -167,7 +267,7 @@ class DebateJudge:
         orchestration_mode: str | None = None,
     ) -> dict:
         """LLM으로 토론 판정. 스코어카드 dict 반환."""
-        model_id = self.judge_model_override or settings.debate_judge_model or settings.debate_orchestrator_model
+        model_id = self._resolve_model_id()
         if not model_id:
             raise ValueError(
                 "judge 모델 미설정: DEBATE_JUDGE_MODEL 또는 DEBATE_ORCHESTRATOR_MODEL "

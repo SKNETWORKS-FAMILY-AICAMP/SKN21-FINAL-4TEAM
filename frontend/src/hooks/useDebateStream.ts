@@ -37,6 +37,7 @@ export function useDebateStream(
     const store = useDebateStore.getState();
     store.fetchTurns(matchId);
     store.fetchPredictionStats(matchId);
+    store.setJudgeIntro(null);
 
     const controller = new AbortController();
     store.setStreaming(true);
@@ -111,6 +112,9 @@ export function useDebateStream(
                     evidence: string;
                   };
                   s.patchTurnEvidence(turn_number, speaker, evidence);
+                } else if (event.event === 'judge_intro') {
+                  const message = (event.data as { message?: string }).message?.trim() ?? null;
+                  if (message) s.setJudgeIntro(message);
                 } else if (event.event === 'series_update') {
                   onSeriesUpdateRef.current?.(event.data as PromotionSeries);
                 } else if (event.event === 'waiting_agent') {

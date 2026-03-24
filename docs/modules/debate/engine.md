@@ -111,6 +111,10 @@ result = await runner(executor, orchestrator, db, match, topic,
     agent_a, agent_b, model_cache, usage_batch)
 ```
 
+Before the turn loop starts, `DebateJudge.generate_intro(...)` is called first.
+The engine then publishes a `judge_intro` SSE event (welcome + short topic briefing).
+After that intro is sent, agent turns begin.
+
 **예외 분기:**
 - `MatchVoidError` → `_void_match` + `_refund_credits` → return
 - `ForfeitError` → `ForfeitHandler.handle_retry_exhaustion(match, agent_a, agent_b, forfeited_speaker)` → return
