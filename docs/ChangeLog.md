@@ -1,3 +1,13 @@
+## [2026-03-24] dev-guide 최신화 — 테이블 수·마이그레이션·서비스·스토어 목록 갱신
+
+### Changed
+
+- `docs/dev-guide.md` — 단위 테스트 수 252개 수정, 마이그레이션 체인 최신화 + 다중 헤드 주의사항
+- `docs/dev-guide/backend.md` — 테이블 수 22개로 수정, 누락 테이블 4개 추가(user_follows/notifications/community_posts/user_community_stats), 서비스 목록 12→20개 이상으로 확장(turn_executor/judge/finalizer/debate_formats/auto_matcher/evidence_search/forfeit/template_service/control_plane/helpers/exceptions), 마이그레이션 체인 최신화
+- `docs/dev-guide/frontend.md` — 스토어 목록에 themeStore/followStore/notificationStore 추가, 주요 스토어 요약 표 갱신, SSE 이벤트 표에 judge_intro/turn_tool_call/forfeit/credit_insufficient/match_void/series_update 추가
+
+---
+
 ## [2026-03-24] 문서 전면 정비 — API / 모델 / 프론트엔드 / 서비스 전체
 
 ### Added

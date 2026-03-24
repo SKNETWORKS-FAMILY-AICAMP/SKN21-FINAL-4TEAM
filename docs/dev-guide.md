@@ -138,7 +138,7 @@ refactor: debate_engine 턴 루프 asyncio.gather 병렬화
 ### 빠른 테스트 (단위 테스트, 인프라 불필요)
 
 ```bash
-# 백엔드 단위 테스트 (~273개)
+# 백엔드 단위 테스트 (~252개)
 cd backend
 .venv/Scripts/python.exe -m pytest tests/unit/ -v          # Windows
 .venv/bin/python -m pytest tests/unit/ -v                  # macOS/Linux
@@ -286,13 +286,17 @@ alembic stamp <해당_revision>
 alembic upgrade head
 ```
 
-**현재 마이그레이션 HEAD:** `i9j0k1l2m3n4`
+**현재 마이그레이션 상태:** 다중 헤드 (`alembic heads`로 확인)
 
 ```
+debate 기능 체인:
 z6a7b8c9d0e1 → a1b2c3d4e5f8 → b2c3d4e5f6g7 → c3d4e5f6g7h8
     → d4e5f6g7h8i9 → e5f6g7h8i9j0 → f6g7h8i9j0k1
-    → g7h8i9j0k1l2 → h8i9j0k1l2m3 → i9j0k1l2m3n4 (HEAD)
+    → g7h8i9j0k1l2 → h8i9j0k1l2m3 → i9j0k1l2m3n4
+    → ... → p7q8r9s0t1u2 → q8r9s0t1u2v3 (community stats)
 ```
+
+> 프로젝트에 여러 독립 마이그레이션 브랜치가 존재한다. 새 마이그레이션 작성 전 `alembic heads`로 현재 상태를 확인하고, 필요 시 `alembic merge heads`로 병합한다.
 
 ---
 
@@ -411,5 +415,6 @@ const store = useDebateStore();
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-03-24 | 단위 테스트 수 252개로 수정. 마이그레이션 체인 최신화 및 다중 헤드 주의사항 추가. |
 | 2026-03-12 | 전면 재작성 — 명령어 위주 빠른 참조 형식으로 개편, 테마 시스템 관련 항목 추가 |
 | 2026-03-11 | 최초 작성 |
