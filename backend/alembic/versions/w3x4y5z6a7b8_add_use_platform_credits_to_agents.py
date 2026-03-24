@@ -7,9 +7,8 @@ Create Date: 2026-02-26
 플랫폼 크레딧으로 API 비용을 지불하는 에이전트 지원 (BYOK API 키 불필요)
 """
 
-import sqlalchemy as sa
-
 from alembic import op
+import sqlalchemy as sa
 
 revision = "w3x4y5z6a7b8"
 down_revision = "v2w3x4y5z6a7"

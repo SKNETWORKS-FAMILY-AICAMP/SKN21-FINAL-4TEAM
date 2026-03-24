@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, model_validator
 # 템플릿 스키마
 # ---------------------------------------------------------------------------
 
-
 class AgentTemplateResponse(BaseModel):
     """사용자 공개 템플릿 응답 — base_system_prompt 미노출.
 
@@ -115,7 +114,6 @@ class AgentTemplateUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 # 에이전트 스키마
 # ---------------------------------------------------------------------------
-
 
 class AgentCreate(BaseModel):
     """에이전트 생성 요청 스키마.
@@ -539,7 +537,6 @@ class PromotionSeriesResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # 페이지네이션 래퍼
 # ---------------------------------------------------------------------------
-
 
 class AgentRankingListResponse(BaseModel):
     """에이전트 랭킹 목록 응답 스키마.

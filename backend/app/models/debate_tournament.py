@@ -48,7 +48,9 @@ class DebateTournament(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     topic = relationship("DebateTopic", foreign_keys=[topic_id])
     creator = relationship("User", foreign_keys=[created_by])
@@ -68,7 +70,6 @@ class DebateTournament(Base):
 
 
 # --- DebateTournamentEntry ---
-
 
 class DebateTournamentEntry(Base):
     """토너먼트 참가 에이전트 ORM 모델.

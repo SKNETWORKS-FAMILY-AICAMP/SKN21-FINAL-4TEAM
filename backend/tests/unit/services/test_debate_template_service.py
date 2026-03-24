@@ -7,15 +7,10 @@ import pytest
 # 공통 커스터마이징 스키마 (테스트용)
 _SCHEMA = {
     "sliders": [
-        {"key": "aggression", "label": "공격성", "min": 1, "max": 5, "default": 3, "description": "높을수록 반박"},
-        {
-            "key": "evidence_focus",
-            "label": "증거 활용도",
-            "min": 1,
-            "max": 5,
-            "default": 3,
-            "description": "높을수록 데이터",
-        },
+        {"key": "aggression", "label": "공격성", "min": 1, "max": 5, "default": 3,
+         "description": "높을수록 반박"},
+        {"key": "evidence_focus", "label": "증거 활용도", "min": 1, "max": 5, "default": 3,
+         "description": "높을수록 데이터"},
     ],
     "selects": [
         {
@@ -68,7 +63,6 @@ def _make_template() -> SimpleNamespace:
 # ---------------------------------------------------------------------------
 # 슬라이더 검증
 # ---------------------------------------------------------------------------
-
 
 class TestValidateSliders:
     def test_valid_slider_values(self):
@@ -130,7 +124,6 @@ class TestValidateSliders:
 # 셀렉트 검증
 # ---------------------------------------------------------------------------
 
-
 class TestValidateSelects:
     def test_valid_select_value(self):
         from app.services.debate.template_service import DebateTemplateService
@@ -154,7 +147,6 @@ class TestValidateSelects:
 # ---------------------------------------------------------------------------
 # 자유 텍스트 처리
 # ---------------------------------------------------------------------------
-
 
 class TestValidateFreeText:
     def test_free_text_disabled_removes_key(self):
@@ -192,7 +184,9 @@ class TestValidateFreeText:
         long_text = "A" * 51  # max_length=50 초과
 
         with pytest.raises(ValueError, match="초과할 수 없습니다"):
-            svc.validate_customizations(tmpl, {"additional_instructions": long_text}, enable_free_text=True)
+            svc.validate_customizations(
+                tmpl, {"additional_instructions": long_text}, enable_free_text=True
+            )
 
     def test_free_text_injection_pattern_raises(self):
         from app.services.debate.template_service import DebateTemplateService
@@ -225,7 +219,6 @@ class TestValidateFreeText:
 # 기본값 채움
 # ---------------------------------------------------------------------------
 
-
 class TestDefaultValues:
     def test_missing_keys_filled_with_defaults(self):
         from app.services.debate.template_service import DebateTemplateService
@@ -253,7 +246,6 @@ class TestDefaultValues:
 # ---------------------------------------------------------------------------
 # 프롬프트 조립
 # ---------------------------------------------------------------------------
-
 
 class TestAssemblePrompt:
     def test_customization_block_replaced(self):

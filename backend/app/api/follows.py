@@ -66,7 +66,6 @@ async def follow_target(
     # 신규 팔로워 알림 — 별도 세션으로 실행해 팔로우 세션 오염 방지
     try:
         from app.services.notification_service import NotificationService
-
         async with async_session() as notify_db:
             await NotificationService(notify_db).notify_new_follower(
                 follower_id=current_user.id,
@@ -85,7 +84,6 @@ async def follow_target(
     # 에이전트 팔로우 시 커뮤니티 참여점수 비동기 업데이트
     if data.target_type == "agent":
         from app.services.community_service import _schedule_stats_update
-
         _schedule_stats_update(str(current_user.id), follows_delta=1)
 
     # 응답 조립을 위해 대상 이름·이미지 조회
@@ -122,7 +120,6 @@ async def unfollow_target(
     # 에이전트 언팔로우 시 커뮤니티 참여점수 비동기 업데이트
     if target_type == "agent":
         from app.services.community_service import _schedule_stats_update
-
         _schedule_stats_update(str(current_user.id), follows_delta=-1)
 
 

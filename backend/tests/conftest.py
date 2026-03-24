@@ -13,10 +13,9 @@
 ## 벤치마크 패턴 (benchmark/)
 - LLM만 AsyncMock, DB는 실제 사용 또는 db_session
 """
-
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # DOTENV_PATH 환경변수가 지정된 경우 해당 .env 파일 로드 (테스트 Compose 지원)
@@ -34,7 +33,9 @@ if _dotenv_path:
 # debate 라우트를 테스트에서 활성화하기 위해 app import 전에 환경변수 설정
 os.environ.setdefault("DEBATE_ENABLED", "true")
 
+import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -125,7 +126,7 @@ async def test_admin(db_session: AsyncSession):
         password_hash=get_password_hash("adminpass"),
         role="admin",
         age_group="adult_verified",
-        adult_verified_at=datetime.now(UTC),
+        adult_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(admin)
     await db_session.commit()
@@ -146,7 +147,7 @@ async def test_superadmin(db_session: AsyncSession):
         password_hash=get_password_hash("superpass"),
         role="superadmin",
         age_group="adult_verified",
-        adult_verified_at=datetime.now(UTC),
+        adult_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(superadmin)
     await db_session.commit()
@@ -178,7 +179,8 @@ async def test_developer(db_session: AsyncSession):
 async def test_debate_agent(db_session: AsyncSession, test_developer):
     """토론 에이전트 fixture."""
     from app.core.encryption import encrypt_api_key
-    from app.models.debate_agent import DebateAgent, DebateAgentVersion
+    from app.models.debate_agent import DebateAgent
+    from app.models.debate_agent import DebateAgentVersion
 
     agent = DebateAgent(
         id=uuid.uuid4(),
@@ -206,7 +208,8 @@ async def test_debate_agent(db_session: AsyncSession, test_developer):
 @pytest_asyncio.fixture
 async def test_local_debate_agent(db_session: AsyncSession, test_developer):
     """로컬 에이전트 fixture (provider=local, API 키 없음)."""
-    from app.models.debate_agent import DebateAgent, DebateAgentVersion
+    from app.models.debate_agent import DebateAgent
+    from app.models.debate_agent import DebateAgentVersion
 
     agent = DebateAgent(
         id=uuid.uuid4(),
@@ -265,7 +268,7 @@ async def test_adult_user(db_session: AsyncSession):
         password_hash=get_password_hash("adultpass"),
         role="user",
         age_group="adult_verified",
-        adult_verified_at=datetime.now(UTC),
+        adult_verified_at=datetime.now(timezone.utc),
     )
     db_session.add(user)
     await db_session.commit()

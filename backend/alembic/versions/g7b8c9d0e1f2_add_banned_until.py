@@ -8,16 +8,15 @@ Create Date: 2026-02-20 01:00:00.000000
 NULL이면 밴 아님, 값이 있으면 해당 시각까지 밴 적용.
 """
 
-from collections.abc import Sequence
-
-import sqlalchemy as sa
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
 
 revision: str = "g7b8c9d0e1f2"
-down_revision: str | None = "f6a7b8c9d0e1"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "f6a7b8c9d0e1"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

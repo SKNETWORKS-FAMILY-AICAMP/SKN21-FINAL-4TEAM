@@ -71,7 +71,6 @@ class DebateAutoMatcher:
         if task.cancelled() or not (exc := task.exception()):
             return
         from app.core.observability import capture_exception
-
         logger.error("run_debate task failed: %s", exc, exc_info=exc)
         capture_exception(exc, source="DebateAutoMatcher.run_debate")
 
@@ -143,7 +142,9 @@ class DebateAutoMatcher:
         now = datetime.now(UTC)
         async with async_session() as db:
             result = await db.execute(
-                select(DebateMatchQueue).where(DebateMatchQueue.expires_at <= now).with_for_update(skip_locked=True)
+                select(DebateMatchQueue)
+                .where(DebateMatchQueue.expires_at <= now)
+                .with_for_update(skip_locked=True)
             )
             expired = result.scalars().all()
             for entry in expired:
@@ -165,7 +166,9 @@ class DebateAutoMatcher:
         async with async_session() as db:
             # SKIP LOCKED으로 다른 태스크와 충돌 방지
             result = await db.execute(
-                select(DebateMatchQueue).where(DebateMatchQueue.joined_at < cutoff).with_for_update(skip_locked=True)
+                select(DebateMatchQueue)
+                .where(DebateMatchQueue.joined_at < cutoff)
+                .with_for_update(skip_locked=True)
             )
             stale = list(result.scalars().all())
 
@@ -261,16 +264,11 @@ class DebateAutoMatcher:
         logger.info("Auto-matched %s with platform agent %s (match=%s)", agent_id, platform_id, match_id)
 
         # 대기방 SSE에 매칭 이벤트 발행
-        await publish_queue_event(
-            topic_id,
-            agent_id,
-            "matched",
-            {
-                "match_id": match_id,
-                "opponent_agent_id": platform_id,
-                "auto_matched": True,
-            },
-        )
+        await publish_queue_event(topic_id, agent_id, "matched", {
+            "match_id": match_id,
+            "opponent_agent_id": platform_id,
+            "auto_matched": True,
+        })
 
         # 토론 엔진 시작 — 태스크 참조 보관 및 예외 Sentry 전송
         task = asyncio.create_task(run_debate(match_id))

@@ -76,7 +76,6 @@ SCORING_CRITERIA = {
     "strategy": 25,
 }
 
-
 def _build_score_format() -> str:
     """SCORING_CRITERIA에서 Judge LLM이 반환할 JSON 출력 스펙을 동적 생성한다.
 
@@ -111,7 +110,8 @@ JUDGE_SYSTEM_PROMPT = (
     "5. 두 에이전트가 실질적으로 동등한 수준이면 동점이 정직한 결과다.\n"
     "6. [TIMEOUT] 또는 [ERROR]가 포함된 응답은 해당 에이전트의 각 항목에 0~5점을 부여하라.\n"
     "7. reasoning에는 각 항목별 핵심 판단 근거와 승패를 가른 결정적 차이를 포함하라.\n\n"
-    "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n" + _build_score_format()
+    "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n"
+    + _build_score_format()
 )
 
 # Stage 1: 서술형 분석 프롬프트 — 숫자/점수 언급 금지로 앵커링 편향 차단
@@ -130,7 +130,8 @@ JUDGE_SCORING_PROMPT = (
     "- argumentation (최대 40점): 논거의 명확성, 근거의 타당성\n"
     "- rebuttal (최대 35점): 상대 주장 반박의 정확성, 논리적 일관성\n"
     "- strategy (최대 25점): 토론 흐름 파악, 전략적 전개\n\n"
-    "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n" + _build_score_format()
+    "⚠️ 반드시 아래 JSON 형식만 출력하세요. 설명, 마크다운 코드블록, 추가 텍스트 절대 금지:\n"
+    + _build_score_format()
 )
 
 JUDGE_INTRO_SYSTEM_PROMPT = (
@@ -406,11 +407,7 @@ class DebateJudge:
 
         # 점수차 >= debate_draw_threshold → 승/패, 미만 → 무승부
         diff = abs(final_a - final_b)
-        winner_id = (
-            (match.agent_a_id if final_a > final_b else match.agent_b_id)
-            if diff >= settings.debate_draw_threshold
-            else None
-        )
+        winner_id = (match.agent_a_id if final_a > final_b else match.agent_b_id) if diff >= settings.debate_draw_threshold else None
 
         return {
             "scorecard": scorecard,
@@ -463,10 +460,12 @@ class DebateJudge:
                 lines.append(f"도구 사용: {raw['tool_used']}")
             if turn.penalty_total > 0:
                 ko_items = ", ".join(
-                    f"{PENALTY_KO_LABELS.get(k, k)} {v}점" for k, v in (turn.penalties or {}).items() if v
+                    f"{PENALTY_KO_LABELS.get(k, k)} {v}점"
+                    for k, v in (turn.penalties or {}).items()
+                    if v
                 )
                 lines.append(f"벌점: -{turn.penalty_total}점 ({ko_items})")
-                for violation_key in turn.penalties or {}:
+                for violation_key in (turn.penalties or {}):
                     counts = violation_counts.get(penalty_key, {})
                     counts[violation_key] = counts.get(violation_key, 0) + 1
                     violation_counts[penalty_key] = counts
@@ -482,5 +481,9 @@ class DebateJudge:
         """에이전트 이름과 위반 횟수 dict를 받아 Judge용 요약 문자열 반환."""
         if not violations:
             return f"{name}: 위반 없음"
-        items = ", ".join(f"{PENALTY_KO_LABELS.get(k, k)} {v}회" for k, v in violations.items() if v)
+        items = ", ".join(
+            f"{PENALTY_KO_LABELS.get(k, k)} {v}회"
+            for k, v in violations.items()
+            if v
+        )
         return f"{name}: {items}"

@@ -22,6 +22,7 @@ from app.services.debate.broadcast import publish_event
 from app.services.debate.control_plane import OrchestrationControlPlane
 from app.services.debate.debate_formats import (
     TurnLoopResult,
+    _log_orchestrator_usage,  # 테스트 import 경로 유지 — debate_formats에서 re-export
     get_format_runner,
     run_turns_1v1,
 )

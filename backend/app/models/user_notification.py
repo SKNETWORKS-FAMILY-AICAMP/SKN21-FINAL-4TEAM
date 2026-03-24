@@ -39,7 +39,9 @@ class UserNotification(Base):
     body: Mapped[str | None] = mapped_column(String(500), nullable=True)
     link: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     user = relationship("User", foreign_keys=[user_id])
 

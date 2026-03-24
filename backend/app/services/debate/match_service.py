@@ -117,16 +117,18 @@ class DebateMatchService:
             scorecard 데이터에 winner_id, result 필드를 추가한 dict.
             매치가 없거나 scorecard가 없으면 None.
         """
-        result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
+        result = await self.db.execute(
+            select(DebateMatch).where(DebateMatch.id == match_id)
+        )
         match = result.scalar_one_or_none()
         if match is None or match.scorecard is None:
             return None
         return {
             **match.scorecard,
             "winner_id": str(match.winner_id) if match.winner_id else None,
-            "result": "draw"
-            if match.winner_id is None and match.status == "completed"
-            else ("win" if match.winner_id else "pending"),
+            "result": "draw" if match.winner_id is None and match.status == "completed" else (
+                "win" if match.winner_id else "pending"
+            ),
         }
 
     async def list_matches(
@@ -160,8 +162,12 @@ class DebateMatchService:
             query = query.where(DebateMatch.topic_id == topic_id)
             count_query = count_query.where(DebateMatch.topic_id == topic_id)
         if agent_id:
-            query = query.where((DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id))
-            count_query = count_query.where((DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id))
+            query = query.where(
+                (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id)
+            )
+            count_query = count_query.where(
+                (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id)
+            )
         if status:
             query = query.where(DebateMatch.status == status)
             count_query = count_query.where(DebateMatch.status == status)
@@ -191,38 +197,45 @@ class DebateMatchService:
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        result = await self.db.execute(query.order_by(DebateMatch.created_at.desc()).offset(skip).limit(limit))
+        result = await self.db.execute(
+            query.order_by(DebateMatch.created_at.desc()).offset(skip).limit(limit)
+        )
         rows = result.all()
 
         # N+1 방지: 페이지 내 모든 에이전트 ID를 단일 배치 쿼리로 조회
-        agent_ids = {id_ for match, _ in rows for id_ in (match.agent_a_id, match.agent_b_id) if id_ is not None}
+        agent_ids = {
+            id_
+            for match, _ in rows
+            for id_ in (match.agent_a_id, match.agent_b_id)
+            if id_ is not None
+        }
         agents_map: dict = {}
         if agent_ids:
-            agents_result = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
+            agents_result = await self.db.execute(
+                select(DebateAgent).where(DebateAgent.id.in_(agent_ids))
+            )
             agents_map = {str(a.id): a for a in agents_result.scalars()}
 
         items = []
         for match, topic_title in rows:
             agent_a = self._agent_from_map(agents_map, match.agent_a_id)
             agent_b = self._agent_from_map(agents_map, match.agent_b_id)
-            items.append(
-                {
-                    "id": str(match.id),
-                    "topic_id": str(match.topic_id),
-                    "topic_title": topic_title,
-                    "agent_a": agent_a,
-                    "agent_b": agent_b,
-                    "status": match.status,
-                    "winner_id": str(match.winner_id) if match.winner_id else None,
-                    "score_a": match.score_a,
-                    "score_b": match.score_b,
-                    "penalty_a": match.penalty_a,
-                    "penalty_b": match.penalty_b,
-                    "started_at": match.started_at,
-                    "finished_at": match.finished_at,
-                    "created_at": match.created_at,
-                }
-            )
+            items.append({
+                "id": str(match.id),
+                "topic_id": str(match.topic_id),
+                "topic_title": topic_title,
+                "agent_a": agent_a,
+                "agent_b": agent_b,
+                "status": match.status,
+                "winner_id": str(match.winner_id) if match.winner_id else None,
+                "score_a": match.score_a,
+                "score_b": match.score_b,
+                "penalty_a": match.penalty_a,
+                "penalty_b": match.penalty_b,
+                "started_at": match.started_at,
+                "finished_at": match.finished_at,
+                "created_at": match.created_at,
+            })
 
         return items, total
 
@@ -244,12 +257,8 @@ class DebateMatchService:
         a = agents_map.get(str(agent_id))
         if a is None:
             return {
-                "id": str(agent_id),
-                "name": "[삭제됨]",
-                "provider": "",
-                "model_id": "",
-                "elo_rating": 0,
-                "image_url": None,
+                "id": str(agent_id), "name": "[삭제됨]",
+                "provider": "", "model_id": "", "elo_rating": 0, "image_url": None,
             }
         return {
             "id": str(a.id),
@@ -274,9 +283,10 @@ class DebateMatchService:
         from app.core.config import settings as _s
 
         # 라운드 기준 컷오프: COUNT(*)는 A/B 발언을 각각 세므로, MAX(turn_number)로 라운드 수 판단
-        completed_rounds = (
-            await self.db.execute(select(func.max(DebateTurnLog.turn_number)).where(DebateTurnLog.match_id == match.id))
-        ).scalar() or 0
+        completed_rounds = (await self.db.execute(
+            select(func.max(DebateTurnLog.turn_number))
+            .where(DebateTurnLog.match_id == match.id)
+        )).scalar() or 0
         if completed_rounds > _s.debate_prediction_cutoff_turns:
             raise ValueError(f"투표 시간이 지났습니다 ({_s.debate_prediction_cutoff_turns}턴 이후 불가)")
 
@@ -294,10 +304,10 @@ class DebateMatchService:
         self.db.add(pred)
         try:
             await self.db.commit()
-        except IntegrityError as err:
+        except IntegrityError:
             # 동시 요청으로 인한 중복 삽입 방지
             await self.db.rollback()
-            raise ValueError("이미 예측에 참여했습니다") from err
+            raise ValueError("이미 예측에 참여했습니다")
         return {"ok": True, "prediction": prediction}
 
     async def get_prediction_stats(self, match_id: str, user_id: uuid.UUID) -> dict:
@@ -331,7 +341,9 @@ class DebateMatchService:
             "is_correct": my_pred.is_correct if my_pred else None,
         }
 
-    async def resolve_predictions(self, match_id: str, winner_id: str | None, agent_a_id: str, agent_b_id: str) -> None:
+    async def resolve_predictions(
+        self, match_id: str, winner_id: str | None, agent_a_id: str, agent_b_id: str
+    ) -> None:
         """판정 후 is_correct 업데이트."""
         from app.models.debate_match import DebateMatchPrediction
 
@@ -355,7 +367,6 @@ class DebateMatchService:
         async with async_session() as notify_db:
             try:
                 from app.services.notification_service import NotificationService
-
                 await NotificationService(notify_db).notify_prediction_result(match_id)
                 await notify_db.commit()
             except Exception:
@@ -372,7 +383,6 @@ class DebateMatchService:
         if match.summary_report is None:
             # summary 기능이 비활성화됐거나 생성 실패 시 unavailable 반환
             from app.core.config import settings as _s
-
             if not _s.debate_summary_enabled:
                 return {"status": "unavailable"}
             return {"status": "generating"}
@@ -402,7 +412,9 @@ class DebateMatchService:
         """is_featured=True, featured_at DESC. 테스트 매치 제외."""
         featured_cond = (DebateMatch.is_featured == True) & (DebateMatch.is_test.is_(False))  # noqa: E712
 
-        total_result = await self.db.execute(select(func.count(DebateMatch.id)).where(featured_cond))
+        total_result = await self.db.execute(
+            select(func.count(DebateMatch.id)).where(featured_cond)
+        )
         total = total_result.scalar() or 0
 
         q = (
@@ -414,7 +426,12 @@ class DebateMatchService:
         )
         rows = (await self.db.execute(q)).all()
 
-        agent_ids = {id_ for match, _ in rows for id_ in (match.agent_a_id, match.agent_b_id) if id_ is not None}
+        agent_ids = {
+            id_
+            for match, _ in rows
+            for id_ in (match.agent_a_id, match.agent_b_id)
+            if id_ is not None
+        }
         agents_map: dict = {}
         if agent_ids:
             res = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(agent_ids)))
@@ -424,24 +441,22 @@ class DebateMatchService:
         for match, topic_title in rows:
             agent_a = self._agent_from_map(agents_map, match.agent_a_id)
             agent_b = self._agent_from_map(agents_map, match.agent_b_id)
-            items.append(
-                {
-                    "id": str(match.id),
-                    "topic_id": str(match.topic_id),
-                    "topic_title": topic_title,
-                    "agent_a": agent_a,
-                    "agent_b": agent_b,
-                    "status": match.status,
-                    "winner_id": str(match.winner_id) if match.winner_id else None,
-                    "score_a": match.score_a,
-                    "score_b": match.score_b,
-                    "is_featured": match.is_featured,
-                    "featured_at": match.featured_at,
-                    "started_at": match.started_at,
-                    "finished_at": match.finished_at,
-                    "created_at": match.created_at,
-                }
-            )
+            items.append({
+                "id": str(match.id),
+                "topic_id": str(match.topic_id),
+                "topic_title": topic_title,
+                "agent_a": agent_a,
+                "agent_b": agent_b,
+                "status": match.status,
+                "winner_id": str(match.winner_id) if match.winner_id else None,
+                "score_a": match.score_a,
+                "score_b": match.score_b,
+                "is_featured": match.is_featured,
+                "featured_at": match.featured_at,
+                "started_at": match.started_at,
+                "finished_at": match.finished_at,
+                "created_at": match.created_at,
+            })
         return items, total
 
 
@@ -542,7 +557,9 @@ class DebateSummaryService:
 
         # 턴 로그 조회
         turns_res = await self.db.execute(
-            select(DebateTurnLog).where(DebateTurnLog.match_id == match.id).order_by(DebateTurnLog.turn_number)
+            select(DebateTurnLog)
+            .where(DebateTurnLog.match_id == match.id)
+            .order_by(DebateTurnLog.turn_number)
         )
         turns = list(turns_res.scalars().all())
         if not turns:
@@ -604,16 +621,14 @@ class DebateSummaryService:
             if agent_a_obj is not None and (input_tokens > 0 or output_tokens > 0):
                 input_cost = calculate_token_cost(input_tokens, llm_model.input_cost_per_1m)
                 output_cost = calculate_token_cost(output_tokens, llm_model.output_cost_per_1m)
-                self.db.add(
-                    TokenUsageLog(
-                        user_id=agent_a_obj.owner_id,
-                        session_id=None,
-                        llm_model_id=llm_model.id,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        cost=input_cost + output_cost,
-                    )
-                )
+                self.db.add(TokenUsageLog(
+                    user_id=agent_a_obj.owner_id,
+                    session_id=None,
+                    llm_model_id=llm_model.id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost=input_cost + output_cost,
+                ))
 
             summary_report = {
                 "agent_a_arguments": parsed.get("agent_a_arguments", []),
@@ -628,7 +643,9 @@ class DebateSummaryService:
             }
 
             await self.db.execute(
-                sa_update(DebateMatch).where(DebateMatch.id == match.id).values(summary_report=summary_report)
+                sa_update(DebateMatch)
+                .where(DebateMatch.id == match.id)
+                .values(summary_report=summary_report)
             )
             await self.db.commit()
             logger.info("Summary generated for match %s", match_id)

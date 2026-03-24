@@ -11,30 +11,21 @@ debate_topics에 스케줄 컬럼 추가.
 - status CHECK에 'scheduled' 추가
 """
 
-from collections.abc import Sequence
-
+from typing import Sequence, Union
+from alembic import op
 import sqlalchemy as sa
 
-from alembic import op
-
 revision: str = "n4i5j6k7l8m9"
-down_revision: str | None = "m3h4i5j6k7l8"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "m3h4i5j6k7l8"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     op.add_column("debate_topics", sa.Column("scheduled_start_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("debate_topics", sa.Column("scheduled_end_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column(
-        "debate_topics", sa.Column("is_admin_topic", sa.Boolean(), nullable=False, server_default=sa.text("false"))
-    )
-    op.create_index(
-        "idx_debate_topics_schedule",
-        "debate_topics",
-        ["scheduled_end_at"],
-        postgresql_where=sa.text("scheduled_end_at IS NOT NULL"),
-    )
+    op.add_column("debate_topics", sa.Column("is_admin_topic", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+    op.create_index("idx_debate_topics_schedule", "debate_topics", ["scheduled_end_at"], postgresql_where=sa.text("scheduled_end_at IS NOT NULL"))
 
     # status CHECK에 'scheduled' 추가
     op.execute("ALTER TABLE debate_topics DROP CONSTRAINT IF EXISTS ck_debate_topics_status")

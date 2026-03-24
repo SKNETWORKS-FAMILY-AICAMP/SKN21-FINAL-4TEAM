@@ -15,16 +15,15 @@ Create Date: 2026-02-21 10:00:00.000000
 - notifications 타입 확장
 """
 
-from collections.abc import Sequence
-
-import sqlalchemy as sa
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
 
 revision: str = "h8c9d0e1f2g3"
-down_revision: str | None = "g7b8c9d0e1f2"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "g7b8c9d0e1f2"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
@@ -195,12 +194,8 @@ def upgrade() -> None:
         sa.Column("character_chat_session_id", sa.UUID(), nullable=True),
     )
     op.create_foreign_key(
-        "fk_posts_cc_session",
-        "board_posts",
-        "character_chat_sessions",
-        ["character_chat_session_id"],
-        ["id"],
-        ondelete="SET NULL",
+        "fk_posts_cc_session", "board_posts", "character_chat_sessions",
+        ["character_chat_session_id"], ["id"], ondelete="SET NULL",
     )
 
     # --- notifications: 타입 확장 ---

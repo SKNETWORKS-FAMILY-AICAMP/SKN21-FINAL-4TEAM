@@ -181,34 +181,27 @@ class TestWSConnectionManager:
         async def simulate_tool_then_response():
             await asyncio.sleep(0.05)
             # 에이전트가 tool_request 전송
-            await manager.handle_message(
-                agent_id,
-                {
-                    "type": "tool_request",
-                    "match_id": str(match_id),
-                    "turn_number": 1,
-                    "tool_name": "turn_info",
-                    "tool_input": "",
-                },
-            )
+            await manager.handle_message(agent_id, {
+                "type": "tool_request",
+                "match_id": str(match_id),
+                "turn_number": 1,
+                "tool_name": "turn_info",
+                "tool_input": "",
+            })
             await asyncio.sleep(0.05)
             # 에이전트가 turn_response 전송
-            await manager.handle_message(
-                agent_id,
-                {
-                    "type": "turn_response",
-                    "match_id": str(match_id),
-                    "action": "argue",
-                    "claim": "Claim after tool use",
-                    "evidence": None,
-                },
-            )
+            await manager.handle_message(agent_id, {
+                "type": "turn_response",
+                "match_id": str(match_id),
+                "action": "argue",
+                "claim": "Claim after tool use",
+                "evidence": None,
+            })
 
         task = asyncio.create_task(simulate_tool_then_response())
         result = await asyncio.wait_for(
-            manager.request_turn(
-                match_id, agent_id, request, tool_executor=DebateToolExecutor(), tool_context=tool_ctx
-            ),
+            manager.request_turn(match_id, agent_id, request,
+                                 tool_executor=DebateToolExecutor(), tool_context=tool_ctx),
             timeout=3.0,
         )
         await task
@@ -234,27 +227,21 @@ class TestWSConnectionManager:
 
         async def simulate_tool_then_response():
             await asyncio.sleep(0.05)
-            await manager.handle_message(
-                agent_id,
-                {
-                    "type": "tool_request",
-                    "match_id": str(match_id),
-                    "turn_number": 1,
-                    "tool_name": "calculator",
-                    "tool_input": "1+1",
-                },
-            )
+            await manager.handle_message(agent_id, {
+                "type": "tool_request",
+                "match_id": str(match_id),
+                "turn_number": 1,
+                "tool_name": "calculator",
+                "tool_input": "1+1",
+            })
             await asyncio.sleep(0.05)
-            await manager.handle_message(
-                agent_id,
-                {
-                    "type": "turn_response",
-                    "match_id": str(match_id),
-                    "action": "argue",
-                    "claim": "No tool needed",
-                    "evidence": None,
-                },
-            )
+            await manager.handle_message(agent_id, {
+                "type": "turn_response",
+                "match_id": str(match_id),
+                "action": "argue",
+                "claim": "No tool needed",
+                "evidence": None,
+            })
 
         task = asyncio.create_task(simulate_tool_then_response())
         result = await asyncio.wait_for(
@@ -265,7 +252,10 @@ class TestWSConnectionManager:
 
         assert isinstance(result, WSTurnResponse)
         # tool_result에 error가 설정되어 전송됐는지 확인
-        tool_result_calls = [call for call in ws.send_json.call_args_list if call.args[0].get("type") == "tool_result"]
+        tool_result_calls = [
+            call for call in ws.send_json.call_args_list
+            if call.args[0].get("type") == "tool_result"
+        ]
         assert len(tool_result_calls) == 1
         assert tool_result_calls[0].args[0]["error"] is not None
 

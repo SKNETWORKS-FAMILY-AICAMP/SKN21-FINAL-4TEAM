@@ -91,7 +91,6 @@ class UsageService:
         hourly_total = result.scalar() or 0
         if hourly_total >= BURST_TOKENS_PER_HOUR_THRESHOLD:
             from app.core.observability import capture_exception
-
             msg = (
                 f"Token burst detected: user={user_id} used {hourly_total:,} tokens in the last hour "
                 f"(threshold={BURST_TOKENS_PER_HOUR_THRESHOLD:,})"

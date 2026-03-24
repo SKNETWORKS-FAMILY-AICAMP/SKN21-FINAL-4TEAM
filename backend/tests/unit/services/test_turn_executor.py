@@ -4,6 +4,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.turn_executor import TurnExecutor

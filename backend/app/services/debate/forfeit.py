@@ -109,9 +109,7 @@ class ForfeitHandler:
         from app.services.debate.promotion_service import DebatePromotionService
 
         new_a, new_b = calculate_elo(
-            agent_a.elo_rating,
-            agent_b.elo_rating,
-            elo_result,
+            agent_a.elo_rating, agent_b.elo_rating, elo_result,
             score_diff=settings.debate_elo_forfeit_score_diff,
         )
 
@@ -124,13 +122,7 @@ class ForfeitHandler:
 
         if match.season_id:
             await _update_season_elo(
-                self.db,
-                match,
-                agent_a,
-                agent_b,
-                elo_result,
-                result_a,
-                result_b,
+                self.db, match, agent_a, agent_b, elo_result, result_a, result_b,
                 score_diff=settings.debate_elo_forfeit_score_diff,
             )
 
@@ -179,31 +171,20 @@ class ForfeitHandler:
         version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
         _, __, series_events = await self.settle(
-            match,
-            agent_a_obj,
-            agent_b_obj,
-            elo_result,
-            result_a,
-            result_b,
-            version_a_id,
-            version_b_id,
+            match, agent_a_obj, agent_b_obj, elo_result, result_a, result_b,
+            version_a_id, version_b_id,
         )
 
         await self.db.commit()
         for se in series_events:
             await publish_event(str(match.id), "series_update", se)
-        await publish_event(
-            str(match.id),
-            "forfeit",
-            {
-                "match_id": str(match.id),
-                "reason": f"Agent {loser.name} did not connect in time",
-                "winner_id": str(winner.id),
-            },
-        )
+        await publish_event(str(match.id), "forfeit", {
+            "match_id": str(match.id),
+            "reason": f"Agent {loser.name} did not connect in time",
+            "winner_id": str(winner.id),
+        })
 
         from app.core.config import settings as _settings
-
         if _settings.community_post_enabled:
             import asyncio as _asyncio
 
@@ -212,8 +193,7 @@ class ForfeitHandler:
             community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
             community_task.add_done_callback(
                 lambda t: logger.warning("community_post_task failed (disconnect): %s", t.exception())
-                if not t.cancelled() and t.exception()
-                else None
+                if not t.cancelled() and t.exception() else None
             )
 
         logger.info("Match %s forfeit: agent %s did not connect", match.id, loser.name)
@@ -259,14 +239,8 @@ class ForfeitHandler:
         version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
         new_a, new_b, series_events = await self.settle(
-            match,
-            agent_a,
-            agent_b,
-            elo_result,
-            result_a,
-            result_b,
-            version_a_id,
-            version_b_id,
+            match, agent_a, agent_b, elo_result, result_a, result_b,
+            version_a_id, version_b_id,
         )
 
         await self.db.execute(
@@ -278,33 +252,25 @@ class ForfeitHandler:
 
         for se in series_events:
             await publish_event(str(match.id), "series_update", se)
-        await publish_event(
-            str(match.id),
-            "forfeit",
-            {
-                "forfeited_speaker": forfeited_speaker,
-                "winner_id": str(forfeit_winner.id),
-                "loser_id": str(forfeit_loser.id),
-                "reason": "Turn execution failed after all retries",
-            },
-        )
+        await publish_event(str(match.id), "forfeit", {
+            "forfeited_speaker": forfeited_speaker,
+            "winner_id": str(forfeit_winner.id),
+            "loser_id": str(forfeit_loser.id),
+            "reason": "Turn execution failed after all retries",
+        })
 
-        await publish_event(
-            str(match.id),
-            "finished",
-            {
-                "winner_id": str(forfeit_winner.id),
-                "score_a": score_a,
-                "score_b": score_b,
-                "elo_a_before": elo_a_before,
-                "elo_a_after": new_a,
-                "elo_b_before": elo_b_before,
-                "elo_b_after": new_b,
-                # 하위 호환
-                "elo_a": new_a,
-                "elo_b": new_b,
-            },
-        )
+        await publish_event(str(match.id), "finished", {
+            "winner_id": str(forfeit_winner.id),
+            "score_a": score_a,
+            "score_b": score_b,
+            "elo_a_before": elo_a_before,
+            "elo_a_after": new_a,
+            "elo_b_before": elo_b_before,
+            "elo_b_after": new_b,
+            # 하위 호환
+            "elo_a": new_a,
+            "elo_b": new_b,
+        })
 
         match_service = DebateMatchService(self.db)
         await match_service.resolve_predictions(
@@ -315,7 +281,6 @@ class ForfeitHandler:
         )
 
         from app.core.config import settings as _settings
-
         if _settings.community_post_enabled:
             import asyncio as _asyncio
 
@@ -324,13 +289,10 @@ class ForfeitHandler:
             community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
             community_task.add_done_callback(
                 lambda t: logger.warning("community_post_task failed (retry_exhaustion): %s", t.exception())
-                if not t.cancelled() and t.exception()
-                else None
+                if not t.cancelled() and t.exception() else None
             )
 
         logger.info(
             "Match %s ended by forfeit. %s failed after retries, winner: %s",
-            match.id,
-            forfeit_loser.name,
-            forfeit_winner.name,
+            match.id, forfeit_loser.name, forfeit_winner.name,
         )

@@ -47,21 +47,6 @@ ignore = [
     "E712",   # == True/False 비교 — SQLAlchemy ORM 필터에서 필수
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [
-    "N801",   # 한글 포함 테스트 클래스명
-    "N802",   # 한글 포함 테스트 함수명
-    "N806",   # 테스트 내 대문자 상수
-    "F841",   # 테스트 내 미사용 지역 변수
-    "B017",   # pytest.raises(Exception) — 테스트에서 허용
-    "E402",   # conftest.py 환경 변수 설정 후 import
-    "SIM108", # 테스트 내 삼항 연산자 강제 금지
-]
-"alembic/**/*.py" = ["E501", "UP007", "UP035", "I001"]
-"seed_test.py" = ["E501"]
-"app/services/debate/*.py" = ["E501"]
-"app/core/config.py" = ["E501"]
-
 [tool.ruff.format]
 quote-style = "double"
 

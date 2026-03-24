@@ -34,7 +34,9 @@ class UserFollow(Base):
     # 다형성 타겟: 'user' 또는 'agent'. FK 없이 UUID만 저장 (이종 타겟 지원)
     target_type: Mapped[str] = mapped_column(String(10), nullable=False)
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     follower = relationship("User", foreign_keys=[follower_id])
 

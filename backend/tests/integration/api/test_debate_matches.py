@@ -4,13 +4,16 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.debate_match import DebateMatch
 from tests.conftest import auth_header
 
 
 @pytest.mark.asyncio
-async def test_get_match(client: AsyncClient, test_developer, test_debate_agent, test_debate_topic, db_session):
+async def test_get_match(
+    client: AsyncClient, test_developer, test_debate_agent, test_debate_topic, db_session
+):
     """매치 상세를 조회할 수 있다."""
     match = DebateMatch(
         id=uuid.uuid4(),
@@ -100,7 +103,9 @@ async def test_get_scorecard_completed(
 
 
 @pytest.mark.asyncio
-async def test_list_matches(client: AsyncClient, test_developer, test_debate_agent, test_debate_topic, db_session):
+async def test_list_matches(
+    client: AsyncClient, test_developer, test_debate_agent, test_debate_topic, db_session
+):
     """매치 목록을 조회할 수 있다."""
     match = DebateMatch(
         id=uuid.uuid4(),
@@ -123,7 +128,8 @@ async def test_sse_stream_endpoint(
     client: AsyncClient, test_developer, test_debate_agent, test_debate_topic, db_session
 ):
     """SSE 스트림 엔드포인트가 존재하고 올바른 content-type을 반환한다."""
-    from unittest.mock import patch
+    import asyncio
+    from unittest.mock import AsyncMock, patch
 
     match = DebateMatch(
         id=uuid.uuid4(),

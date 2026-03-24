@@ -32,7 +32,9 @@ class FollowService:
         if target_type == "user":
             if target_id == follower_id:
                 raise ValueError("self_follow")
-            exists = await self.db.scalar(select(func.count()).select_from(User).where(User.id == target_id))
+            exists = await self.db.scalar(
+                select(func.count()).select_from(User).where(User.id == target_id)
+            )
             if not exists:
                 raise ValueError("target_not_found")
         elif target_type == "agent":
@@ -83,7 +85,9 @@ class FollowService:
         if target_type is not None:
             base_where.append(UserFollow.target_type == target_type)
 
-        total = await self.db.scalar(select(func.count()).select_from(UserFollow).where(and_(*base_where)))
+        total = await self.db.scalar(
+            select(func.count()).select_from(UserFollow).where(and_(*base_where))
+        )
         result = await self.db.execute(
             select(UserFollow)
             .where(and_(*base_where))
@@ -96,9 +100,7 @@ class FollowService:
     async def get_follower_count(self, target_type: str, target_id: UUID) -> int:
         """특정 대상의 팔로워 수."""
         count = await self.db.scalar(
-            select(func.count())
-            .select_from(UserFollow)
-            .where(
+            select(func.count()).select_from(UserFollow).where(
                 and_(
                     UserFollow.target_type == target_type,
                     UserFollow.target_id == target_id,
@@ -110,9 +112,7 @@ class FollowService:
     async def is_following(self, follower_id: UUID, target_type: str, target_id: UUID) -> bool:
         """팔로우 여부 확인."""
         count = await self.db.scalar(
-            select(func.count())
-            .select_from(UserFollow)
-            .where(
+            select(func.count()).select_from(UserFollow).where(
                 and_(
                     UserFollow.follower_id == follower_id,
                     UserFollow.target_type == target_type,

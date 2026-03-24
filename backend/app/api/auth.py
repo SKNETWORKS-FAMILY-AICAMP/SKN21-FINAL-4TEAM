@@ -51,7 +51,6 @@ def _clear_auth_cookie(response: Response) -> None:
     """
     response.delete_cookie(key="access_token", samesite="lax")
 
-
 router = APIRouter()
 
 

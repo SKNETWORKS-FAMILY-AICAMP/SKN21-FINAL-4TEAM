@@ -74,7 +74,9 @@ class DebateAgent(Base):
     # 이름 변경 제한 (7일 1회)
     name_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 시스템 프롬프트 공개 여부 (소유자 결정)
-    is_system_prompt_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_system_prompt_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # 플랫폼 크레딧으로 API 비용 지불 (BYOK API 키 불필요)
     use_platform_credits: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     tier: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Iron")
@@ -86,7 +88,9 @@ class DebateAgent(Base):
         nullable=True,
     )
     is_profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -98,10 +102,8 @@ class DebateAgent(Base):
     owner = relationship("User", foreign_keys=[owner_id])
     template = relationship("DebateAgentTemplate", foreign_keys=[template_id])
     versions = relationship(
-        "DebateAgentVersion",
-        back_populates="agent",
-        cascade="all, delete-orphan",
-        order_by="DebateAgentVersion.version_number.desc()",
+        "DebateAgentVersion", back_populates="agent", cascade="all, delete-orphan",
+        order_by="DebateAgentVersion.version_number.desc()"
     )
     community_posts = relationship("CommunityPost", back_populates="agent")
 
@@ -114,7 +116,6 @@ class DebateAgent(Base):
 
 
 # --- DebateAgentVersion ---
-
 
 class DebateAgentVersion(Base):
     """에이전트 버전 이력 ORM 모델.
@@ -150,14 +151,15 @@ class DebateAgentVersion(Base):
     wins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     # Relationships
     agent = relationship("DebateAgent", back_populates="versions")
 
 
 # --- DebateAgentSeasonStats ---
-
 
 class DebateAgentSeasonStats(Base):
     """에이전트 시즌별 전적 통계 ORM 모델.
@@ -195,7 +197,9 @@ class DebateAgentSeasonStats(Base):
     wins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     losses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()"), onupdate=text("now()")
     )

@@ -50,13 +50,10 @@ async def test_user_3(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient):
-    response = await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "newuser",
-            "password": "securepass123",
-        },
-    )
+    response = await client.post("/api/auth/register", json={
+        "nickname": "newuser",
+        "password": "securepass123",
+    })
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
@@ -65,65 +62,47 @@ async def test_register_success(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_register_with_email(client: AsyncClient):
-    response = await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "emailuser",
-            "password": "securepass123",
-            "email": "test@example.com",
-        },
-    )
+    response = await client.post("/api/auth/register", json={
+        "nickname": "emailuser",
+        "password": "securepass123",
+        "email": "test@example.com",
+    })
     assert response.status_code == 200
     assert "access_token" in response.json()
 
 
 @pytest.mark.asyncio
 async def test_register_duplicate_nickname(client: AsyncClient):
-    await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "dupuser",
-            "password": "password1A",
-        },
-    )
-    response = await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "dupuser",
-            "password": "password2B",
-        },
-    )
+    await client.post("/api/auth/register", json={
+        "nickname": "dupuser",
+        "password": "password1A",
+    })
+    response = await client.post("/api/auth/register", json={
+        "nickname": "dupuser",
+        "password": "password2B",
+    })
     assert response.status_code == 409
     assert "Nickname already taken" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
 async def test_register_missing_password(client: AsyncClient):
-    response = await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "nopassuser",
-        },
-    )
+    response = await client.post("/api/auth/register", json={
+        "nickname": "nopassuser",
+    })
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient):
-    await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "loginuser",
-            "password": "mypassword1",
-        },
-    )
-    response = await client.post(
-        "/api/auth/login",
-        json={
-            "nickname": "loginuser",
-            "password": "mypassword1",
-        },
-    )
+    await client.post("/api/auth/register", json={
+        "nickname": "loginuser",
+        "password": "mypassword1",
+    })
+    response = await client.post("/api/auth/login", json={
+        "nickname": "loginuser",
+        "password": "mypassword1",
+    })
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
@@ -132,33 +111,24 @@ async def test_login_success(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient):
-    await client.post(
-        "/api/auth/register",
-        json={
-            "nickname": "wrongpwuser",
-            "password": "correct1A",
-        },
-    )
-    response = await client.post(
-        "/api/auth/login",
-        json={
-            "nickname": "wrongpwuser",
-            "password": "wrong",
-        },
-    )
+    await client.post("/api/auth/register", json={
+        "nickname": "wrongpwuser",
+        "password": "correct1A",
+    })
+    response = await client.post("/api/auth/login", json={
+        "nickname": "wrongpwuser",
+        "password": "wrong",
+    })
     assert response.status_code == 401
     assert "Invalid credentials" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
 async def test_login_nonexistent_user(client: AsyncClient):
-    response = await client.post(
-        "/api/auth/login",
-        json={
-            "nickname": "ghost",
-            "password": "noexist",
-        },
-    )
+    response = await client.post("/api/auth/login", json={
+        "nickname": "ghost",
+        "password": "noexist",
+    })
     assert response.status_code == 401
 
 

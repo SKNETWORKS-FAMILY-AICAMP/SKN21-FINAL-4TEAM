@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app.services.debate.helpers import (
     validate_response_schema,
 )
@@ -10,15 +12,13 @@ from app.services.debate.helpers import (
 class TestResponseSchemaValidation:
     def test_valid_response(self):
         """유효한 JSON 응답을 파싱한다."""
-        response = json.dumps(
-            {
-                "action": "argue",
-                "claim": "AI will transform education.",
-                "evidence": "Studies show 30% improvement.",
-                "tool_used": None,
-                "tool_result": None,
-            }
-        )
+        response = json.dumps({
+            "action": "argue",
+            "claim": "AI will transform education.",
+            "evidence": "Studies show 30% improvement.",
+            "tool_used": None,
+            "tool_result": None,
+        })
         result = validate_response_schema(response)
         assert result is not None
         assert result["action"] == "argue"
@@ -67,23 +67,18 @@ class TestLocalAgentRouting:
             assert result is not None
             assert result["action"] == action
 
-
 class TestResolveApiKey:
     def test_local_provider_returns_empty_string(self):
-        from unittest.mock import MagicMock
-
         from app.services.debate.engine import _resolve_api_key
-
+        from unittest.mock import MagicMock
         agent = MagicMock()
         agent.provider = "local"
         result = _resolve_api_key(agent)
         assert result == ""
 
     def test_platform_credits_openai(self):
-        from unittest.mock import MagicMock, patch
-
         from app.services.debate.engine import _resolve_api_key
-
+        from unittest.mock import MagicMock, patch
         agent = MagicMock()
         agent.provider = "openai"
         agent.use_platform_credits = True
@@ -93,10 +88,8 @@ class TestResolveApiKey:
             assert result == "test_key"
 
     def test_platform_credits_anthropic(self):
-        from unittest.mock import MagicMock, patch
-
         from app.services.debate.engine import _resolve_api_key
-
+        from unittest.mock import MagicMock, patch
         agent = MagicMock()
         agent.provider = "anthropic"
         agent.use_platform_credits = True
@@ -106,10 +99,8 @@ class TestResolveApiKey:
             assert result == "test_key"
 
     def test_byok_returns_decrypted_key(self):
-        from unittest.mock import MagicMock, patch
-
         from app.services.debate.engine import _resolve_api_key
-
+        from unittest.mock import MagicMock, patch
         agent = MagicMock()
         agent.provider = "openai"
         agent.use_platform_credits = False
@@ -120,10 +111,8 @@ class TestResolveApiKey:
             assert result == "sk-user-key"
 
     def test_force_platform(self):
-        from unittest.mock import MagicMock, patch
-
         from app.services.debate.engine import _resolve_api_key
-
+        from unittest.mock import MagicMock, patch
         agent = MagicMock()
         agent.provider = "anthropic"
         agent.use_platform_credits = False
@@ -140,15 +129,13 @@ class TestPredictionCutoffLogic:
     def test_cutoff_configuration(self):
         """설정된 컷오프 턴 수를 확인한다."""
         from app.core.config import settings
-
         assert settings.debate_prediction_cutoff_turns == 2
 
     def test_prediction_service_has_create_prediction_method(self):
         """DebateMatchService가 create_prediction 메서드를 갖는다."""
         from app.services.debate.match_service import DebateMatchService
-
-        assert hasattr(DebateMatchService, "create_prediction")
-        assert callable(DebateMatchService.create_prediction)
+        assert hasattr(DebateMatchService, 'create_prediction')
+        assert callable(getattr(DebateMatchService, 'create_prediction'))
 
 
 class TestTurnLoopUnification:
@@ -157,21 +144,17 @@ class TestTurnLoopUnification:
     def test_run_turn_loop_exists(self):
         """_run_turn_loop 함수가 존재한다."""
         from app.services.debate.engine import _run_turn_loop
-
         assert callable(_run_turn_loop)
 
     def test_optimized_loops_removed(self):
         """이전 개별 루프 함수들이 제거됐다."""
         import app.services.debate.engine as mod
-
         assert not hasattr(mod, "_run_optimized_turn_loop")
         assert not hasattr(mod, "_run_sequential_turn_loop")
 
     def test_run_turn_loop_accepts_parallel_flag(self):
         """_run_turn_loop이 parallel 파라미터를 받는다."""
         import inspect
-
         from app.services.debate.engine import _run_turn_loop
-
         sig = inspect.signature(_run_turn_loop)
         assert "parallel" in sig.parameters

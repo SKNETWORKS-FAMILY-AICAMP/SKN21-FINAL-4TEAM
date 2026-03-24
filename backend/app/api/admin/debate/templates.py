@@ -52,7 +52,9 @@ async def create_template(
     try:
         template = await service.create_template(data)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     return AgentTemplateAdminResponse.model_validate(template)
 
 

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
@@ -100,7 +100,7 @@ async def get_hot_topics(
         return [HotTopicItem(**item) for item in data]
 
     # in_progress 매치 수 기준 상위 3개 토픽 집계
-    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(DebateTopic.id, DebateTopic.title, func.count(DebateMatch.id).label("match_count"))
         .join(DebateMatch, DebateMatch.topic_id == DebateTopic.id)

@@ -1,17 +1,16 @@
 """테스트용 시드 스크립트: 유저 + LLM 모델 + 페르소나 생성."""
-
 import asyncio
-from datetime import UTC
+import uuid
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from app.core.auth import create_access_token, get_password_hash
 from app.core.config import settings
+from app.core.auth import get_password_hash, create_access_token
+from app.models.user import User
 from app.models.llm_model import LLMModel
 from app.models.persona import Persona
-from app.models.user import User
 
 
 async def seed():
@@ -20,7 +19,9 @@ async def seed():
 
     async with async_session() as db:
         # ── 1. 테스트 유저 생성 ──
-        existing_user = (await db.execute(select(User).where(User.nickname == "tester"))).scalar_one_or_none()
+        existing_user = (await db.execute(
+            select(User).where(User.nickname == "tester")
+        )).scalar_one_or_none()
 
         if existing_user:
             user = existing_user
@@ -33,9 +34,8 @@ async def seed():
                 age_group="adult_verified",
             )
             # adult_verified_at 설정
-            from datetime import datetime
-
-            user.adult_verified_at = datetime.now(UTC)
+            from datetime import datetime, timezone
+            user.adult_verified_at = datetime.now(timezone.utc)
             db.add(user)
             await db.commit()
             await db.refresh(user)
@@ -67,14 +67,12 @@ async def seed():
 
         llm_model = None
         for spec in models_spec:
-            existing_model = (
-                await db.execute(
-                    select(LLMModel).where(
-                        LLMModel.provider == spec["provider"],
-                        LLMModel.model_id == spec["model_id"],
-                    )
+            existing_model = (await db.execute(
+                select(LLMModel).where(
+                    LLMModel.provider == spec["provider"],
+                    LLMModel.model_id == spec["model_id"],
                 )
-            ).scalar_one_or_none()
+            )).scalar_one_or_none()
 
             if existing_model:
                 # 기존 모델의 석 단가가 다르면 업데이트
@@ -85,9 +83,7 @@ async def seed():
                     existing_model.output_cost_per_1m = spec["output_cost_per_1m"]
                     await db.commit()
                     await db.refresh(existing_model)
-                    print(
-                        f"[OK] 모델 업데이트: {existing_model.display_name} (tier={spec['tier']}, {spec['credit_per_1k_tokens']}석/1K)"
-                    )
+                    print(f"[OK] 모델 업데이트: {existing_model.display_name} (tier={spec['tier']}, {spec['credit_per_1k_tokens']}석/1K)")
                 else:
                     print(f"[OK] 기존 모델 사용: {existing_model.display_name} ({existing_model.id})")
                 if llm_model is None:
@@ -108,16 +104,14 @@ async def seed():
                 db.add(new_model)
                 await db.commit()
                 await db.refresh(new_model)
-                print(
-                    f"[OK] 모델 등록: {new_model.display_name} (tier={spec['tier']}, {spec['credit_per_1k_tokens']}석/1K)"
-                )
+                print(f"[OK] 모델 등록: {new_model.display_name} (tier={spec['tier']}, {spec['credit_per_1k_tokens']}석/1K)")
                 if llm_model is None:
                     llm_model = new_model
 
         # ── 3. 테스트 페르소나 생성 ──
-        existing_persona = (
-            await db.execute(select(Persona).where(Persona.persona_key == "sakura_reviewer", Persona.version == "v1.0"))
-        ).scalar_one_or_none()
+        existing_persona = (await db.execute(
+            select(Persona).where(Persona.persona_key == "sakura_reviewer", Persona.version == "v1.0")
+        )).scalar_one_or_none()
 
         if existing_persona:
             persona = existing_persona
@@ -160,12 +154,12 @@ async def seed():
         print("\n" + "=" * 60)
         print("테스트 준비 완료!")
         print("=" * 60)
-        print("  닉네임: tester")
-        print("  비밀번호: Test1234")
-        print("  역할: admin (성인인증 완료)")
-        print("  LLM 모델: GPT-4o Mini (1석/1K) + GPT-4o (10석/1K)")
+        print(f"  닉네임: tester")
+        print(f"  비밀번호: Test1234")
+        print(f"  역할: admin (성인인증 완료)")
+        print(f"  LLM 모델: GPT-4o Mini (1석/1K) + GPT-4o (10석/1K)")
         print(f"  페르소나: 사쿠라 ({persona.id})")
-        print("\n  JWT 토큰 (테스트용):")
+        print(f"\n  JWT 토큰 (테스트용):")
         print(f"  {token}")
         print("=" * 60)
         print("\n프론트엔드에서 로그인: tester / Test1234")

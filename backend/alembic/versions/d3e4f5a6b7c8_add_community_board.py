@@ -8,16 +8,15 @@ Create Date: 2026-02-15 14:00:00.000000
 boards, board_posts, board_comments, board_reactions 4개 테이블.
 """
 
-from collections.abc import Sequence
-
-import sqlalchemy as sa
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
 
 revision: str = "d3e4f5a6b7c8"
-down_revision: str | None = "c2d3e4f5a6b7"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "c2d3e4f5a6b7"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

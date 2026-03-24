@@ -1,16 +1,16 @@
 """알림 서비스 단위 테스트."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.notification_service import NotificationService
 
+
 # ──────────────────────────────────────────────
 # 헬퍼
 # ──────────────────────────────────────────────
-
 
 def _make_db():
     """기본 AsyncSession mock."""
@@ -63,7 +63,6 @@ def _counts_result(total: int, unread: int):
 # create()
 # ──────────────────────────────────────────────
 
-
 @pytest.mark.asyncio
 class TestCreate:
     async def test_create_notification(self):
@@ -90,7 +89,6 @@ class TestCreate:
 # ──────────────────────────────────────────────
 # create_bulk()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestCreateBulk:
@@ -125,7 +123,9 @@ class TestCreateBulk:
         svc = NotificationService(db)
 
         # 예외가 전파되지 않아야 한다
-        await svc.create_bulk([{"user_id": uuid.uuid4(), "type": "t", "title": "t", "body": None, "link": None}])
+        await svc.create_bulk([
+            {"user_id": uuid.uuid4(), "type": "t", "title": "t", "body": None, "link": None}
+        ])
 
         db.rollback.assert_called_once()
 
@@ -133,7 +133,6 @@ class TestCreateBulk:
 # ──────────────────────────────────────────────
 # get_list()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestGetList:
@@ -144,12 +143,10 @@ class TestGetList:
 
         db = _make_db()
         # execute 1st call: 집계 쿼리, 2nd call: 목록 쿼리
-        db.execute = AsyncMock(
-            side_effect=[
-                _counts_result(total=3, unread=1),
-                _scalars_result(notifications),
-            ]
-        )
+        db.execute = AsyncMock(side_effect=[
+            _counts_result(total=3, unread=1),
+            _scalars_result(notifications),
+        ])
 
         svc = NotificationService(db)
         items, total, unread_count = await svc.get_list(user_id, offset=0, limit=20)
@@ -164,12 +161,10 @@ class TestGetList:
         unread = [_make_notification(user_id=user_id, is_read=False)]
 
         db = _make_db()
-        db.execute = AsyncMock(
-            side_effect=[
-                _counts_result(total=1, unread=1),
-                _scalars_result(unread),
-            ]
-        )
+        db.execute = AsyncMock(side_effect=[
+            _counts_result(total=1, unread=1),
+            _scalars_result(unread),
+        ])
 
         svc = NotificationService(db)
         items, total, unread_count = await svc.get_list(user_id, offset=0, limit=20, unread_only=True)
@@ -180,12 +175,10 @@ class TestGetList:
     async def test_get_list_empty_returns_zero(self):
         """알림이 없을 때 빈 목록과 0을 반환한다."""
         db = _make_db()
-        db.execute = AsyncMock(
-            side_effect=[
-                _counts_result(total=0, unread=0),
-                _scalars_result([]),
-            ]
-        )
+        db.execute = AsyncMock(side_effect=[
+            _counts_result(total=0, unread=0),
+            _scalars_result([]),
+        ])
 
         svc = NotificationService(db)
         items, total, unread_count = await svc.get_list(uuid.uuid4(), offset=0, limit=20)
@@ -198,7 +191,6 @@ class TestGetList:
 # ──────────────────────────────────────────────
 # get_unread_count()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestGetUnreadCount:
@@ -226,7 +218,6 @@ class TestGetUnreadCount:
 # ──────────────────────────────────────────────
 # mark_read()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestMarkRead:
@@ -269,7 +260,6 @@ class TestMarkRead:
 # ──────────────────────────────────────────────
 # mark_all_read()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestMarkAllRead:

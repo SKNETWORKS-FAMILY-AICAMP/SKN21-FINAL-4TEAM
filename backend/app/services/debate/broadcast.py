@@ -132,10 +132,7 @@ async def publish_queue_event(topic_id: str, agent_id: str, event_type: str, dat
     except Exception:
         logger.error(
             "publish_queue_event 실패 (topic=%s agent=%s event=%s)",
-            topic_id,
-            agent_id,
-            event_type,
-            exc_info=True,
+            topic_id, agent_id, event_type, exc_info=True,
         )
 
 
@@ -166,9 +163,7 @@ async def subscribe_queue(
             yield f"data: {timeout_payload}\n\n"
             logger.warning(
                 "Queue subscribe timeout for topic=%s agent=%s after %ds",
-                topic_id,
-                agent_id,
-                max_wait_seconds,
+                topic_id, agent_id, max_wait_seconds,
             )
     finally:
         await pubsub.unsubscribe(channel)

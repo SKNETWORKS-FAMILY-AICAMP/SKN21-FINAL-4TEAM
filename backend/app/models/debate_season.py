@@ -34,7 +34,9 @@ class DebateSeason(Base):
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="upcoming")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     results = relationship("DebateSeasonResult", back_populates="season", cascade="all, delete-orphan")
 
@@ -47,7 +49,6 @@ class DebateSeason(Base):
 
 
 # --- DebateSeasonResult ---
-
 
 class DebateSeasonResult(Base):
     """시즌 종료 결과 스냅샷 ORM 모델.
@@ -87,7 +88,9 @@ class DebateSeasonResult(Base):
     draws: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     reward_credits: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     season = relationship("DebateSeason", back_populates="results")
     agent = relationship("DebateAgent", foreign_keys=[agent_id])

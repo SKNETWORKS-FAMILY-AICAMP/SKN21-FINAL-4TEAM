@@ -58,13 +58,9 @@ class MatchFinalizer:
 
         # 1. Judge 토큰 usage_batch 추가 (조기 커밋 버그 수정 — 판정 전 커밋하지 않음)
         await _log_orchestrator_usage(
-            self.db,
-            agent_a.owner_id,
-            judgment.get("model_id", ""),
-            judgment["input_tokens"],
-            judgment["output_tokens"],
-            model_cache=model_cache,
-            usage_batch=usage_batch,
+            self.db, agent_a.owner_id, judgment.get("model_id", ""),
+            judgment["input_tokens"], judgment["output_tokens"],
+            model_cache=model_cache, usage_batch=usage_batch,
         )
 
         # 2. ELO 계산
@@ -102,14 +98,7 @@ class MatchFinalizer:
             # 3. 시즌 ELO 갱신
             if match.season_id:
                 await _update_season_elo(
-                    self.db,
-                    match,
-                    agent_a,
-                    agent_b,
-                    elo_result,
-                    result_a,
-                    result_b,
-                    score_diff,
+                    self.db, match, agent_a, agent_b, elo_result, result_a, result_b, score_diff,
                 )
 
             # 4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
@@ -132,30 +121,24 @@ class MatchFinalizer:
                         else:
                             post_protection = 0
                         new_series = await promo_svc.check_and_trigger(
-                            str(agent_obj.id),
-                            int(elo_before),
-                            int(elo_after),
-                            post_tier,
-                            post_protection,
+                            str(agent_obj.id), int(elo_before), int(elo_after), post_tier, post_protection,
                         )
                         if new_series:
-                            series_updates.append(
-                                {
-                                    "id": str(new_series.id),
-                                    "series_id": str(new_series.id),
-                                    "agent_id": str(new_series.agent_id),
-                                    "series_type": new_series.series_type,
-                                    "status": new_series.status,
-                                    "current_wins": 0,
-                                    "current_losses": 0,
-                                    "draw_count": 0,
-                                    "required_wins": new_series.required_wins,
-                                    "from_tier": new_series.from_tier,
-                                    "to_tier": new_series.to_tier,
-                                    "tier_changed": False,
-                                    "new_tier": None,
-                                }
-                            )
+                            series_updates.append({
+                                "id": str(new_series.id),
+                                "series_id": str(new_series.id),
+                                "agent_id": str(new_series.agent_id),
+                                "series_type": new_series.series_type,
+                                "status": new_series.status,
+                                "current_wins": 0,
+                                "current_losses": 0,
+                                "draw_count": 0,
+                                "required_wins": new_series.required_wins,
+                                "from_tier": new_series.from_tier,
+                                "to_tier": new_series.to_tier,
+                                "tier_changed": False,
+                                "new_tier": None,
+                            })
 
         # 5. DB 커밋 + usage_batch 일괄 INSERT — SSE 발행 전 커밋으로 데이터 정합성 보장
         # is_test 매치는 ELO 컬럼 기록 생략 (랭킹에 영향 없도록)
@@ -179,22 +162,18 @@ class MatchFinalizer:
             await publish_event(str(match.id), "series_update", su)
 
         # 6. finished SSE 발행 — 커밋 완료 후 발행하여 새로고침 시에도 DB 결과와 일치
-        await publish_event(
-            str(match.id),
-            "finished",
-            {
-                "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
-                "score_a": judgment["score_a"],
-                "score_b": judgment["score_b"],
-                "elo_a_before": elo_a_before,
-                "elo_a_after": new_a,
-                "elo_b_before": elo_b_before,
-                "elo_b_after": new_b,
-                # 하위 호환
-                "elo_a": new_a,
-                "elo_b": new_b,
-            },
-        )
+        await publish_event(str(match.id), "finished", {
+            "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
+            "score_a": judgment["score_a"],
+            "score_b": judgment["score_b"],
+            "elo_a_before": elo_a_before,
+            "elo_a_after": new_a,
+            "elo_b_before": elo_b_before,
+            "elo_b_after": new_b,
+            # 하위 호환
+            "elo_a": new_a,
+            "elo_b": new_b,
+        })
 
         # 7. 예측투표 정산 — commit 후 독립 단계. 실패해도 후속 단계 진행
         match_service = DebateMatchService(self.db)
@@ -211,7 +190,6 @@ class MatchFinalizer:
         # 8. 토너먼트 라운드 진행 — 실패해도 매치 완료 상태에 영향 없음
         if match.tournament_id:
             from app.services.debate.tournament_service import DebateTournamentService
-
             t_service = DebateTournamentService(self.db)
             try:
                 await t_service.advance_round(str(match.tournament_id))

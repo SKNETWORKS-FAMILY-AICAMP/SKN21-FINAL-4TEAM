@@ -7,17 +7,16 @@ Create Date: 2026-02-19 00:00:00.000000
 LTX-Video 13B 영상 생성 작업 추적 테이블 추가.
 """
 
-from collections.abc import Sequence
+from typing import Sequence, Union
 
+from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
-
 revision: str = "e5f6a7b8c9d0"
-down_revision: str | None = "d4e5f6a7b8c9"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "d4e5f6a7b8c9"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

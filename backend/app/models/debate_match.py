@@ -125,7 +125,9 @@ class DebateMatch(Base):
     # 몰수패/부전패 처리 시 차감된 크레딧 및 오류 사유
     credits_deducted: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     error_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     # Relationships
     topic = relationship("DebateTopic", back_populates="matches")
@@ -134,7 +136,8 @@ class DebateMatch(Base):
     agent_a_version = relationship("DebateAgentVersion", foreign_keys=[agent_a_version_id])
     agent_b_version = relationship("DebateAgentVersion", foreign_keys=[agent_b_version_id])
     turns = relationship(
-        "DebateTurnLog", back_populates="match", cascade="all, delete-orphan", order_by="DebateTurnLog.turn_number"
+        "DebateTurnLog", back_populates="match", cascade="all, delete-orphan",
+        order_by="DebateTurnLog.turn_number"
     )
     community_posts = relationship("CommunityPost", back_populates="match")
 
@@ -151,7 +154,6 @@ class DebateMatch(Base):
 
 
 # --- DebateMatchParticipant ---
-
 
 class DebateMatchParticipant(Base):
     """멀티에이전트 매치 참가자 ORM 모델.
@@ -188,11 +190,12 @@ class DebateMatchParticipant(Base):
     agent = relationship("DebateAgent", foreign_keys=[agent_id])
     version = relationship("DebateAgentVersion", foreign_keys=[version_id])
 
-    __table_args__ = (CheckConstraint("team IN ('A', 'B')", name="ck_debate_match_participants_team"),)
+    __table_args__ = (
+        CheckConstraint("team IN ('A', 'B')", name="ck_debate_match_participants_team"),
+    )
 
 
 # --- DebateMatchPrediction ---
-
 
 class DebateMatchPrediction(Base):
     """사용자 예측투표 ORM 모델.
@@ -223,7 +226,9 @@ class DebateMatchPrediction(Base):
     )
     prediction: Mapped[str] = mapped_column(String(10), nullable=False)
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -235,7 +240,6 @@ class DebateMatchPrediction(Base):
 
 
 # --- DebateMatchQueue ---
-
 
 class DebateMatchQueue(Base):
     """매칭 대기 큐 ORM 모델.
@@ -267,9 +271,13 @@ class DebateMatchQueue(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    is_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_ready: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     # Relationships
     topic = relationship("DebateTopic", back_populates="queue_entries")

@@ -9,10 +9,9 @@ Revises: h8i9j0k1l2m3
 Create Date: 2026-03-04
 """
 
+from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
-from alembic import op
 
 revision = "i9j0k1l2m3n4"
 down_revision = "h8i9j0k1l2m3"
@@ -50,8 +49,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["agent_id"], ["debate_agents.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["season_id"], ["debate_seasons.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["agent_id"], ["debate_agents.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["season_id"], ["debate_seasons.id"], ondelete="CASCADE"
+        ),
         sa.UniqueConstraint("agent_id", "season_id", name="uq_season_stats_agent_season"),
     )
     op.create_index(

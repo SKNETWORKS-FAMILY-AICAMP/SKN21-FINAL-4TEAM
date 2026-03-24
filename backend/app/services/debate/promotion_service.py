@@ -49,7 +49,9 @@ class DebatePromotionService:
         )
         return result.scalar_one_or_none()
 
-    async def get_series_history(self, agent_id: str, limit: int = 20, offset: int = 0) -> list[DebatePromotionSeries]:
+    async def get_series_history(
+        self, agent_id: str, limit: int = 20, offset: int = 0
+    ) -> list[DebatePromotionSeries]:
         """에이전트의 시리즈 이력을 최신순으로 반환.
 
         Args:
@@ -83,15 +85,23 @@ class DebatePromotionService:
         self.db.add(series)
         await self.db.flush()  # ID 확보
 
-        await self.db.execute(update(DebateAgent).where(DebateAgent.id == agent_id).values(active_series_id=series.id))
+        await self.db.execute(
+            update(DebateAgent)
+            .where(DebateAgent.id == agent_id)
+            .values(active_series_id=series.id)
+        )
         logger.info("%s series created: agent=%s %s→%s", series_type, agent_id, from_tier, to_tier)
         return series
 
-    async def create_promotion_series(self, agent_id: str, from_tier: str, to_tier: str) -> DebatePromotionSeries:
+    async def create_promotion_series(
+        self, agent_id: str, from_tier: str, to_tier: str
+    ) -> DebatePromotionSeries:
         """승급전 시리즈 생성 (required_wins=2, 3판 2선승)."""
         return await self._create_series(agent_id, "promotion", from_tier, to_tier, required_wins=2)
 
-    async def create_demotion_series(self, agent_id: str, from_tier: str, to_tier: str) -> DebatePromotionSeries:
+    async def create_demotion_series(
+        self, agent_id: str, from_tier: str, to_tier: str
+    ) -> DebatePromotionSeries:
         """강등전 시리즈 생성 (required_wins=1, 1판 필승)."""
         return await self._create_series(agent_id, "demotion", from_tier, to_tier, required_wins=1)
 
@@ -104,7 +114,9 @@ class DebatePromotionService:
           series_type, status, current_wins, current_losses, draw_count,
           required_wins, tier_changed, new_tier (optional)
         """
-        res = await self.db.execute(select(DebatePromotionSeries).where(DebatePromotionSeries.id == series_id))
+        res = await self.db.execute(
+            select(DebatePromotionSeries).where(DebatePromotionSeries.id == series_id)
+        )
         series = res.scalar_one_or_none()
         # 시리즈가 없거나 이미 완료/취소된 경우 기록 거부 — 중복 처리 방지
         if series is None or series.status != "active":
@@ -120,7 +132,9 @@ class DebatePromotionService:
                 series.status = "expired"
                 series.completed_at = datetime.now(UTC)
                 await self.db.execute(
-                    update(DebateAgent).where(DebateAgent.id == str(series.agent_id)).values(active_series_id=None)
+                    update(DebateAgent)
+                    .where(DebateAgent.id == str(series.agent_id))
+                    .values(active_series_id=None)
                 )
                 return {
                     "id": str(series.id),
@@ -195,7 +209,9 @@ class DebatePromotionService:
                 else:
                     # 승급 실패: 티어 유지
                     await self.db.execute(
-                        update(DebateAgent).where(DebateAgent.id == str(series.agent_id)).values(active_series_id=None)
+                        update(DebateAgent)
+                        .where(DebateAgent.id == str(series.agent_id))
+                        .values(active_series_id=None)
                     )
             else:  # demotion
                 if series_won:
@@ -250,7 +266,11 @@ class DebatePromotionService:
             return
         series.status = "cancelled"
         series.completed_at = datetime.now(UTC)
-        await self.db.execute(update(DebateAgent).where(DebateAgent.id == agent_id).values(active_series_id=None))
+        await self.db.execute(
+            update(DebateAgent)
+            .where(DebateAgent.id == agent_id)
+            .values(active_series_id=None)
+        )
         logger.info("Series cancelled: agent=%s series=%s", agent_id, series.id)
 
     async def check_and_trigger(

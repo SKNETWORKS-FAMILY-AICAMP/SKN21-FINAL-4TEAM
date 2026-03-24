@@ -8,16 +8,14 @@ debate_topics에 tools_enabled 컬럼 추가.
 - tools_enabled: 툴 사용 허용 여부 (기본값 true)
 """
 
-from collections.abc import Sequence
-
+from typing import Sequence, Union
+from alembic import op
 import sqlalchemy as sa
 
-from alembic import op
-
 revision: str = "o5j6k7l8m9n4"
-down_revision: str | None = "n4i5j6k7l8m9"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "n4i5j6k7l8m9"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

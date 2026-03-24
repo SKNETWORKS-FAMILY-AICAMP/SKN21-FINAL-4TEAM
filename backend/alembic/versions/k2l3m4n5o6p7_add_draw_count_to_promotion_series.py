@@ -11,9 +11,8 @@ Revises: j0k1l2m3n4o5
 Create Date: 2026-03-16
 """
 
-import sqlalchemy as sa
-
 from alembic import op
+import sqlalchemy as sa
 
 revision = "k2l3m4n5o6p7"
 down_revision = "j0k1l2m3n4o5"

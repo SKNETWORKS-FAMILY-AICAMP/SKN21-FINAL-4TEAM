@@ -1,5 +1,6 @@
 """InferenceClient 단위 테스트. 외부 API 호출을 mock."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

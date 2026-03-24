@@ -1,8 +1,7 @@
 """H2H 전적 서비스 단위 테스트."""
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 
 @pytest.mark.asyncio

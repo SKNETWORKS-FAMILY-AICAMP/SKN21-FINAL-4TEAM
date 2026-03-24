@@ -10,16 +10,15 @@ Note: a1b2c3d4e5f6 (add_deleted_session_status) 는 DB에 적용된 적 없으�
 parent를 b1c2d3e4f5a6 으로 직접 연결 (2026-03-23 수정).
 """
 
-from collections.abc import Sequence
-
+from typing import Sequence, Union
+from alembic import op
 import sqlalchemy as sa
 
-from alembic import op
 
 revision: str = "b2c3d4e5f6a7"
-down_revision: str | None = "b1c2d3e4f5a6"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "b1c2d3e4f5a6"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:

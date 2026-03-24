@@ -1,7 +1,7 @@
 """예측 투표 서비스 단위 테스트."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

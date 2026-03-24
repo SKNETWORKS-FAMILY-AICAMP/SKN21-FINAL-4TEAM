@@ -9,6 +9,8 @@ Revises: k2l3m4n5o6p7, o5p6q7r8s9t0
 Create Date: 2026-03-16
 """
 
+from alembic import op
+
 revision = "l3m4n5o6p7q8"
 down_revision = ("k2l3m4n5o6p7", "o5p6q7r8s9t0")
 branch_labels = None

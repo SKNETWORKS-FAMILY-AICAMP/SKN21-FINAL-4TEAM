@@ -96,7 +96,6 @@ class TestDebateEngineStreaming:
     async def test_byok_turn_publishes_chunk_events(self):
         """BYOK 턴 실행 시 turn_chunk 이벤트가 각 청크마다 발행된다."""
         from decimal import Decimal
-
         from app.models.llm_model import LLMModel
         from app.services.debate.turn_executor import TurnExecutor
 
@@ -136,9 +135,7 @@ class TestDebateEngineStreaming:
         db.execute = AsyncMock(return_value=mock_result)
 
         # 스트리밍 청크: JSON 형식 응답
-        raw_json = (
-            '{"action":"argue","claim":"AI는 좋은 기술입니다.","evidence":null,"tool_used":null,"tool_result":null}'
-        )
+        raw_json = '{"action":"argue","claim":"AI는 좋은 기술입니다.","evidence":null,"tool_used":null,"tool_result":null}'
         chunks = [raw_json[i : i + 10] for i in range(0, len(raw_json), 10)]
 
         async def _fake_stream(*args, **kwargs):

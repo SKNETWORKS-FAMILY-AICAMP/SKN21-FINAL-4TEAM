@@ -192,20 +192,14 @@ async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> N
     try:
         async with async_session() as db:
             # 두 엔트리를 단일 쿼리로 함께 잠금 — 분리 잠금 시 ready_up과 경합 방지
-            entries = (
-                (
-                    await db.execute(
-                        select(DebateMatchQueue)
-                        .where(
-                            DebateMatchQueue.topic_id == topic_id,
-                            DebateMatchQueue.agent_id.in_([agent_a_id, agent_b_id]),
-                        )
-                        .with_for_update()
-                    )
+            entries = (await db.execute(
+                select(DebateMatchQueue)
+                .where(
+                    DebateMatchQueue.topic_id == topic_id,
+                    DebateMatchQueue.agent_id.in_([agent_a_id, agent_b_id]),
                 )
-                .scalars()
-                .all()
-            )
+                .with_for_update()
+            )).scalars().all()
 
             if len(entries) < 2:
                 # 이미 ready_up에서 처리됨
@@ -251,26 +245,16 @@ async def _auto_match_safe(topic_id: str, agent_a_id: str, agent_b_id: str) -> N
 
             logger.info("카운트다운 자동 매치 생성: %s (topic=%s)", match.id, topic_id)
 
-            await publish_queue_event(
-                topic_id,
-                agent_a_id,
-                "matched",
-                {
-                    "match_id": str(match.id),
-                    "opponent_agent_id": agent_b_id,
-                    "auto_matched": False,
-                },
-            )
-            await publish_queue_event(
-                topic_id,
-                agent_b_id,
-                "matched",
-                {
-                    "match_id": str(match.id),
-                    "opponent_agent_id": agent_a_id,
-                    "auto_matched": False,
-                },
-            )
+            await publish_queue_event(topic_id, agent_a_id, "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": agent_b_id,
+                "auto_matched": False,
+            })
+            await publish_queue_event(topic_id, agent_b_id, "matched", {
+                "match_id": str(match.id),
+                "opponent_agent_id": agent_a_id,
+                "auto_matched": False,
+            })
 
             # create_task로 토론 실행 — BackgroundTask 컨텍스트 즉시 반환
             task = asyncio.create_task(_run_debate_safe(str(match.id)))
@@ -375,7 +359,9 @@ async def ready_up_queue(
         background_tasks.add_task(_run_debate_safe, result["match_id"])
     elif result.get("countdown_started") and result.get("opponent_agent_id"):
         # 한 명이 먼저 준비 완료 → 10초 후 자동 매치
-        background_tasks.add_task(_auto_match_safe, topic_id, str(data.agent_id), result["opponent_agent_id"])
+        background_tasks.add_task(
+            _auto_match_safe, topic_id, str(data.agent_id), result["opponent_agent_id"]
+        )
 
     return result
 
@@ -461,13 +447,10 @@ async def queue_status(
     if entry is not None:
         # 상대방 큐 엔트리 확인
         opp_result = await db.execute(
-            select(DebateMatchQueue)
-            .where(
+            select(DebateMatchQueue).where(
                 DebateMatchQueue.topic_id == topic_id,
                 DebateMatchQueue.agent_id != agent_id,
-            )
-            .order_by(DebateMatchQueue.joined_at)
-            .limit(1)
+            ).order_by(DebateMatchQueue.joined_at).limit(1)
         )
         opp_entry = opp_result.scalar_one_or_none()
         return {
@@ -481,13 +464,10 @@ async def queue_status(
 
     # 이미 매칭됐는지 확인 (최근 매치)
     match_result = await db.execute(
-        select(DebateMatch)
-        .where(
+        select(DebateMatch).where(
             DebateMatch.topic_id == topic_id,
             (DebateMatch.agent_a_id == agent_id) | (DebateMatch.agent_b_id == agent_id),
-        )
-        .order_by(DebateMatch.created_at.desc())
-        .limit(1)
+        ).order_by(DebateMatch.created_at.desc()).limit(1)
     )
     match = match_result.scalar_one_or_none()
     if match is not None:

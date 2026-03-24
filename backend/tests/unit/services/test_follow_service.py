@@ -8,10 +8,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.services.follow_service import FollowService
 
+
 # ──────────────────────────────────────────────
 # 헬퍼
 # ──────────────────────────────────────────────
-
 
 def _make_db(scalar_return=None, execute_return=None, rowcount=1):
     """AsyncSession mock 생성.
@@ -46,7 +46,6 @@ def _make_follow(follower_id=None, target_type="agent", target_id=None):
 # ──────────────────────────────────────────────
 # follow()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestFollowAgent:
@@ -134,7 +133,6 @@ class TestFollowAgent:
 # unfollow()
 # ──────────────────────────────────────────────
 
-
 @pytest.mark.asyncio
 class TestUnfollow:
     async def test_unfollow_success(self):
@@ -159,16 +157,13 @@ class TestUnfollow:
 # get_following()
 # ──────────────────────────────────────────────
 
-
 @pytest.mark.asyncio
 class TestGetFollowing:
     async def test_get_following_all(self):
         """target_type 필터 없이 전체 팔로우 목록과 총 수를 반환한다."""
         follower_id = uuid.uuid4()
-        follows = [
-            _make_follow(follower_id=follower_id, target_type="agent"),
-            _make_follow(follower_id=follower_id, target_type="user"),
-        ]
+        follows = [_make_follow(follower_id=follower_id, target_type="agent"),
+                   _make_follow(follower_id=follower_id, target_type="user")]
 
         db = AsyncMock()
         db.scalar = AsyncMock(return_value=2)
@@ -239,7 +234,6 @@ class TestGetFollowing:
 # get_follower_count()
 # ──────────────────────────────────────────────
 
-
 @pytest.mark.asyncio
 class TestGetFollowerCount:
     async def test_get_follower_count(self):
@@ -266,7 +260,6 @@ class TestGetFollowerCount:
 # ──────────────────────────────────────────────
 # is_following()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestIsFollowing:
@@ -304,7 +297,6 @@ class TestIsFollowing:
 # ──────────────────────────────────────────────
 # get_follower_user_ids()
 # ──────────────────────────────────────────────
-
 
 @pytest.mark.asyncio
 class TestGetFollowerUserIds:

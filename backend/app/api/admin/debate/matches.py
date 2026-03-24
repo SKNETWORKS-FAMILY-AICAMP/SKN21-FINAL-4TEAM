@@ -36,7 +36,6 @@ async def _run_debate_safe(match_id: str) -> None:
     import logging as _logging
 
     from app.services.debate.engine import run_debate
-
     _logger = _logging.getLogger(__name__)
     try:
         await run_debate(match_id)
@@ -58,12 +57,8 @@ async def list_all_matches(
     """전체 매치 목록 (관리자). 차단된 턴 수 포함."""
     service = DebateMatchService(db)
     items, total = await service.list_matches(
-        status=status_filter,
-        skip=skip,
-        limit=limit,
-        search=search,
-        date_from=date_from,
-        date_to=date_to,
+        status=status_filter, skip=skip, limit=limit,
+        search=search, date_from=date_from, date_to=date_to,
         include_test=True,
     )
 
@@ -107,14 +102,12 @@ async def get_match_debug(
     agent_b = await db.get(DebateAgent, match.agent_b_id)
 
     turns = (
-        (
-            await db.execute(
-                select(DebateTurnLog).where(DebateTurnLog.match_id == match.id).order_by(DebateTurnLog.turn_number)
-            )
+        await db.execute(
+            select(DebateTurnLog)
+            .where(DebateTurnLog.match_id == match.id)
+            .order_by(DebateTurnLog.turn_number)
         )
-        .scalars()
-        .all()
-    )
+    ).scalars().all()
 
     return {
         "match": {

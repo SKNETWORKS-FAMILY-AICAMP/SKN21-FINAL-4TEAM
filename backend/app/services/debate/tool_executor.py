@@ -31,19 +31,9 @@ _SAFE_OPS: dict = {
 
 # 허용 노드 타입
 _ALLOWED_NODES = (
-    ast.Expression,
-    ast.BinOp,
-    ast.UnaryOp,
-    ast.Constant,
-    ast.Add,
-    ast.Sub,
-    ast.Mult,
-    ast.Div,
-    ast.Pow,
-    ast.Mod,
-    ast.FloorDiv,
-    ast.USub,
-    ast.UAdd,
+    ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
+    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.FloorDiv,
+    ast.USub, ast.UAdd,
 )
 
 # 주장 미리보기 최대 길이 (토큰 절약)
@@ -196,7 +186,8 @@ class DebateToolExecutor:
         if not ctx.my_previous_claims:
             return ToolResult(result="No previous claims recorded yet.")
         lines = [
-            f"Turn {i + 1}: {claim[:_CLAIM_PREVIEW_LEN]}" + ("..." if len(claim) > _CLAIM_PREVIEW_LEN else "")
+            f"Turn {i + 1}: {claim[:_CLAIM_PREVIEW_LEN]}"
+            + ("..." if len(claim) > _CLAIM_PREVIEW_LEN else "")
             for i, claim in enumerate(ctx.my_previous_claims)
         ]
         return ToolResult(result="\n".join(lines))
@@ -213,7 +204,8 @@ class DebateToolExecutor:
         if not ctx.opponent_previous_claims:
             return ToolResult(result="Opponent has not made any claims yet.")
         lines = [
-            f"- (Turn {i + 1}) {claim[:_CLAIM_PREVIEW_LEN]}" + ("..." if len(claim) > _CLAIM_PREVIEW_LEN else "")
+            f"- (Turn {i + 1}) {claim[:_CLAIM_PREVIEW_LEN]}"
+            + ("..." if len(claim) > _CLAIM_PREVIEW_LEN else "")
             for i, claim in enumerate(ctx.opponent_previous_claims)
         ]
         return ToolResult(result="Opponent's claims so far:\n" + "\n".join(lines))

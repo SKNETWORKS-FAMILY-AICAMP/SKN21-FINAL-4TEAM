@@ -64,7 +64,9 @@ class DebateMatchingService:
             QueueConflictError: 동일 사용자/에이전트가 이미 다른 큐에 대기 중인 경우.
         """
         # 토픽 검증
-        topic = await self.db.execute(select(DebateTopic).where(DebateTopic.id == topic_id))
+        topic = await self.db.execute(
+            select(DebateTopic).where(DebateTopic.id == topic_id)
+        )
         topic = topic.scalar_one_or_none()
         if topic is None:
             raise ValueError("Topic not found")
@@ -99,22 +101,28 @@ class DebateMatchingService:
             }.get(agent.provider, False)
             if not provider_has_platform_key:
                 raise ValueError(
-                    "에이전트에 API 키가 설정되지 않았습니다. "
-                    "에이전트 설정에서 API 키를 입력하거나 '플랫폼 크레딧 사용'을 활성화하세요."
+                    f"에이전트에 API 키가 설정되지 않았습니다. "
+                    f"에이전트 설정에서 API 키를 입력하거나 '플랫폼 크레딧 사용'을 활성화하세요."
                 )
 
         # 크레딧 사전 검증: BYOK 에이전트(자기 API 키)는 차감 없음, 나머지는 잔액 확인
         if settings.debate_credit_cost > 0 and settings.credit_system_enabled and not agent.encrypted_api_key:
-            owner_result = await self.db.execute(select(User.credit_balance).where(User.id == agent.owner_id))
+            owner_result = await self.db.execute(
+                select(User.credit_balance).where(User.id == agent.owner_id)
+            )
             owner_balance = owner_result.scalar_one_or_none() or 0
             if owner_balance < settings.debate_credit_cost:
-                raise ValueError(f"크레딧이 부족합니다. 필요: {settings.debate_credit_cost}석, 현재: {owner_balance}석")
+                raise ValueError(
+                    f"크레딧이 부족합니다. 필요: {settings.debate_credit_cost}석, 현재: {owner_balance}석"
+                )
 
         await self._purge_expired_entries()
 
         # 유저당 1개 큐만 허용 (admin 제외)
         if not is_admin:
-            user_existing = await self.db.execute(select(DebateMatchQueue).where(DebateMatchQueue.user_id == user.id))
+            user_existing = await self.db.execute(
+                select(DebateMatchQueue).where(DebateMatchQueue.user_id == user.id)
+            )
             existing_user_entry = user_existing.scalar_one_or_none()
             # 이미 다른 에이전트로 대기 중이면 QueueConflictError — 프론트에서 기존 대기 취소 유도
             if existing_user_entry is not None:
@@ -175,23 +183,13 @@ class DebateMatchingService:
         # 큐에 상대가 대기 중이면 양방향 SSE 이벤트 발행 (ready_up 버튼 활성화 유도)
         if opponent_entry:
             # 상대에게 내가 입장했음을 알림
-            await publish_queue_event(
-                topic_id,
-                str(opponent_entry.agent_id),
-                "opponent_joined",
-                {
-                    "opponent_agent_id": str(agent_id),
-                },
-            )
+            await publish_queue_event(topic_id, str(opponent_entry.agent_id), "opponent_joined", {
+                "opponent_agent_id": str(agent_id),
+            })
             # 나에게도 상대가 있음을 알림
-            await publish_queue_event(
-                topic_id,
-                str(agent_id),
-                "opponent_joined",
-                {
-                    "opponent_agent_id": str(opponent_entry.agent_id),
-                },
-            )
+            await publish_queue_event(topic_id, str(agent_id), "opponent_joined", {
+                "opponent_agent_id": str(opponent_entry.agent_id),
+            })
             return {
                 "status": "queued",
                 "position": 1,
@@ -243,24 +241,14 @@ class DebateMatchingService:
         if not opponent_entry.is_ready:
             # 첫 번째 준비 완료 → 10초 카운트다운 시작 이벤트를 양쪽에 발행
             await self.db.commit()
-            await publish_queue_event(
-                topic_id,
-                str(my_entry.agent_id),
-                "countdown_started",
-                {
-                    "countdown_seconds": settings.debate_ready_countdown_seconds,
-                    "ready_agent_id": str(my_entry.agent_id),
-                },
-            )
-            await publish_queue_event(
-                topic_id,
-                str(opponent_entry.agent_id),
-                "countdown_started",
-                {
-                    "countdown_seconds": settings.debate_ready_countdown_seconds,
-                    "ready_agent_id": str(my_entry.agent_id),
-                },
-            )
+            await publish_queue_event(topic_id, str(my_entry.agent_id), "countdown_started", {
+                "countdown_seconds": settings.debate_ready_countdown_seconds,
+                "ready_agent_id": str(my_entry.agent_id),
+            })
+            await publish_queue_event(topic_id, str(opponent_entry.agent_id), "countdown_started", {
+                "countdown_seconds": settings.debate_ready_countdown_seconds,
+                "ready_agent_id": str(my_entry.agent_id),
+            })
             return {
                 "status": "ready",
                 "waiting_for_opponent": False,
@@ -310,25 +298,15 @@ class DebateMatchingService:
 
         logger.info("Match created (ready-up): %s (topic=%s)", match.id, topic_id)
 
-        await publish_queue_event(
-            topic_id,
-            my_agent_id,
-            "matched",
-            {
-                "match_id": str(match.id),
-                "opponent_agent_id": opp_agent_id,
-                "auto_matched": False,
-            },
-        )
-        await publish_queue_event(
-            topic_id,
-            opp_agent_id,
-            "matched",
-            {
-                "match_id": str(match.id),
-                "opponent_agent_id": my_agent_id,
-                "auto_matched": False,
-            },
-        )
+        await publish_queue_event(topic_id, my_agent_id, "matched", {
+            "match_id": str(match.id),
+            "opponent_agent_id": opp_agent_id,
+            "auto_matched": False,
+        })
+        await publish_queue_event(topic_id, opp_agent_id, "matched", {
+            "match_id": str(match.id),
+            "opponent_agent_id": my_agent_id,
+            "auto_matched": False,
+        })
 
         return {"status": "matched", "match_id": str(match.id)}

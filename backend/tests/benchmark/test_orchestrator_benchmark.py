@@ -12,7 +12,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -33,7 +33,6 @@ def debate_fixture() -> dict:
 
 
 # ─── LLM 응답 모킹 헬퍼 ───────────────────────────────────────────────────────
-
 
 def _make_review_response(
     logic_score: int = 8,
@@ -79,7 +78,6 @@ def _make_judge_response(model: str = "gpt-4o", latency: float = 4.0) -> dict:
 
 # ─── 시나리오 A: 기존 순차 실행 베이스라인 ─────────────────────────────────────
 
-
 class TestScenarioA_SequentialBaseline:
     """기존 순차 실행 — A실행 → A검토(GPT-4o) → B실행 → B검토(GPT-4o).
 
@@ -90,9 +88,9 @@ class TestScenarioA_SequentialBaseline:
     - 순차 지연: 검토 지연이 B 실행 앞에 위치
     """
 
-    REVIEW_LATENCY = 2.0  # gpt-4o 검토 모의 지연
+    REVIEW_LATENCY = 2.0   # gpt-4o 검토 모의 지연
     EXECUTE_LATENCY = 3.0  # 에이전트 실행 모의 지연
-    JUDGE_LATENCY = 4.5  # gpt-4o 판정 모의 지연
+    JUDGE_LATENCY = 4.5    # gpt-4o 판정 모의 지연
     TURNS = 6
 
     def _compute_expected_wall_time(self) -> float:
@@ -123,9 +121,9 @@ class TestScenarioA_SequentialBaseline:
                     action=turn["action"],
                 )
 
-        assert call_count == len(
-            debate_fixture["turns"]
-        ), f"순차 모드 검토 호출 횟수 불일치: 기대={len(debate_fixture['turns'])}, 실제={call_count}"
+        assert call_count == len(debate_fixture["turns"]), (
+            f"순차 모드 검토 호출 횟수 불일치: 기대={len(debate_fixture['turns'])}, 실제={call_count}"
+        )
 
     @pytest.mark.asyncio
     async def test_sequential_uses_heavy_model(self):
@@ -135,11 +133,7 @@ class TestScenarioA_SequentialBaseline:
 
         async def capture_model_call(model_id, api_key, messages, **kwargs):
             used_model.append(model_id)
-            return {
-                "content": '{"logic_score":7,"violations":[],"feedback":"ok","severity":"none","block":false}',
-                "input_tokens": 100,
-                "output_tokens": 50,
-            }
+            return {"content": '{"logic_score":7,"violations":[],"feedback":"ok","severity":"none","block":false}', "input_tokens": 100, "output_tokens": 50}
 
         with (
             patch("app.services.debate.orchestrator.settings") as mock_settings,
@@ -170,7 +164,6 @@ class TestScenarioA_SequentialBaseline:
 
 
 # ─── 시나리오 B: Phase 1 — 모델 분리 ──────────────────────────────────────────
-
 
 class TestScenarioB_ModelSplit:
     """Phase 1: 경량 review 모델(gpt-4o-mini) + 중량 judge 모델(gpt-4o) 분리.
@@ -214,7 +207,9 @@ class TestScenarioB_ModelSplit:
             )
 
         assert used_models, "LLM 호출이 발생하지 않았습니다"
-        assert used_models[0] == "gpt-4o-mini", f"Phase 1 검토 모델 불일치: 기대=gpt-4o-mini, 실제={used_models[0]}"
+        assert used_models[0] == "gpt-4o-mini", (
+            f"Phase 1 검토 모델 불일치: 기대=gpt-4o-mini, 실제={used_models[0]}"
+        )
 
     @pytest.mark.asyncio
     async def test_judge_uses_heavy_model(self):
@@ -222,14 +217,11 @@ class TestScenarioB_ModelSplit:
         orch = OptimizedDebateOrchestrator()
         used_models = []
 
-        scorecard_json = json.dumps(
-            {
-                "agent_a": {"logic": 20, "evidence": 18, "rebuttal": 18, "relevance": 15},
-                "agent_b": {"logic": 18, "evidence": 16, "rebuttal": 16, "relevance": 14},
-                "reasoning": "A가 더 명확한 근거를 제시했습니다.",
-            },
-            ensure_ascii=False,
-        )
+        scorecard_json = json.dumps({
+            "agent_a": {"logic": 20, "evidence": 18, "rebuttal": 18, "relevance": 15},
+            "agent_b": {"logic": 18, "evidence": 16, "rebuttal": 16, "relevance": 14},
+            "reasoning": "A가 더 명확한 근거를 제시했습니다.",
+        }, ensure_ascii=False)
 
         async def capture_call(model_id, api_key, messages, **kwargs):
             used_models.append(model_id)
@@ -263,7 +255,9 @@ class TestScenarioB_ModelSplit:
             )
 
         assert used_models, "judge LLM 호출이 발생하지 않았습니다"
-        assert used_models[0] == "gpt-4o", f"Phase 1 판정 모델 불일치: 기대=gpt-4o, 실제={used_models[0]}"
+        assert used_models[0] == "gpt-4o", (
+            f"Phase 1 판정 모델 불일치: 기대=gpt-4o, 실제={used_models[0]}"
+        )
 
     def test_cost_reduction_estimate(self):
         """Phase 1: gpt-4o-mini 전환으로 검토 비용 절감량 계산."""
@@ -295,7 +289,6 @@ class TestScenarioB_ModelSplit:
 
 
 # ─── 시나리오 C: Phase 2 — 병렬 실행 ──────────────────────────────────────────
-
 
 class TestScenarioC_ParallelExecution:
     """Phase 2: asyncio.gather()로 A검토 + B실행 병렬화.
@@ -339,7 +332,7 @@ class TestScenarioC_ParallelExecution:
     @pytest.mark.asyncio
     async def test_parallel_latency_reduction_simulation(self):
         """Phase 2: 시뮬레이션으로 6턴 병렬화 지연 절감 검증."""
-        REVIEW_LATENCY = 0.05  # gpt-4o-mini 모의 (50ms)
+        REVIEW_LATENCY = 0.05   # gpt-4o-mini 모의 (50ms)
         EXECUTE_LATENCY = 0.08  # 에이전트 LLM 모의 (80ms)
         TURNS = 6
 
@@ -354,18 +347,18 @@ class TestScenarioC_ParallelExecution:
         # 순차 실행 시간 측정
         t0 = time.monotonic()
         for _ in range(TURNS):
-            await mock_execute()  # A 실행
-            await mock_review()  # A 검토 (순차)
-            await mock_execute()  # B 실행
-            await mock_review()  # B 검토
+            await mock_execute()   # A 실행
+            await mock_review()    # A 검토 (순차)
+            await mock_execute()   # B 실행
+            await mock_review()    # B 검토
         sequential_time = time.monotonic() - t0
 
         # 병렬 실행 시간 측정 (A검토 + B실행 gather)
         t0 = time.monotonic()
         for _ in range(TURNS):
-            await mock_execute()  # A 실행
+            await mock_execute()                            # A 실행
             await asyncio.gather(mock_review(), mock_execute())  # A검토 + B실행 병렬
-            await mock_review()  # B 검토
+            await mock_review()                             # B 검토
         parallel_time = time.monotonic() - t0
 
         reduction_pct = (1 - parallel_time / sequential_time) * 100
@@ -399,29 +392,28 @@ class TestScenarioC_ParallelExecution:
         if review_result["block"]:
             claims_a[-1] = review_result["blocked_claim"]
 
-        assert (
-            claims_a[-1] == "[차단됨: 규칙 위반으로 발언이 차단되었습니다]"
-        ), "차단 시 claims_a 패치가 적용되지 않았습니다"
+        assert claims_a[-1] == "[차단됨: 규칙 위반으로 발언이 차단되었습니다]", (
+            "차단 시 claims_a 패치가 적용되지 않았습니다"
+        )
         assert original_claim not in claims_a
 
 
 # ─── 통합 성능 비교 ─────────────────────────────────────────────────────────────
-
 
 class TestIntegratedComparison:
     """3개 시나리오 통합 성능 비교 — 벽시계 시간 · LLM 호출 수 · 예상 비용."""
 
     # 시뮬레이션 파라미터 (단위: 초, USD/1M tokens)
     TURNS = 6
-    EXECUTE_LATENCY = 3.0  # 에이전트 LLM 실행
-    GPT4O_REVIEW_LATENCY = 2.0  # gpt-4o 검토
-    MINI_REVIEW_LATENCY = 0.8  # gpt-4o-mini 검토 (약 2.5배 빠름)
-    JUDGE_LATENCY_4O = 4.5  # gpt-4o 판정
+    EXECUTE_LATENCY = 3.0        # 에이전트 LLM 실행
+    GPT4O_REVIEW_LATENCY = 2.0   # gpt-4o 검토
+    MINI_REVIEW_LATENCY = 0.8    # gpt-4o-mini 검토 (약 2.5배 빠름)
+    JUDGE_LATENCY_4O = 4.5       # gpt-4o 판정
 
-    GPT4O_IN = 5.0  # $/1M
+    GPT4O_IN = 5.0    # $/1M
     GPT4O_OUT = 15.0  # $/1M
-    MINI_IN = 0.15  # $/1M
-    MINI_OUT = 0.60  # $/1M
+    MINI_IN = 0.15    # $/1M
+    MINI_OUT = 0.60   # $/1M
 
     REVIEW_IN_TOKENS = 450
     REVIEW_OUT_TOKENS = 80
@@ -431,10 +423,16 @@ class TestIntegratedComparison:
     def _review_cost(self, model: str, count: int) -> float:
         in_cost = self.MINI_IN if model == "mini" else self.GPT4O_IN
         out_cost = self.MINI_OUT if model == "mini" else self.GPT4O_OUT
-        return count * (self.REVIEW_IN_TOKENS * in_cost / 1_000_000 + self.REVIEW_OUT_TOKENS * out_cost / 1_000_000)
+        return count * (
+            self.REVIEW_IN_TOKENS * in_cost / 1_000_000
+            + self.REVIEW_OUT_TOKENS * out_cost / 1_000_000
+        )
 
     def _judge_cost(self) -> float:
-        return self.JUDGE_IN_TOKENS * self.GPT4O_IN / 1_000_000 + self.JUDGE_OUT_TOKENS * self.GPT4O_OUT / 1_000_000
+        return (
+            self.JUDGE_IN_TOKENS * self.GPT4O_IN / 1_000_000
+            + self.JUDGE_OUT_TOKENS * self.GPT4O_OUT / 1_000_000
+        )
 
     def compute_all_scenarios(self) -> dict[str, dict]:
         reviews = self.TURNS * 2  # 각 턴 A+B
@@ -442,7 +440,10 @@ class TestIntegratedComparison:
         scenarios = {}
 
         # ── A: 기존 순차 ───────────────────────────────────
-        wall_a = (self.EXECUTE_LATENCY + self.GPT4O_REVIEW_LATENCY) * 2 * self.TURNS + self.JUDGE_LATENCY_4O
+        wall_a = (
+            (self.EXECUTE_LATENCY + self.GPT4O_REVIEW_LATENCY) * 2 * self.TURNS
+            + self.JUDGE_LATENCY_4O
+        )
         scenarios["A_Baseline"] = {
             "wall_time_s": wall_a,
             "llm_review_calls": reviews,
@@ -452,7 +453,10 @@ class TestIntegratedComparison:
         }
 
         # ── B: Phase 1 — 모델 분리 ─────────────────────────
-        wall_b = (self.EXECUTE_LATENCY + self.MINI_REVIEW_LATENCY) * 2 * self.TURNS + self.JUDGE_LATENCY_4O
+        wall_b = (
+            (self.EXECUTE_LATENCY + self.MINI_REVIEW_LATENCY) * 2 * self.TURNS
+            + self.JUDGE_LATENCY_4O
+        )
         scenarios["B_ModelSplit"] = {
             "wall_time_s": wall_b,
             "llm_review_calls": reviews,
@@ -464,8 +468,11 @@ class TestIntegratedComparison:
         # ── C: Phase 1+2 — 병렬 실행 ───────────────────────
         # A실행(3s) + max(A검토(0.8s), B실행(3s))(3s) + B검토(0.8s) = 6.8s/라운드
         wall_c = (
-            self.TURNS
-            * (self.EXECUTE_LATENCY + max(self.MINI_REVIEW_LATENCY, self.EXECUTE_LATENCY) + self.MINI_REVIEW_LATENCY)
+            self.TURNS * (
+                self.EXECUTE_LATENCY
+                + max(self.MINI_REVIEW_LATENCY, self.EXECUTE_LATENCY)
+                + self.MINI_REVIEW_LATENCY
+            )
             + self.JUDGE_LATENCY_4O
         )
         scenarios["C_Parallel"] = {
@@ -481,18 +488,22 @@ class TestIntegratedComparison:
     def test_all_scenarios_wall_time_ranking(self):
         """3개 시나리오 벽시계 시간: A > B > C 순으로 단축."""
         s = self.compute_all_scenarios()
-        assert (
-            s["A_Baseline"]["wall_time_s"] > s["B_ModelSplit"]["wall_time_s"]
-        ), "Phase 1(모델 분리)이 기존보다 빠르지 않습니다"
-        assert (
-            s["B_ModelSplit"]["wall_time_s"] >= s["C_Parallel"]["wall_time_s"]
-        ), "Phase 2(병렬)가 Phase 1보다 빠르지 않습니다"
+        assert s["A_Baseline"]["wall_time_s"] > s["B_ModelSplit"]["wall_time_s"], (
+            "Phase 1(모델 분리)이 기존보다 빠르지 않습니다"
+        )
+        assert s["B_ModelSplit"]["wall_time_s"] >= s["C_Parallel"]["wall_time_s"], (
+            "Phase 2(병렬)가 Phase 1보다 빠르지 않습니다"
+        )
 
     def test_all_scenarios_cost_ranking(self):
         """3개 시나리오 비용: A >> B ≥ C."""
         s = self.compute_all_scenarios()
-        assert s["A_Baseline"]["cost_usd"] > s["B_ModelSplit"]["cost_usd"], "Phase 1이 기존보다 저렴하지 않습니다"
-        assert s["B_ModelSplit"]["cost_usd"] >= s["C_Parallel"]["cost_usd"], "Phase 2가 Phase 1보다 비싸면 안 됩니다"
+        assert s["A_Baseline"]["cost_usd"] > s["B_ModelSplit"]["cost_usd"], (
+            "Phase 1이 기존보다 저렴하지 않습니다"
+        )
+        assert s["B_ModelSplit"]["cost_usd"] >= s["C_Parallel"]["cost_usd"], (
+            "Phase 2가 Phase 1보다 비싸면 안 됩니다"
+        )
 
     def test_print_comparison_report(self):
         """벤치마크 결과 콘솔 출력 (pytest -s 실행 시 가시화)."""
@@ -511,11 +522,12 @@ class TestIntegratedComparison:
             cost = v["cost_usd"]
             calls = v["llm_review_calls"]
             time_reduction = (1 - time_s / baseline_time) * 100
-            print(f"  {key:<22} {time_s:>10.1f} {time_reduction:>6.1f}% " f"${cost:>8.4f} {calls:>8}")
+            print(
+                f"  {key:<22} {time_s:>10.1f} {time_reduction:>6.1f}% "
+                f"${cost:>8.4f} {calls:>8}"
+            )
         print("=" * 72)
         print("\n  [OK] 권장 구성: C_Parallel (Phase 1+2 통합)")
-        print(
-            f"  [OK] 총 절감: 시간 {(1 - s['C_Parallel']['wall_time_s']/baseline_time)*100:.1f}%,"
-            f" 비용 {(1 - s['C_Parallel']['cost_usd']/baseline_cost)*100:.1f}%"
-        )
+        print(f"  [OK] 총 절감: 시간 {(1 - s['C_Parallel']['wall_time_s']/baseline_time)*100:.1f}%,"
+              f" 비용 {(1 - s['C_Parallel']['cost_usd']/baseline_cost)*100:.1f}%")
         print("=" * 72)

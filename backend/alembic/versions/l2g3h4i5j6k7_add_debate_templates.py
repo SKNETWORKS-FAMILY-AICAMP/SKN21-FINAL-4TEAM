@@ -11,16 +11,15 @@ Create Date: 2026-02-23 16:00:00.000000
 """
 
 import json
-from collections.abc import Sequence
+from typing import Sequence, Union
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "l2g3h4i5j6k7"
-down_revision: str | None = "k1f2g3h4i5j6"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: Union[str, None] = "k1f2g3h4i5j6"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 # 공통 커스터마이징 스키마 (3개 템플릿 공유)
 _CUSTOMIZATION_SCHEMA = {
@@ -177,7 +176,9 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -220,7 +221,9 @@ def upgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index("idx_debate_agents_template", "debate_agents", ["template_id"])
+    op.create_index(
+        "idx_debate_agents_template", "debate_agents", ["template_id"]
+    )
 
     # --- 초기 템플릿 시드 데이터 ---
     conn = op.get_bind()
@@ -244,8 +247,12 @@ def upgrade() -> None:
                 "description": tmpl["description"],
                 "icon": tmpl["icon"],
                 "base_system_prompt": tmpl["base_system_prompt"],
-                "customization_schema": json.dumps(tmpl["customization_schema"], ensure_ascii=False),
-                "default_values": json.dumps(tmpl["default_values"], ensure_ascii=False),
+                "customization_schema": json.dumps(
+                    tmpl["customization_schema"], ensure_ascii=False
+                ),
+                "default_values": json.dumps(
+                    tmpl["default_values"], ensure_ascii=False
+                ),
                 "sort_order": tmpl["sort_order"],
             },
         )
@@ -253,7 +260,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("idx_debate_agents_template", table_name="debate_agents")
-    op.drop_constraint("fk_debate_agents_template_id", "debate_agents", type_="foreignkey")
+    op.drop_constraint(
+        "fk_debate_agents_template_id", "debate_agents", type_="foreignkey"
+    )
     op.drop_column("debate_agents", "customizations")
     op.drop_column("debate_agents", "template_id")
 

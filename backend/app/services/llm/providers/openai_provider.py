@@ -80,7 +80,9 @@ class OpenAIProvider(BaseProvider):
         """사용자 제공 OpenAI API 키(BYOK)로 비스트리밍 호출한다."""
         return await self._call_impl(model_id, api_key, messages, **kwargs)
 
-    async def stream(self, model_id: str, messages: list[dict], usage_out: dict, **kwargs) -> AsyncGenerator[str, None]:
+    async def stream(
+        self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
+    ) -> AsyncGenerator[str, None]:
         """플랫폼 OpenAI API 키로 SSE 스트리밍 호출한다."""
         async for chunk in self._stream_impl(model_id, settings.openai_api_key, messages, usage_out, **kwargs):
             yield chunk
@@ -133,8 +135,7 @@ class OpenAIProvider(BaseProvider):
         if not response.is_success:
             raise httpx.HTTPStatusError(
                 f"OpenAI API {response.status_code}: {response.text[:300]}",
-                request=response.request,
-                response=response,
+                request=response.request, response=response,
             )
         data = response.json()
         choice = data["choices"][0]
@@ -203,14 +204,15 @@ class OpenAIProvider(BaseProvider):
                 body_bytes = await response.aread()
                 raise httpx.HTTPStatusError(
                     f"OpenAI API {response.status_code}: {body_bytes.decode(errors='replace')[:300]}",
-                    request=response.request,
-                    response=response,
+                    request=response.request, response=response,
                 )
             async for chunk in _iter_openai_sse(response, usage_out):
                 yield chunk
 
 
-async def _iter_openai_sse(response: httpx.Response, usage_out: dict) -> AsyncGenerator[str, None]:
+async def _iter_openai_sse(
+    response: httpx.Response, usage_out: dict
+) -> AsyncGenerator[str, None]:
     """OpenAI-compatible SSE 스트림을 파싱하여 텍스트 청크를 생성한다.
 
     OpenAI와 RunPod(OpenAI-compatible) 모두에서 공통으로 사용한다.

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.core.rate_limit import (
+    BYPASS_PATHS,
     RateLimitMiddleware,
     _extract_identifier,
     _get_rate_limit_config,

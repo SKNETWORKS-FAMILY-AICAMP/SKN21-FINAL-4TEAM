@@ -34,6 +34,7 @@ from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
 from app.models.user import User
 from app.services.debate.engine import _execute_match
+from app.services.debate.orchestrator import calculate_elo
 
 # ---------------------------------------------------------------------------
 # 시나리오 정의: 주제 — "AI는 의료 진단을 인간 의사보다 더 잘 수행할 수 있다"
@@ -150,7 +151,6 @@ _JUDGE_SCORECARD_WIN = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _make_llm_response(turn: dict) -> dict:
     """에이전트 턴 데이터를 LLM API 응답 포맷으로 변환."""
     body = json.dumps(
@@ -178,7 +178,6 @@ def _divider(char: str = "-", width: int = 72) -> str:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
 
 @pytest_asyncio.fixture
 async def two_users(db_session: AsyncSession):
@@ -310,7 +309,6 @@ async def debate_e2e_setup(db_session: AsyncSession, two_users):
 # E2E Test
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
 async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     """토론 한 사이클 완전 실행: 3턴 × 2에이전트 → 판정 → ELO 갱신.
@@ -377,9 +375,7 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
                 .where(DebateTurnLog.match_id == match.id)
                 .order_by(DebateTurnLog.turn_number, DebateTurnLog.speaker)
             )
-        )
-        .scalars()
-        .all()
+        ).scalars().all()
     )
 
     await db_session.refresh(agent_a)
@@ -400,7 +396,7 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     )
 
     print(f"\n\n{_divider('=')}")
-    print("  [E2E] 토론 E2E 테스트 -- 전체 사이클 실행 결과")
+    print(f"  [E2E] 토론 E2E 테스트 -- 전체 사이클 실행 결과")
     print(_divider("="))
     print(f"  [TOPIC] 주제: {topic.title}")
     print(f"  [AGENT] Agent A (PRO): {agent_a.name} [{agent_a.provider}/{agent_a.model_id}]")
@@ -409,12 +405,12 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     print(_divider())
 
     # 턴별 트랜스크립트
-    print("\n  [TRANSCRIPT] 토론 트랜스크립트\n")
+    print(f"\n  [TRANSCRIPT] 토론 트랜스크립트\n")
     for _i, turn in enumerate(turns):
         side = "PRO (Agent A)" if turn.speaker == "agent_a" else "CON (Agent B)"
         print(f"  [{turn.turn_number}턴] {side} -- {turn.action.upper()}")
         # 줄 바꿈을 위해 80자 단위로 출력
-        claim_lines = [turn.claim[j : j + 68] for j in range(0, len(turn.claim), 68)]
+        claim_lines = [turn.claim[j:j+68] for j in range(0, len(turn.claim), 68)]
         for k, line in enumerate(claim_lines):
             prefix = "  주장: " if k == 0 else "        "
             print(f"  {prefix}{line}")
@@ -426,18 +422,14 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
 
     # 판정 결과
     print(_divider())
-    print("\n  [JUDGE] 오케스트레이터 판정 결과\n")
+    print(f"\n  [JUDGE] 오케스트레이터 판정 결과\n")
     if scorecard.get("agent_a") and scorecard.get("agent_b"):
         a_s = scorecard["agent_a"]
         b_s = scorecard["agent_b"]
         print(f"  {'항목':<14} {'Agent A (PRO)':>14} {'Agent B (CON)':>14}")
         print(f"  {_divider('-', 44)}")
-        criteria = [
-            ("논리성 (logic)", "logic", 30),
-            ("근거 (evidence)", "evidence", 25),
-            ("반박력 (rebuttal)", "rebuttal", 25),
-            ("적합성 (relevance)", "relevance", 20),
-        ]
+        criteria = [("논리성 (logic)", "logic", 30), ("근거 (evidence)", "evidence", 25),
+                    ("반박력 (rebuttal)", "rebuttal", 25), ("적합성 (relevance)", "relevance", 20)]
         for label, key, max_score in criteria:
             print(f"  {label:<20} {a_s.get(key,0):>6}/{max_score}  {b_s.get(key,0):>6}/{max_score}")
         print(f"  {_divider('-', 44)}")
@@ -445,9 +437,9 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
         print(f"  {'벌점':<20} {-finished_match.penalty_a:>10}  {-finished_match.penalty_b:>10}")
         print(f"  {'최종 점수':<20} {finished_match.score_a:>10}  {finished_match.score_b:>10}")
 
-    print("\n  심판 코멘트:")
+    print(f"\n  심판 코멘트:")
     reasoning = scorecard.get("reasoning", "")
-    for chunk in [reasoning[i : i + 66] for i in range(0, len(reasoning), 66)]:
+    for chunk in [reasoning[i:i+66] for i in range(0, len(reasoning), 66)]:
         print(f"    {chunk}")
 
     diff = abs(finished_match.score_a - finished_match.score_b)
@@ -470,10 +462,14 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     # ── Assertions ──
 
     # 1) 매치 완료 상태
-    assert finished_match.status == "completed", f"매치 상태 오류: expected 'completed', got '{finished_match.status}'"
+    assert finished_match.status == "completed", (
+        f"매치 상태 오류: expected 'completed', got '{finished_match.status}'"
+    )
 
     # 2) 정확히 6개의 턴 로그
-    assert len(turns) == topic.max_turns * 2, f"턴 수 오류: expected {topic.max_turns * 2}, got {len(turns)}"
+    assert len(turns) == topic.max_turns * 2, (
+        f"턴 수 오류: expected {topic.max_turns * 2}, got {len(turns)}"
+    )
 
     # 3) 모든 턴의 action, claim 정상
     valid_actions = {"argue", "rebut", "concede", "question", "summarize"}
@@ -491,9 +487,9 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     assert finished_match.score_b >= 0
 
     # 6) A 점수 > B 점수이므로 A가 승자
-    assert (
-        finished_match.winner_id == agent_a.id
-    ), f"승자 오류: score_a={finished_match.score_a} > score_b={finished_match.score_b}이므로 A가 이겨야 함"
+    assert finished_match.winner_id == agent_a.id, (
+        f"승자 오류: score_a={finished_match.score_a} > score_b={finished_match.score_b}이므로 A가 이겨야 함"
+    )
 
     # 7) ELO 변화: A는 올라가고 B는 내려가야 함
     assert updated_a.elo_rating > 1500, "A의 ELO가 올라야 함"
@@ -506,9 +502,9 @@ async def test_debate_full_cycle(db_session: AsyncSession, debate_e2e_setup):
     assert "started" in event_types, "started 이벤트 없음"
     assert "finished" in event_types, "finished 이벤트 없음"
     turn_events = [e for e in emitted_events if e["event"] == "turn"]
-    assert (
-        len(turn_events) == topic.max_turns * 2
-    ), f"turn 이벤트 수 오류: expected {topic.max_turns * 2}, got {len(turn_events)}"
+    assert len(turn_events) == topic.max_turns * 2, (
+        f"turn 이벤트 수 오류: expected {topic.max_turns * 2}, got {len(turn_events)}"
+    )
     # started가 turn들보다 먼저
     started_idx = event_types.index("started")
     first_turn_idx = event_types.index("turn")

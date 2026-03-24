@@ -92,7 +92,9 @@ class DebateAgentService:
             if not template.is_active:
                 raise ValueError("Template is not active")
 
-            validated = template_service.validate_customizations(template, data.customizations, data.enable_free_text)
+            validated = template_service.validate_customizations(
+                template, data.customizations, data.enable_free_text
+            )
             prompt = template_service.assemble_prompt(template, validated)
         elif is_local:
             # 로컬 에이전트 기본값
@@ -138,7 +140,9 @@ class DebateAgentService:
     async def update_agent(self, agent_id: str, data: AgentUpdate, user: User) -> DebateAgent:
         """에이전트 수정. 프롬프트/커스터마이징 변경 시 새 버전 자동 생성."""
         # 존재 여부와 소유권을 분리해서 검사 — 다른 HTTP 상태코드(404/403)를 위해
-        result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
+        result = await self.db.execute(
+            select(DebateAgent).where(DebateAgent.id == agent_id)
+        )
         agent = result.scalar_one_or_none()
         if agent is None:
             raise ValueError("Agent not found")
@@ -181,7 +185,9 @@ class DebateAgentService:
             template = await template_service.get_template(agent.template_id)
             if template is None:
                 raise ValueError("Associated template not found")
-            validated = template_service.validate_customizations(template, data.customizations, data.enable_free_text)
+            validated = template_service.validate_customizations(
+                template, data.customizations, data.enable_free_text
+            )
             new_prompt = template_service.assemble_prompt(template, validated)
             agent.customizations = validated
         elif data.system_prompt is not None:
@@ -217,7 +223,9 @@ class DebateAgentService:
         Returns:
             DebateAgent 객체. 존재하지 않으면 None.
         """
-        result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
+        result = await self.db.execute(
+            select(DebateAgent).where(DebateAgent.id == agent_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_my_agents(self, user: User) -> list[DebateAgent]:
@@ -230,7 +238,9 @@ class DebateAgentService:
             소유한 DebateAgent 목록 (최신 생성순).
         """
         result = await self.db.execute(
-            select(DebateAgent).where(DebateAgent.owner_id == user.id).order_by(DebateAgent.created_at.desc())
+            select(DebateAgent)
+            .where(DebateAgent.owner_id == user.id)
+            .order_by(DebateAgent.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -289,13 +299,17 @@ class DebateAgentService:
 
             if search:
                 like = _build_like_pattern(search)
-                base_query = base_query.where((DebateAgent.name.ilike(like)) | (User.nickname.ilike(like)))
+                base_query = base_query.where(
+                    (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
+                )
 
             if tier:
                 base_query = base_query.where(DebateAgentSeasonStats.tier == tier)
 
             # 전체 카운트 (페이지네이션용)
-            count_result = await self.db.execute(select(func.count()).select_from(base_query.subquery()))
+            count_result = await self.db.execute(
+                select(func.count()).select_from(base_query.subquery())
+            )
             total = count_result.scalar() or 0
 
             result = await self.db.execute(
@@ -331,16 +345,22 @@ class DebateAgentService:
         if search:
             escaped = search.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\\_")
             like = f"%{escaped}%"
-            base_query = base_query.where((DebateAgent.name.ilike(like)) | (User.nickname.ilike(like)))
+            base_query = base_query.where(
+                (DebateAgent.name.ilike(like)) | (User.nickname.ilike(like))
+            )
 
         if tier:
             base_query = base_query.where(DebateAgent.tier == tier)
 
         # 전체 카운트 (페이지네이션용)
-        count_result = await self.db.execute(select(func.count()).select_from(base_query.subquery()))
+        count_result = await self.db.execute(
+            select(func.count()).select_from(base_query.subquery())
+        )
         total = count_result.scalar() or 0
 
-        result = await self.db.execute(base_query.order_by(DebateAgent.elo_rating.desc()).offset(offset).limit(limit))
+        result = await self.db.execute(
+            base_query.order_by(DebateAgent.elo_rating.desc()).offset(offset).limit(limit)
+        )
         rows = result.all()
         items = [
             {
@@ -376,12 +396,10 @@ class DebateAgentService:
         all_agents = result.all()
 
         my_result = await self.db.execute(
-            select(DebateAgent)
-            .where(
+            select(DebateAgent).where(
                 DebateAgent.owner_id == user.id,
                 DebateAgent.is_active == True,  # noqa: E712
-            )
-            .order_by(DebateAgent.elo_rating.desc())
+            ).order_by(DebateAgent.elo_rating.desc())
         )
         my_agents = list(my_result.scalars().all())
 
@@ -425,7 +443,9 @@ class DebateAgentService:
             raise ValueError("진행 중인 매치가 있어 삭제할 수 없습니다.")
 
         # 에이전트 버전 먼저 삭제 (FK 제약)
-        await self.db.execute(sa_delete(DebateAgentVersion).where(DebateAgentVersion.agent_id == agent_id))
+        await self.db.execute(
+            sa_delete(DebateAgentVersion).where(DebateAgentVersion.agent_id == agent_id)
+        )
         await self.db.delete(agent)
         await self.db.commit()
 
@@ -437,7 +457,7 @@ class DebateAgentService:
         result_type: 'win' | 'loss' | 'draw'
         반환: 시리즈가 새로 생성된 경우 시리즈 정보 dict, 없으면 None
         """
-        from app.services.debate.promotion_service import TIER_ORDER, DebatePromotionService
+        from app.services.debate.promotion_service import DebatePromotionService, TIER_ORDER
 
         # 현재 에이전트 상태 조회 (시리즈/보호 로직에 필요)
         result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
@@ -478,7 +498,9 @@ class DebateAgentService:
                 # 강등 방향 보호 차감은 check_and_trigger()에서 이미 처리됨
         # else: 시리즈 진행 중 — ELO만 업데이트, 티어 변경 없음
 
-        await self.db.execute(update(DebateAgent).where(DebateAgent.id == agent_id).values(**updates))
+        await self.db.execute(
+            update(DebateAgent).where(DebateAgent.id == agent_id).values(**updates)
+        )
 
         # 버전별 전적도 갱신
         if version_id:
@@ -490,7 +512,9 @@ class DebateAgentService:
             else:
                 ver_updates["draws"] = DebateAgentVersion.draws + 1
             await self.db.execute(
-                update(DebateAgentVersion).where(DebateAgentVersion.id == version_id).values(**ver_updates)
+                update(DebateAgentVersion)
+                .where(DebateAgentVersion.id == version_id)
+                .values(**ver_updates)
             )
 
         if new_series is not None:
@@ -513,24 +537,12 @@ class DebateAgentService:
                 DebateMatch.agent_b_id.label("opponent_id"),
                 func.count().label("total"),
                 func.sum(case((DebateMatch.winner_id == agent_uuid, 1), else_=0)).label("wins"),
-                func.sum(
-                    case(
-                        (
-                            (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid),
-                            1,  # noqa: E711
-                        ),
-                        else_=0,
-                    )
-                ).label("losses"),
-                func.sum(
-                    case(
-                        (
-                            (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"),
-                            1,  # noqa: E711
-                        ),
-                        else_=0,
-                    )
-                ).label("draws"),
+                func.sum(case((
+                    (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid), 1  # noqa: E711
+                ), else_=0)).label("losses"),
+                func.sum(case((
+                    (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"), 1  # noqa: E711
+                ), else_=0)).label("draws"),
             )
             .where(DebateMatch.agent_a_id == agent_uuid)
             .where(DebateMatch.status == "completed")
@@ -544,24 +556,12 @@ class DebateAgentService:
                 DebateMatch.agent_a_id.label("opponent_id"),
                 func.count().label("total"),
                 func.sum(case((DebateMatch.winner_id == agent_uuid, 1), else_=0)).label("wins"),
-                func.sum(
-                    case(
-                        (
-                            (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid),  # noqa: E711
-                            1,
-                        ),
-                        else_=0,
-                    )
-                ).label("losses"),
-                func.sum(
-                    case(
-                        (
-                            (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"),  # noqa: E711
-                            1,
-                        ),
-                        else_=0,
-                    )
-                ).label("draws"),
+                func.sum(case((
+                    (DebateMatch.winner_id != None) & (DebateMatch.winner_id != agent_uuid), 1  # noqa: E711
+                ), else_=0)).label("losses"),
+                func.sum(case((
+                    (DebateMatch.winner_id == None) & (DebateMatch.status == "completed"), 1  # noqa: E711
+                ), else_=0)).label("draws"),
             )
             .where(DebateMatch.agent_b_id == agent_uuid)
             .where(DebateMatch.status == "completed")
@@ -590,23 +590,23 @@ class DebateAgentService:
         opp_ids = [r.opponent_id for r in rows]
         agents_map: dict = {}
         if opp_ids:
-            res = await self.db.execute(select(DebateAgent).where(DebateAgent.id.in_(opp_ids)))
+            res = await self.db.execute(
+                select(DebateAgent).where(DebateAgent.id.in_(opp_ids))
+            )
             agents_map = {str(a.id): a for a in res.scalars()}
 
         result = []
         for r in rows:
             a = agents_map.get(str(r.opponent_id))
-            result.append(
-                {
-                    "opponent_id": str(r.opponent_id),
-                    "opponent_name": a.name if a else "[삭제됨]",
-                    "opponent_image_url": a.image_url if a else None,
-                    "total_matches": int(r.total_matches),
-                    "wins": int(r.wins),
-                    "losses": int(r.losses),
-                    "draws": int(r.draws),
-                }
-            )
+            result.append({
+                "opponent_id": str(r.opponent_id),
+                "opponent_name": a.name if a else "[삭제됨]",
+                "opponent_image_url": a.image_url if a else None,
+                "total_matches": int(r.total_matches),
+                "wins": int(r.wins),
+                "losses": int(r.losses),
+                "draws": int(r.draws),
+            })
         return result
 
     async def get_gallery(self, sort: str = "elo", skip: int = 0, limit: int = 20) -> tuple[list, int]:
@@ -637,24 +637,22 @@ class DebateAgentService:
 
         items = []
         for agent, nickname in rows:
-            items.append(
-                {
-                    "id": str(agent.id),
-                    "name": agent.name,
-                    "description": agent.description,
-                    "provider": agent.provider,
-                    "model_id": agent.model_id,
-                    "image_url": agent.image_url,
-                    "elo_rating": agent.elo_rating,
-                    "wins": agent.wins,
-                    "losses": agent.losses,
-                    "draws": agent.draws,
-                    "tier": agent.tier,
-                    "owner_nickname": nickname or "unknown",
-                    "is_system_prompt_public": agent.is_system_prompt_public,
-                    "created_at": agent.created_at,
-                }
-            )
+            items.append({
+                "id": str(agent.id),
+                "name": agent.name,
+                "description": agent.description,
+                "provider": agent.provider,
+                "model_id": agent.model_id,
+                "image_url": agent.image_url,
+                "elo_rating": agent.elo_rating,
+                "wins": agent.wins,
+                "losses": agent.losses,
+                "draws": agent.draws,
+                "tier": agent.tier,
+                "owner_nickname": nickname or "unknown",
+                "is_system_prompt_public": agent.is_system_prompt_public,
+                "created_at": agent.created_at,
+            })
         return items, total
 
     async def clone_agent(self, source_id: str, user: User, name: str) -> DebateAgent:
@@ -741,3 +739,4 @@ async def get_latest_version(db: AsyncSession, agent_id) -> DebateAgentVersion |
         .limit(1)
     )
     return result.scalar_one_or_none()
+

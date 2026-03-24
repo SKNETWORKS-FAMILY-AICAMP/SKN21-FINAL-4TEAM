@@ -45,7 +45,7 @@ class OrchestrationPolicy:
     trace_events_enabled: bool
 
     @classmethod
-    def from_settings(cls) -> OrchestrationPolicy:
+    def from_settings(cls) -> "OrchestrationPolicy":
         ratio = min(max(settings.debate_model_rollout_ratio, 0.0), 1.0)
         return cls(
             mode=settings.debate_orchestration_mode,
@@ -118,13 +118,11 @@ class OrchestrationControlPlane:
 
     def record_transition(self, from_status: str, to_status: str, reason: str = "") -> None:
         """매치 상태 전이를 기록한다."""
-        self.runtime.transitions.append(
-            {
-                "from": from_status,
-                "to": to_status,
-                "reason": reason,
-            }
-        )
+        self.runtime.transitions.append({
+            "from": from_status,
+            "to": to_status,
+            "reason": reason,
+        })
 
     def mark_fallback(
         self,
@@ -171,3 +169,4 @@ class OrchestrationControlPlane:
         if fallback_reason:
             meta["fallback_reason"] = fallback_reason
         return meta
+

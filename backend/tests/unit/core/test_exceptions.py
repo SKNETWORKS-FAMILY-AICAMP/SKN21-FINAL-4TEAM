@@ -1,5 +1,5 @@
 """에러 핸들링 계층 단위 테스트."""
-
+import pytest
 from app.core.exceptions import (
     AppError,
     ConflictError,

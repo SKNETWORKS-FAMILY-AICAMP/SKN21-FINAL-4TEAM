@@ -39,7 +39,9 @@ class GoogleProvider(BaseProvider):
         """사용자 제공 Google API 키(BYOK)로 비스트리밍 호출한다."""
         return await self._call_impl(model_id, api_key, messages, **kwargs)
 
-    async def stream(self, model_id: str, messages: list[dict], usage_out: dict, **kwargs) -> AsyncGenerator[str, None]:
+    async def stream(
+        self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
+    ) -> AsyncGenerator[str, None]:
         """플랫폼 Google API 키로 SSE 스트리밍 호출한다."""
         async for chunk in self._stream_impl(model_id, settings.google_api_key, messages, usage_out, **kwargs):
             yield chunk
@@ -89,8 +91,7 @@ class GoogleProvider(BaseProvider):
         if not response.is_success:
             raise httpx.HTTPStatusError(
                 f"Google API {response.status_code}: {response.text[:300]}",
-                request=response.request,
-                response=response,
+                request=response.request, response=response,
             )
         data = response.json()
         candidate = data["candidates"][0]
@@ -171,8 +172,7 @@ class GoogleProvider(BaseProvider):
                 body_bytes = await response.aread()
                 raise httpx.HTTPStatusError(
                     f"Google API {response.status_code}: {body_bytes.decode(errors='replace')[:300]}",
-                    request=response.request,
-                    response=response,
+                    request=response.request, response=response,
                 )
             async for chunk in _iter_google_sse(response, usage_out):
                 yield chunk
@@ -192,30 +192,24 @@ class GoogleProvider(BaseProvider):
                 if msg.get("content"):
                     parts.append({"text": msg["content"]})
                 for tc in msg["tool_calls"]:
-                    parts.append(
-                        {
-                            "functionCall": {
-                                "name": tc["function"]["name"],
-                                "args": json.loads(tc["function"]["arguments"]),
-                            }
+                    parts.append({
+                        "functionCall": {
+                            "name": tc["function"]["name"],
+                            "args": json.loads(tc["function"]["arguments"]),
                         }
-                    )
+                    })
                 contents.append({"role": "model", "parts": parts})
             elif msg["role"] == "tool":
                 # OpenAI tool role → Gemini user+functionResponse part
-                contents.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "functionResponse": {
-                                    "name": "web_search",
-                                    "response": {"content": msg["content"]},
-                                }
-                            }
-                        ],
-                    }
-                )
+                contents.append({
+                    "role": "user",
+                    "parts": [{
+                        "functionResponse": {
+                            "name": "web_search",
+                            "response": {"content": msg["content"]},
+                        }
+                    }],
+                })
             elif msg["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
             else:
@@ -223,7 +217,9 @@ class GoogleProvider(BaseProvider):
         return "\n\n".join(system_parts), contents
 
 
-async def _iter_google_sse(response: httpx.Response, usage_out: dict) -> AsyncGenerator[str, None]:
+async def _iter_google_sse(
+    response: httpx.Response, usage_out: dict
+) -> AsyncGenerator[str, None]:
     """Google Gemini SSE 스트림을 파싱하여 텍스트 청크를 생성한다.
 
     usageMetadata 필드(마지막 청크)에서 promptTokenCount/candidatesTokenCount를 캡처한다.

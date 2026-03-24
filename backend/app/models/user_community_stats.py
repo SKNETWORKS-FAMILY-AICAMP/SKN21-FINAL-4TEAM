@@ -17,10 +17,14 @@ class UserCommunityStats(Base):
     """
 
     __tablename__ = "user_community_stats"
-    __table_args__ = (UniqueConstraint("user_id", name="uq_user_community_stats_user_id"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_user_community_stats_user_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     total_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tier: Mapped[str] = mapped_column(String(20), nullable=False, default="Bronze")
     likes_given: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
