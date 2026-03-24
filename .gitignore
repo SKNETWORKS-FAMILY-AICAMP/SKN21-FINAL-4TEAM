@@ -12,6 +12,8 @@ venv/
 env/
 
 # Testing
+*_test_results.txt
+*_test_result.txt
 .pytest_cache/
 .coverage
 htmlcov/
