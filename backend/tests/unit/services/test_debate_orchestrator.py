@@ -366,7 +366,7 @@ class TestReviewTurn:
         # minor 위반은 벌점 0 — AI 토론 맥락에서 허용
         assert result["penalties"] == {}
         assert result["penalty_total"] == 0
-        assert result["blocked_claim"] is None
+        assert result["blocked_claim"] == ""
 
     @pytest.mark.asyncio
     async def test_block_true_generates_blocked_claim(self):
@@ -397,7 +397,7 @@ class TestReviewTurn:
 
         assert result["penalty_total"] >= BLOCK_PENALTY_THRESHOLD
         assert result["block"] is True
-        assert result["blocked_claim"] is not None
+        assert result["blocked_claim"]
         assert "차단" in result["blocked_claim"]
         assert result["penalties"].get("ad_hominem") == LLM_VIOLATION_PENALTIES["ad_hominem"]
 

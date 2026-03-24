@@ -4,23 +4,15 @@ import asyncio
 import json
 import logging
 import re
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import settings
 from app.services.llm.inference_client import InferenceClient
+from app.services.llm.utils import infer_provider
 
 logger = logging.getLogger(__name__)
-
-
-def _infer_provider(model_id: str) -> str:
-    """모델 ID 접두사로 provider를 추론. claude→anthropic, gemini→google, 기타→openai."""
-    if model_id.startswith("claude"):
-        return "anthropic"
-    if model_id.startswith("gemini"):
-        return "google"
-    return "openai"
 
 
 def _platform_api_key(provider: str) -> str:
@@ -206,16 +198,16 @@ class DebateOrchestrator:
         반환: (review_result, input_tokens, output_tokens)
         LLM 호출·파싱 실패 시 예외를 그대로 전파한다. 호출자가 폴백 처리 담당.
         """
-        provider = _infer_provider(model_id)
-        kwargs: dict = {
+        provider = infer_provider(model_id)
+        kwargs: dict[str, Any] = {
             "max_tokens": settings.debate_review_max_tokens,
             "temperature": 0.1,
         }
-        # json_schema: 필드 존재·타입·범위까지 API 레벨에서 강제 (OpenAI 전용)
+        # json_schema + strict:True: 필드 존재·타입·범위까지 API 레벨에서 강제 (OpenAI 전용)
         if provider == "openai":
             kwargs["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": "review_result", "schema": ReviewResult.model_json_schema()},
+                "json_schema": {"name": "review_result", "strict": True, "schema": ReviewResult.model_json_schema()},
             }
         # gpt-5-nano 등 추론 모델은 reasoning 토큰을 먼저 소비 후 출력
         # max_completion_tokens가 작으면 reasoning만 하고 출력이 비어버림 → 충분히 크게 설정
@@ -257,11 +249,13 @@ class DebateOrchestrator:
                 penalties[v.type] = penalties.get(v.type, 0) + LLM_VIOLATION_PENALTIES[v.type]
         penalty_total = sum(penalties.values())
         # severe prompt_injection만 즉시 차단 — minor는 벌점 누적으로 처리 (다른 위반과 동일)
-        has_severe_injection = any(v.type == "prompt_injection" and v.severity == "severe" for v in review.violations)
-        blocked = has_severe_injection or penalty_total >= BLOCK_PENALTY_THRESHOLD
-        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if blocked else None
+        blocked = (
+            any(v.type == "prompt_injection" and v.severity == "severe" for v in review.violations)
+            or penalty_total >= BLOCK_PENALTY_THRESHOLD
+        )
+        blocked_claim = "[차단됨: 규칙 위반으로 발언이 차단되었습니다]" if blocked else ""
 
-        result = {
+        return {
             "logic_score": review.logic_score,
             "violations": [v.model_dump() for v in review.violations],
             "feedback": review.feedback,
@@ -272,13 +266,9 @@ class DebateOrchestrator:
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "model_id": model_id,
+            "skipped": skipped,
+            "fallback_reason": fallback_reason,
         }
-        # skipped 플래그는 명시적으로 전달된 경우에만 포함
-        if skipped is not None:
-            result["skipped"] = skipped
-        if fallback_reason:
-            result["fallback_reason"] = fallback_reason
-        return result
 
     async def review_turn(
         self,
@@ -365,7 +355,7 @@ class DebateOrchestrator:
         ]
 
         # API 키 없으면 검토 불가 — 즉시 폴백
-        api_key = _platform_api_key(_infer_provider(model_id))
+        api_key = _platform_api_key(infer_provider(model_id))
         if not api_key:
             logger.warning(
                 "review_turn fallback(no_api_key) | trace_id=%s mode=%s turn=%s speaker=%s model=%s",
@@ -442,10 +432,11 @@ class DebateOrchestrator:
             "block": False,
             "penalties": {},
             "penalty_total": 0,
-            "blocked_claim": None,
+            "blocked_claim": "",
             "input_tokens": 0,
             "output_tokens": 0,
             "model_id": "",
+            "skipped": False,
             "fallback_reason": reason,
         }
 

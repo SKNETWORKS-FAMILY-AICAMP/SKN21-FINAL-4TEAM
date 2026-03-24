@@ -10,26 +10,9 @@ from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
 from app.services.llm.inference_client import InferenceClient
+from app.services.llm.utils import infer_provider
 
 logger = logging.getLogger(__name__)
-
-
-def _infer_provider(model_id: str) -> str:
-    """모델 ID 접두사로 provider를 추론한다.
-
-    Args:
-        model_id: LLM 모델 ID 문자열.
-
-    Returns:
-        'anthropic' | 'google' | 'runpod' | 'openai'
-    """
-    if model_id.startswith("claude"):
-        return "anthropic"
-    if model_id.startswith("gemini"):
-        return "google"
-    if model_id.startswith(("meta-", "llama", "mistral", "qwen")):
-        return "runpod"
-    return "openai"
 
 
 def _platform_api_key(provider: str) -> str:
@@ -179,7 +162,7 @@ class DebateJudge:
                 "fallback_reason": "model_unset",
             }
 
-        provider = _infer_provider(model_id)
+        provider = infer_provider(model_id)
         api_key = _platform_api_key(provider)
         intro_timeout = getattr(settings, "debate_judge_timeout_seconds", 120)
         intro_max_tokens = min(getattr(settings, "debate_judge_max_tokens", 600), 220)
@@ -276,7 +259,7 @@ class DebateJudge:
         Stage 2: 분석 결과 기반 채점 (JSON 출력)
         """
         debate_log = self._format_debate_log(turns, topic, agent_a_name, agent_b_name)
-        provider = _infer_provider(model_id)
+        provider = infer_provider(model_id)
         api_key = _platform_api_key(provider)
 
         judge_input_tokens = 0

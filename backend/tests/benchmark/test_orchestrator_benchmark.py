@@ -48,7 +48,7 @@ def _make_review_response(
         "block": block,
         "penalties": {},
         "penalty_total": 0,
-        "blocked_claim": "[차단됨]" if block else None,
+        "blocked_claim": "[차단됨]" if block else "",
         "input_tokens": 450,
         "output_tokens": 80,
         "skipped": False,
