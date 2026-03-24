@@ -4,6 +4,7 @@ import asyncio
 import logging
 import math
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -441,18 +442,31 @@ class DebateEngine:
             "output_tokens": intro.get("output_tokens", 0),
             "fallback_reason": intro.get("fallback_reason"),
         })
+        intro_message = (intro.get("message") or "").strip()
+        if intro_message:
+            # 턴 루프 컨텍스트에서만 judge_intro를 별도 섹션으로 주입한다.
+            turn_topic = SimpleNamespace(
+                title=topic.title,
+                description=topic.description,
+                max_turns=topic.max_turns,
+                turn_token_limit=topic.turn_token_limit,
+                tools_enabled=topic.tools_enabled,
+                judge_intro=intro_message,
+            )
+        else:
+            turn_topic = topic
 
         try:
             if match_format == "1v1":
                 loop_result: TurnLoopResult = await runner(
-                    executor, orchestrator, self.db, match, topic,
+                    executor, orchestrator, self.db, match, turn_topic,
                     agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
                     model_cache, usage_batch,
                     parallel=orchestrator.optimized,
                 )
             else:
                 loop_result = await runner(
-                    executor, orchestrator, self.db, match, topic,
+                    executor, orchestrator, self.db, match, turn_topic,
                     agent_a, agent_b, model_cache, usage_batch,
                 )
         except MatchVoidError as void_err:
