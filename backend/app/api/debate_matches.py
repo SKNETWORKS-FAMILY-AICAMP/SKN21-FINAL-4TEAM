@@ -149,11 +149,14 @@ async def stream_match(
         async def _immediate():
             if match.status == "completed":
                 payload = json.dumps(
-                    {"event": "finished", "data": {
-                        "winner_id": str(match.winner_id) if match.winner_id else None,
-                        "score_a": match.score_a,
-                        "score_b": match.score_b,
-                    }},
+                    {
+                        "event": "finished",
+                        "data": {
+                            "winner_id": str(match.winner_id) if match.winner_id else None,
+                            "score_a": match.score_a,
+                            "score_b": match.score_b,
+                        },
+                    },
                     default=str,
                 )
             elif match.status == "forfeit":

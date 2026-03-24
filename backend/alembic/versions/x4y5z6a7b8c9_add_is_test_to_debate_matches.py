@@ -8,8 +8,9 @@ Create Date: 2026-02-26
 is_test=True인 매치는 항상 플랫폼 API 키를 사용하고 ELO 랭킹에 미반영.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "x4y5z6a7b8c9"
 down_revision = "w3x4y5z6a7b8"

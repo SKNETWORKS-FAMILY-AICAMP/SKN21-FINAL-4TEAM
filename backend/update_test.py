@@ -1,7 +1,7 @@
 import pathlib
 
-p = pathlib.Path('tests/unit/services/test_debate_engine.py')
-existing = p.read_text(encoding='utf-8')
+p = pathlib.Path("tests/unit/services/test_debate_engine.py")
+existing = p.read_text(encoding="utf-8")
 
 # 새 테스트 코드 작성
 new_code = r'''
@@ -83,5 +83,5 @@ class TestResolveApiKey:
             assert result == "sk-platform-anthropic"
 '''
 
-p.write_text(existing + new_code, encoding='utf-8')
+p.write_text(existing + new_code, encoding="utf-8")
 print("✓ test_debate_engine.py에 TestResolveApiKey 클래스 추가")

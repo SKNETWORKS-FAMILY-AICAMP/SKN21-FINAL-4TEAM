@@ -40,9 +40,7 @@ class DebateTemplateService:
 
     async def list_all_templates(self) -> list[DebateAgentTemplate]:
         """전체 템플릿 목록 (관리자용, 비활성 포함)."""
-        result = await self.db.execute(
-            select(DebateAgentTemplate).order_by(DebateAgentTemplate.sort_order)
-        )
+        result = await self.db.execute(select(DebateAgentTemplate).order_by(DebateAgentTemplate.sort_order))
         return list(result.scalars().all())
 
     async def get_template(self, template_id: str | uuid.UUID) -> DebateAgentTemplate | None:
@@ -54,9 +52,7 @@ class DebateTemplateService:
         Returns:
             DebateAgentTemplate 객체. 미존재 시 None.
         """
-        result = await self.db.execute(
-            select(DebateAgentTemplate).where(DebateAgentTemplate.id == template_id)
-        )
+        result = await self.db.execute(select(DebateAgentTemplate).where(DebateAgentTemplate.id == template_id))
         return result.scalar_one_or_none()
 
     # ------------------------------------------------------------------
@@ -98,9 +94,7 @@ class DebateTemplateService:
             except (TypeError, ValueError) as err:
                 raise ValueError(f"슬라이더 '{key}' 값은 정수여야 합니다.") from err
             if not (slider["min"] <= val <= slider["max"]):
-                raise ValueError(
-                    f"슬라이더 '{key}' 값 {val}은 {slider['min']}~{slider['max']} 범위여야 합니다."
-                )
+                raise ValueError(f"슬라이더 '{key}' 값 {val}은 {slider['min']}~{slider['max']} 범위여야 합니다.")
             result[key] = val
 
         # 셀렉트 옵션 검증
@@ -109,9 +103,7 @@ class DebateTemplateService:
             val = result.get(key, sel["default"])
             valid_values = [opt["value"] for opt in sel["options"]]
             if val not in valid_values:
-                raise ValueError(
-                    f"'{key}' 값 '{val}'은 허용된 옵션({valid_values})이 아닙니다."
-                )
+                raise ValueError(f"'{key}' 값 '{val}'은 허용된 옵션({valid_values})이 아닙니다.")
             result[key] = val
 
         # free_text 처리
@@ -126,9 +118,7 @@ class DebateTemplateService:
                 ft_val = str(ft_val)
                 max_len = ft.get("max_length", 500)
                 if len(ft_val) > max_len:
-                    raise ValueError(
-                        f"추가 지시사항은 {max_len}자를 초과할 수 없습니다."
-                    )
+                    raise ValueError(f"추가 지시사항은 {max_len}자를 초과할 수 없습니다.")
                 # 프롬프트 인젝션 패턴 스캔
                 if _INJECTION_PATTERNS.search(ft_val):
                     raise ValueError("추가 지시사항에 허용되지 않는 패턴이 포함되어 있습니다.")
@@ -136,9 +126,7 @@ class DebateTemplateService:
 
         return result
 
-    def assemble_prompt(
-        self, template: DebateAgentTemplate, customizations: dict
-    ) -> str:
+    def assemble_prompt(self, template: DebateAgentTemplate, customizations: dict) -> str:
         """검증된 customizations로 {customization_block}을 치환하여 최종 프롬프트를 반환한다.
 
         슬라이더·셀렉트·free_text 값을 한국어 라벨 텍스트로 변환해
@@ -201,9 +189,7 @@ class DebateTemplateService:
         await self.db.refresh(tmpl)
         return tmpl
 
-    async def update_template(
-        self, template_id: str | uuid.UUID, data: AgentTemplateUpdate
-    ) -> DebateAgentTemplate:
+    async def update_template(self, template_id: str | uuid.UUID, data: AgentTemplateUpdate) -> DebateAgentTemplate:
         """템플릿 수정 (superadmin)."""
         tmpl = await self.get_template(template_id)
         if tmpl is None:

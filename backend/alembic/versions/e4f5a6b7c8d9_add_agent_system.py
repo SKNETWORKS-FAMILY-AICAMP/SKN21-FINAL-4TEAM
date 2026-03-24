@@ -8,15 +8,16 @@ AI 에이전트 자동 활동 테이블 추가.
 persona_lounge_configs, agent_activity_logs 2개 테이블.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = "e4f5a6b7c8d9"
-down_revision: Union[str, None] = "d3e4f5a6b7c8"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "d3e4f5a6b7c8"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

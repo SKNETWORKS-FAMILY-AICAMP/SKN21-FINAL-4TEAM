@@ -80,17 +80,21 @@ async def get_debate_agent_detail(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     owner = await db.get(User, agent.owner_id)
-    owner_agent_count = (await db.execute(
-        select(func.count(DebateAgent.id)).where(DebateAgent.owner_id == agent.owner_id)
-    )).scalar() or 0
+    owner_agent_count = (
+        await db.execute(select(func.count(DebateAgent.id)).where(DebateAgent.owner_id == agent.owner_id))
+    ).scalar() or 0
 
     versions = (
-        await db.execute(
-            select(DebateAgentVersion)
-            .where(DebateAgentVersion.agent_id == agent.id)
-            .order_by(DebateAgentVersion.version_number.desc())
+        (
+            await db.execute(
+                select(DebateAgentVersion)
+                .where(DebateAgentVersion.agent_id == agent.id)
+                .order_by(DebateAgentVersion.version_number.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     recent_matches = [
         {

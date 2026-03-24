@@ -43,13 +43,10 @@ async def list_seasons(
     """전체 시즌 목록 조회 (superadmin 전용)."""
     total = (await db.execute(select(func.count(DebateSeason.id)))).scalar() or 0
     seasons = (
-        await db.execute(
-            select(DebateSeason)
-            .order_by(DebateSeason.season_number.desc())
-            .offset(skip)
-            .limit(limit)
-        )
-    ).scalars().all()
+        (await db.execute(select(DebateSeason).order_by(DebateSeason.season_number.desc()).offset(skip).limit(limit)))
+        .scalars()
+        .all()
+    )
     return {
         "items": [
             {
@@ -73,9 +70,7 @@ async def activate_season(
     db: AsyncSession = Depends(get_db),
 ):
     """시즌 활성화 — upcoming → active (superadmin 전용)."""
-    existing = await db.execute(
-        select(DebateSeason).where(DebateSeason.status == "active")
-    )
+    existing = await db.execute(select(DebateSeason).where(DebateSeason.status == "active"))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

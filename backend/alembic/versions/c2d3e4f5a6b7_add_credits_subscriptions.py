@@ -9,15 +9,16 @@ Create Date: 2026-02-15 12:00:00.000000
 기존 llm_models 테이블에 tier 컬럼 추가.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = "c2d3e4f5a6b7"
-down_revision: Union[str, None] = "b1c2d3e4f5a6"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "b1c2d3e4f5a6"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

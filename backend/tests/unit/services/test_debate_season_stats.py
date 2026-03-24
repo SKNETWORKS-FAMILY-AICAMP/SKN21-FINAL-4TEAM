@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -33,8 +33,7 @@ def _make_agent(elo: int = 1500, wins: int = 0, losses: int = 0, draws: int = 0)
 
 
 def _make_season_stats(
-    agent_id=None, season_id=None, elo: int = 1500, tier: str = "Iron",
-    wins: int = 0, losses: int = 0, draws: int = 0
+    agent_id=None, season_id=None, elo: int = 1500, tier: str = "Iron", wins: int = 0, losses: int = 0, draws: int = 0
 ) -> MagicMock:
     stats = MagicMock()
     stats.id = uuid.uuid4()
@@ -119,6 +118,7 @@ class TestGetOrCreateSeasonStats:
         db.add.assert_called_once()
         # 생성된 객체는 DebateAgentSeasonStats 인스턴스여야 함
         from app.models.debate_agent import DebateAgentSeasonStats
+
         assert isinstance(db.add.call_args[0][0], DebateAgentSeasonStats)
 
 
@@ -270,10 +270,7 @@ class TestCloseSeasonUsesSeasonStats:
         # 누적 전적(100/50) vs 시즌 전적(5/2)
         agent = _make_agent(elo=1700, wins=100, losses=50)
 
-        stats = _make_season_stats(
-            agent_id=agent.id, season_id=season_id,
-            elo=1600, tier="Gold", wins=5, losses=2
-        )
+        stats = _make_season_stats(agent_id=agent.id, season_id=season_id, elo=1600, tier="Gold", wins=5, losses=2)
 
         # 보상 크레딧 지급을 위한 User mock
         owner = MagicMock()
@@ -298,6 +295,7 @@ class TestCloseSeasonUsesSeasonStats:
 
         # DebateSeasonResult 객체가 add 되었는지 확인
         from app.models.debate_season import DebateSeasonResult
+
         season_results = [obj for obj in added if isinstance(obj, DebateSeasonResult)]
         assert len(season_results) == 1
 
@@ -315,7 +313,6 @@ class TestCloseSeasonUsesSeasonStats:
 class TestMatchSeasonTagging:
     async def test_active_season_tags_match_season_id(self):
         """활성 시즌이 있으면 매치 생성 시 season_id 태깅."""
-        from app.services.debate.matching_service import DebateMatchingService
 
         db = AsyncMock()
         db.flush = AsyncMock()

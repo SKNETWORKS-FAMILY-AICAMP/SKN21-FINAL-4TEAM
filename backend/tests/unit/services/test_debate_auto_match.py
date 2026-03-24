@@ -60,9 +60,7 @@ class TestDebateAutoMatcher:
 
         db.execute = AsyncMock(side_effect=[fresh_result, platform_result])
 
-        with patch(
-            "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-        ) as mock_pub:
+        with patch("app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock) as mock_pub:
             await matcher._auto_match_with_platform_agent(db, entry)
 
         mock_pub.assert_called_once_with(
@@ -96,9 +94,7 @@ class TestDebateAutoMatcher:
 
         with (
             patch("app.services.debate.auto_matcher.redis_client", mock_redis),
-            patch(
-                "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-            ) as mock_pub,
+            patch("app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock) as mock_pub,
         ):
             await matcher._auto_match_with_platform_agent(db, entry)
 
@@ -127,9 +123,7 @@ class TestDebateAutoMatcher:
 
         with (
             patch("app.services.debate.auto_matcher.redis_client", mock_redis),
-            patch(
-                "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-            ) as mock_pub,
+            patch("app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock) as mock_pub,
         ):
             await matcher._auto_match_with_platform_agent(db, entry)
 
@@ -166,9 +160,7 @@ class TestDebateAutoMatcher:
         queue_del_result = MagicMock()
         queue_del_result.scalar_one_or_none = MagicMock(return_value=entry)
 
-        db.execute = AsyncMock(
-            side_effect=[fresh_result, platform_result, ver_result, ver_result, queue_del_result]
-        )
+        db.execute = AsyncMock(side_effect=[fresh_result, platform_result, ver_result, ver_result, queue_del_result])
 
         mock_redis = AsyncMock()
         mock_redis.set = AsyncMock(return_value=True)
@@ -177,9 +169,7 @@ class TestDebateAutoMatcher:
         with (
             patch("app.services.debate.auto_matcher.redis_client", mock_redis),
             patch("app.services.debate.auto_matcher.DebateMatch") as MockMatch,
-            patch(
-                "app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock
-            ) as mock_pub,
+            patch("app.services.debate.auto_matcher.publish_queue_event", new_callable=AsyncMock) as mock_pub,
             patch("app.services.debate.auto_matcher.asyncio.create_task"),
         ):
             MockMatch.return_value = mock_match

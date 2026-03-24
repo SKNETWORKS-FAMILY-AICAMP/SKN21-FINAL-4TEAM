@@ -87,9 +87,7 @@ class DebateTopicService:
         Returns:
             DebateTopic 객체. 존재하지 않으면 None.
         """
-        result = await self.db.execute(
-            select(DebateTopic).where(DebateTopic.id == topic_id)
-        )
+        result = await self.db.execute(select(DebateTopic).where(DebateTopic.id == topic_id))
         return result.scalar_one_or_none()
 
     async def list_topics(
@@ -148,9 +146,8 @@ class DebateTopicService:
                 .group_by(DebateMatch.topic_id)
                 .subquery()
             )
-            query = (
-                query.outerjoin(popular_subq, DebateTopic.id == popular_subq.c.topic_id)
-                .order_by(func.coalesce(popular_subq.c.weekly_cnt, 0).desc(), DebateTopic.created_at.desc())
+            query = query.outerjoin(popular_subq, DebateTopic.id == popular_subq.c.topic_id).order_by(
+                func.coalesce(popular_subq.c.weekly_cnt, 0).desc(), DebateTopic.created_at.desc()
             )
         elif sort == "queue":
             # 현재 대기 인원 많은 순
@@ -171,26 +168,28 @@ class DebateTopicService:
             creator_nickname = row[1]
             queue_count = row[2]
             match_count = row[3]
-            items.append({
-                "id": str(topic.id),
-                "title": topic.title,
-                "description": topic.description,
-                "mode": topic.mode,
-                "status": topic.status,
-                "max_turns": topic.max_turns,
-                "turn_token_limit": topic.turn_token_limit,
-                "scheduled_start_at": topic.scheduled_start_at,
-                "scheduled_end_at": topic.scheduled_end_at,
-                "is_admin_topic": topic.is_admin_topic,
-                "is_password_protected": topic.is_password_protected,
-                "tools_enabled": topic.tools_enabled,
-                "queue_count": queue_count,
-                "match_count": match_count,
-                "created_at": topic.created_at,
-                "updated_at": topic.updated_at,
-                "created_by": topic.created_by,
-                "creator_nickname": creator_nickname,
-            })
+            items.append(
+                {
+                    "id": str(topic.id),
+                    "title": topic.title,
+                    "description": topic.description,
+                    "mode": topic.mode,
+                    "status": topic.status,
+                    "max_turns": topic.max_turns,
+                    "turn_token_limit": topic.turn_token_limit,
+                    "scheduled_start_at": topic.scheduled_start_at,
+                    "scheduled_end_at": topic.scheduled_end_at,
+                    "is_admin_topic": topic.is_admin_topic,
+                    "is_password_protected": topic.is_password_protected,
+                    "tools_enabled": topic.tools_enabled,
+                    "queue_count": queue_count,
+                    "match_count": match_count,
+                    "created_at": topic.created_at,
+                    "updated_at": topic.updated_at,
+                    "created_by": topic.created_by,
+                    "creator_nickname": creator_nickname,
+                }
+            )
 
         return items, total
 
@@ -207,9 +206,7 @@ class DebateTopicService:
         Raises:
             ValueError: 토픽이 존재하지 않는 경우.
         """
-        result = await self.db.execute(
-            select(DebateTopic).where(DebateTopic.id == topic_id)
-        )
+        result = await self.db.execute(select(DebateTopic).where(DebateTopic.id == topic_id))
         topic = result.scalar_one_or_none()
         if topic is None:
             raise ValueError("Topic not found")
@@ -221,9 +218,7 @@ class DebateTopicService:
         await self.db.refresh(topic)
         return topic
 
-    async def update_topic_by_user(
-        self, topic_id: UUID, user_id: UUID, payload: TopicUpdatePayload
-    ) -> DebateTopic:
+    async def update_topic_by_user(self, topic_id: UUID, user_id: UUID, payload: TopicUpdatePayload) -> DebateTopic:
         """주제 작성자가 자신의 주제를 수정. 미존재 시 ValueError, 권한 없으면 PermissionError."""
         topic = await self.db.get(DebateTopic, topic_id)
         if not topic:
@@ -242,9 +237,7 @@ class DebateTopicService:
         """토픽 삭제 (매치가 없는 경우만 허용). 대기 큐를 먼저 정리."""
         from sqlalchemy import delete as sa_delete
 
-        result = await self.db.execute(
-            select(DebateTopic).where(DebateTopic.id == topic_id)
-        )
+        result = await self.db.execute(select(DebateTopic).where(DebateTopic.id == topic_id))
         topic = result.scalar_one_or_none()
         if topic is None:
             raise ValueError("Topic not found")
@@ -257,9 +250,7 @@ class DebateTopicService:
             )
 
         # 대기 큐 먼저 제거
-        await self.db.execute(
-            sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic.id)
-        )
+        await self.db.execute(sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic.id))
         await self.db.delete(topic)
         await self.db.commit()
 
@@ -283,9 +274,7 @@ class DebateTopicService:
         if active_matches > 0:
             raise ValueError(f"진행 중인 매치가 {active_matches}개 있어 삭제할 수 없습니다.")
 
-        await self.db.execute(
-            sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic_id)
-        )
+        await self.db.execute(sa_delete(DebateMatchQueue).where(DebateMatchQueue.topic_id == topic_id))
         await self.db.delete(topic)
         await self.db.commit()
 

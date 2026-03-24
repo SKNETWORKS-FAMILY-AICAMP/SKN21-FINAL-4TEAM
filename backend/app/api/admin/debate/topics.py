@@ -28,12 +28,12 @@ async def debate_stats(
     agents_count = (await db.execute(select(func.count(DebateAgent.id)))).scalar() or 0
     topics_count = (await db.execute(select(func.count(DebateTopic.id)))).scalar() or 0
     matches_total = (await db.execute(select(func.count(DebateMatch.id)))).scalar() or 0
-    matches_completed = (await db.execute(
-        select(func.count(DebateMatch.id)).where(DebateMatch.status == "completed")
-    )).scalar() or 0
-    matches_in_progress = (await db.execute(
-        select(func.count(DebateMatch.id)).where(DebateMatch.status == "in_progress")
-    )).scalar() or 0
+    matches_completed = (
+        await db.execute(select(func.count(DebateMatch.id)).where(DebateMatch.status == "completed"))
+    ).scalar() or 0
+    matches_in_progress = (
+        await db.execute(select(func.count(DebateMatch.id)).where(DebateMatch.status == "in_progress"))
+    ).scalar() or 0
 
     return {
         "agents_count": agents_count,

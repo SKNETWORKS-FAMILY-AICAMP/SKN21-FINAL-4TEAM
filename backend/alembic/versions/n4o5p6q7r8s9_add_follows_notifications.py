@@ -9,9 +9,10 @@ Revises: m3n4o5p6q7r8
 Create Date: 2026-03-12
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "n4o5p6q7r8s9"
 down_revision = "m3n4o5p6q7r8"
@@ -46,7 +47,9 @@ def upgrade() -> None:
             name="ck_user_follows_target_type",
         ),
         sa.UniqueConstraint(
-            "follower_id", "target_type", "target_id",
+            "follower_id",
+            "target_type",
+            "target_id",
             name="uq_user_follows_follower_target",
         ),
     )

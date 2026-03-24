@@ -9,22 +9,19 @@ debate_agents에 is_platform 컬럼 추가.
   플랫폼 에이전트는 자동 매칭 타임아웃 시 상대로 배정되며, 여러 매치에 동시 참여 가능.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "p6k7l8m9n0o5"
-down_revision: Union[str, None] = "o5j6k7l8m9n4"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "o5j6k7l8m9n4"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     # IF NOT EXISTS: 수동으로 컬럼이 이미 추가된 환경에서도 안전하게 실행
-    op.execute(
-        "ALTER TABLE debate_agents ADD COLUMN IF NOT EXISTS is_platform BOOLEAN NOT NULL DEFAULT false"
-    )
+    op.execute("ALTER TABLE debate_agents ADD COLUMN IF NOT EXISTS is_platform BOOLEAN NOT NULL DEFAULT false")
 
 
 def downgrade() -> None:

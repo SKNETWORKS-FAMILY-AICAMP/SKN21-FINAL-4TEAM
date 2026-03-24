@@ -3,7 +3,8 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import case as sa_case, select
+from sqlalchemy import case as sa_case
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,9 +23,7 @@ class DebateSeasonService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_season(
-        self, season_number: int, title: str, start_at: datetime, end_at: datetime
-    ) -> DebateSeason:
+    async def create_season(self, season_number: int, title: str, start_at: datetime, end_at: datetime) -> DebateSeason:
         """새 시즌을 생성한다 (status='upcoming').
 
         Args:
@@ -76,9 +75,7 @@ class DebateSeasonService:
         )
         return res.scalar_one_or_none()
 
-    async def get_or_create_season_stats(
-        self, agent_id: str, season_id: str
-    ) -> DebateAgentSeasonStats:
+    async def get_or_create_season_stats(self, agent_id: str, season_id: str) -> DebateAgentSeasonStats:
         """에이전트의 시즌 통계 행을 가져오거나 생성 (ELO 1500, Iron 시작)."""
         res = await self.db.execute(
             select(DebateAgentSeasonStats).where(
@@ -109,9 +106,7 @@ class DebateSeasonService:
                 stats = res.scalar_one()
         return stats
 
-    async def update_season_stats(
-        self, agent_id: str, season_id: str, new_elo: int, result_type: str
-    ) -> None:
+    async def update_season_stats(self, agent_id: str, season_id: str, new_elo: int, result_type: str) -> None:
         """시즌 ELO/전적 갱신 + tier 재계산.
 
         result_type: 'win' | 'loss' | 'draw'
@@ -147,18 +142,20 @@ class DebateSeasonService:
         )
         items = []
         for result, agent in res.all():
-            items.append({
-                "rank": result.rank,
-                "agent_id": str(result.agent_id),
-                "agent_name": agent.name,
-                "agent_image_url": agent.image_url,
-                "final_elo": result.final_elo,
-                "final_tier": result.final_tier,
-                "wins": result.wins,
-                "losses": result.losses,
-                "draws": result.draws,
-                "reward_credits": result.reward_credits,
-            })
+            items.append(
+                {
+                    "rank": result.rank,
+                    "agent_id": str(result.agent_id),
+                    "agent_name": agent.name,
+                    "agent_image_url": agent.image_url,
+                    "final_elo": result.final_elo,
+                    "final_tier": result.final_tier,
+                    "wins": result.wins,
+                    "losses": result.losses,
+                    "draws": result.draws,
+                    "reward_credits": result.reward_credits,
+                }
+            )
         return items
 
     async def close_season(self, season_id: str) -> None:

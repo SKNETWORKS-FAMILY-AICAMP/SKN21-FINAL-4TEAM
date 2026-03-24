@@ -5,8 +5,10 @@ Revises: i9j0k1l2m3n4
 Create Date: 2026-03-06
 
 """
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "j0k1l2m3n4o5"
 down_revision = "i9j0k1l2m3n4"

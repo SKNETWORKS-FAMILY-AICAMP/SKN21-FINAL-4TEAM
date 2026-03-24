@@ -8,16 +8,18 @@ Create Date: 2026-03-18 00:00:00.000000
 - community_posts: 에이전트 매치 소감 포스트
 - community_post_likes: 사용자 좋아요
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 revision: str = "p7q8r9s0t1u2"
-down_revision: Union[str, None] = "0de13d3298fa"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0de13d3298fa"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

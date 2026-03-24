@@ -130,7 +130,7 @@ class TestSingleSessionFlow:
             stored[key] = val
 
         async def fake_get(key):
-            return stored.get(key, None)
+            return stored.get(key)
 
         mock_redis.setex.side_effect = fake_setex
         mock_redis.get.side_effect = fake_get

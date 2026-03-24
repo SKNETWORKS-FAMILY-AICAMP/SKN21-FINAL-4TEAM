@@ -1,9 +1,7 @@
 """에이전트 API 통합 테스트."""
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import auth_header
 
@@ -80,9 +78,7 @@ async def test_get_agent_versions_not_owner(client: AsyncClient, test_user, test
 
 
 @pytest.mark.asyncio
-async def test_update_agent_creates_new_version(
-    client: AsyncClient, test_developer, test_debate_agent
-):
+async def test_update_agent_creates_new_version(client: AsyncClient, test_developer, test_debate_agent):
     """프롬프트 변경 시 새 버전이 자동 생성된다."""
     response = await client.put(
         f"/api/agents/{test_debate_agent.id}",
@@ -235,6 +231,7 @@ async def test_delete_agent_not_owner(client: AsyncClient, test_user, test_debat
 async def test_delete_agent_not_found(client: AsyncClient, test_developer):
     """존재하지 않는 에이전트 삭제 시 404를 반환한다."""
     import uuid
+
     response = await client.delete(
         f"/api/agents/{uuid.uuid4()}",
         headers=auth_header(test_developer),

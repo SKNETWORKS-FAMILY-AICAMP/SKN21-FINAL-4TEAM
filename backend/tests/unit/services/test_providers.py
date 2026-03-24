@@ -6,8 +6,9 @@ TDD Red-Green 순서:
 """
 
 import pytest
+
+from app.services.llm.providers import AnthropicProvider, GoogleProvider, OpenAIProvider, RunPodProvider
 from app.services.llm.providers.base import BaseProvider
-from app.services.llm.providers import OpenAIProvider, AnthropicProvider, GoogleProvider, RunPodProvider
 
 
 class TestProviderHierarchy:
@@ -47,25 +48,25 @@ class TestBaseProviderInterface:
         """모든 provider 클래스가 generate 메서드를 보유한다."""
         for cls in [OpenAIProvider, AnthropicProvider, GoogleProvider, RunPodProvider]:
             assert hasattr(cls, "generate"), f"{cls.__name__} missing generate()"
-            assert callable(getattr(cls, "generate"))
+            assert callable(cls.generate)
 
     def test_all_providers_have_generate_byok(self):
         """모든 provider 클래스가 generate_byok 메서드를 보유한다."""
         for cls in [OpenAIProvider, AnthropicProvider, GoogleProvider, RunPodProvider]:
             assert hasattr(cls, "generate_byok"), f"{cls.__name__} missing generate_byok()"
-            assert callable(getattr(cls, "generate_byok"))
+            assert callable(cls.generate_byok)
 
     def test_all_providers_have_stream(self):
         """모든 provider 클래스가 stream 메서드를 보유한다."""
         for cls in [OpenAIProvider, AnthropicProvider, GoogleProvider, RunPodProvider]:
             assert hasattr(cls, "stream"), f"{cls.__name__} missing stream()"
-            assert callable(getattr(cls, "stream"))
+            assert callable(cls.stream)
 
     def test_all_providers_have_stream_byok(self):
         """모든 provider 클래스가 stream_byok 메서드를 보유한다."""
         for cls in [OpenAIProvider, AnthropicProvider, GoogleProvider, RunPodProvider]:
             assert hasattr(cls, "stream_byok"), f"{cls.__name__} missing stream_byok()"
-            assert callable(getattr(cls, "stream_byok"))
+            assert callable(cls.stream_byok)
 
 
 class TestInferenceClientWithProviders:

@@ -130,16 +130,13 @@ async def get_model_usage_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """모델별 총 사용량 통계."""
-    query = (
-        select(
-            TokenUsageLog.llm_model_id,
-            func.count().label("total_requests"),
-            func.coalesce(func.sum(TokenUsageLog.input_tokens), 0).label("total_input_tokens"),
-            func.coalesce(func.sum(TokenUsageLog.output_tokens), 0).label("total_output_tokens"),
-            func.coalesce(func.sum(TokenUsageLog.cost), 0).label("total_cost"),
-        )
-        .group_by(TokenUsageLog.llm_model_id)
-    )
+    query = select(
+        TokenUsageLog.llm_model_id,
+        func.count().label("total_requests"),
+        func.coalesce(func.sum(TokenUsageLog.input_tokens), 0).label("total_input_tokens"),
+        func.coalesce(func.sum(TokenUsageLog.output_tokens), 0).label("total_output_tokens"),
+        func.coalesce(func.sum(TokenUsageLog.cost), 0).label("total_cost"),
+    ).group_by(TokenUsageLog.llm_model_id)
     result = await db.execute(query)
     return [
         ModelUsageStats(

@@ -208,9 +208,7 @@ class WSConnectionManager:
                 if queue:
                     queue.put_nowait(data)
             else:
-                logger.warning(
-                    "Received %s from agent %s but no active turn registered", msg_type, agent_id
-                )
+                logger.warning("Received %s from agent %s but no active turn registered", msg_type, agent_id)
 
         elif msg_type == "pong":
             await self._set_presence(agent_id, True)
@@ -360,10 +358,12 @@ class WSConnectionManager:
 
             from app.core.redis import redis_client
 
-            message = json.dumps({
-                "target_agent_id": str(agent_id),
-                "payload": payload,
-            })
+            message = json.dumps(
+                {
+                    "target_agent_id": str(agent_id),
+                    "payload": payload,
+                }
+            )
             await redis_client.publish(_PUBSUB_CHANNEL, message)
         except Exception:
             logger.debug("Failed to publish message to agent %s via Redis", agent_id)

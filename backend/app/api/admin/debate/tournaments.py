@@ -40,9 +40,7 @@ async def start_tournament(
     db: AsyncSession = Depends(get_db),
 ):
     """토너먼트 시작 (superadmin 전용)."""
-    t = (
-        await db.execute(select(DebateTournament).where(DebateTournament.id == tournament_id))
-    ).scalar_one_or_none()
+    t = (await db.execute(select(DebateTournament).where(DebateTournament.id == tournament_id))).scalar_one_or_none()
     if t is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
     if t.status != "registration":

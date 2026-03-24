@@ -1,7 +1,8 @@
 """하이라이트 매치 서비스 단위 테스트."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 @pytest.mark.asyncio

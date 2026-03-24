@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import auth_header
 
-
 # ---------------------------------------------------------------------------
 # 공통 템플릿 픽스처
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def test_template(db_session: AsyncSession):
@@ -28,8 +28,14 @@ async def test_template(db_session: AsyncSession):
         base_system_prompt="당신은 테스트 에이전트입니다.\n\n{customization_block}\n\n성실히 토론하세요.",
         customization_schema={
             "sliders": [
-                {"key": "aggression", "label": "공격성", "min": 1, "max": 5, "default": 3,
-                 "description": "높을수록 공격적"},
+                {
+                    "key": "aggression",
+                    "label": "공격성",
+                    "min": 1,
+                    "max": 5,
+                    "default": 3,
+                    "description": "높을수록 공격적",
+                },
             ],
             "selects": [
                 {
@@ -85,6 +91,7 @@ async def test_inactive_template(db_session: AsyncSession):
 # GET /api/agents/templates — 사용자 템플릿 목록
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_list_templates_returns_active_only(
     client: AsyncClient, test_user, test_template, test_inactive_template
@@ -99,9 +106,7 @@ async def test_list_templates_returns_active_only(
 
 
 @pytest.mark.asyncio
-async def test_list_templates_excludes_base_system_prompt(
-    client: AsyncClient, test_user, test_template
-):
+async def test_list_templates_excludes_base_system_prompt(client: AsyncClient, test_user, test_template):
     """사용자 응답에는 base_system_prompt가 포함되지 않는다."""
     response = await client.get("/api/agents/templates", headers=auth_header(test_user))
     assert response.status_code == 200
@@ -117,9 +122,7 @@ async def test_list_templates_unauthorized(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_list_templates_includes_schema_and_defaults(
-    client: AsyncClient, test_user, test_template
-):
+async def test_list_templates_includes_schema_and_defaults(client: AsyncClient, test_user, test_template):
     """응답에 customization_schema와 default_values가 포함된다."""
     response = await client.get("/api/agents/templates", headers=auth_header(test_user))
     assert response.status_code == 200
@@ -132,6 +135,7 @@ async def test_list_templates_includes_schema_and_defaults(
 # ---------------------------------------------------------------------------
 # POST /api/agents — 템플릿 기반 에이전트 생성
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_create_agent_with_template(client: AsyncClient, test_user, test_template):
@@ -156,9 +160,7 @@ async def test_create_agent_with_template(client: AsyncClient, test_user, test_t
 
 
 @pytest.mark.asyncio
-async def test_create_agent_with_template_uses_default_customizations(
-    client: AsyncClient, test_user, test_template
-):
+async def test_create_agent_with_template_uses_default_customizations(client: AsyncClient, test_user, test_template):
     """customizations 없이 template_id만 넣으면 기본값으로 에이전트가 생성된다."""
     response = await client.post(
         "/api/agents",
@@ -178,9 +180,7 @@ async def test_create_agent_with_template_uses_default_customizations(
 
 
 @pytest.mark.asyncio
-async def test_create_agent_with_invalid_customization_returns_422(
-    client: AsyncClient, test_user, test_template
-):
+async def test_create_agent_with_invalid_customization_returns_422(client: AsyncClient, test_user, test_template):
     """유효하지 않은 커스터마이징 값은 422를 반환한다."""
     response = await client.post(
         "/api/agents",
@@ -198,9 +198,7 @@ async def test_create_agent_with_invalid_customization_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_create_agent_with_invalid_template_id_returns_422(
-    client: AsyncClient, test_user
-):
+async def test_create_agent_with_invalid_template_id_returns_422(client: AsyncClient, test_user):
     """존재하지 않는 template_id는 422를 반환한다."""
     response = await client.post(
         "/api/agents",
@@ -217,9 +215,7 @@ async def test_create_agent_with_invalid_template_id_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_create_agent_with_inactive_template_returns_422(
-    client: AsyncClient, test_user, test_inactive_template
-):
+async def test_create_agent_with_inactive_template_returns_422(client: AsyncClient, test_user, test_inactive_template):
     """비활성 템플릿으로 에이전트 생성 시 422를 반환한다."""
     response = await client.post(
         "/api/agents",
@@ -276,6 +272,7 @@ async def test_create_local_agent_still_works(client: AsyncClient, test_user):
 # PUT /api/agents/{id} — 커스터마이징 업데이트
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_update_agent_customizations_creates_new_version(
     client: AsyncClient, test_user, test_template, db_session
@@ -318,14 +315,13 @@ async def test_update_agent_customizations_creates_new_version(
 # 관리자 템플릿 CRUD
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_admin_list_templates_includes_inactive(
     client: AsyncClient, test_admin, test_template, test_inactive_template
 ):
     """관리자는 비활성 템플릿도 조회할 수 있다."""
-    response = await client.get(
-        "/api/admin/debate/templates", headers=auth_header(test_admin)
-    )
+    response = await client.get("/api/admin/debate/templates", headers=auth_header(test_admin))
     assert response.status_code == 200
     slugs = [t["slug"] for t in response.json()]
     assert "test_template" in slugs
@@ -333,22 +329,16 @@ async def test_admin_list_templates_includes_inactive(
 
 
 @pytest.mark.asyncio
-async def test_admin_list_templates_includes_base_system_prompt(
-    client: AsyncClient, test_admin, test_template
-):
+async def test_admin_list_templates_includes_base_system_prompt(client: AsyncClient, test_admin, test_template):
     """관리자 응답에는 base_system_prompt가 포함된다."""
-    response = await client.get(
-        "/api/admin/debate/templates", headers=auth_header(test_admin)
-    )
+    response = await client.get("/api/admin/debate/templates", headers=auth_header(test_admin))
     assert response.status_code == 200
     for t in response.json():
         assert "base_system_prompt" in t
 
 
 @pytest.mark.asyncio
-async def test_admin_get_template_detail(
-    client: AsyncClient, test_admin, test_template
-):
+async def test_admin_get_template_detail(client: AsyncClient, test_admin, test_template):
     """관리자는 템플릿 상세를 조회할 수 있다."""
     response = await client.get(
         f"/api/admin/debate/templates/{test_template.id}",
@@ -403,16 +393,12 @@ async def test_admin_cannot_create_template(client: AsyncClient, test_admin):
 @pytest.mark.asyncio
 async def test_user_cannot_access_admin_templates(client: AsyncClient, test_user):
     """일반 사용자는 관리자 템플릿 엔드포인트에 접근할 수 없다 (403)."""
-    response = await client.get(
-        "/api/admin/debate/templates", headers=auth_header(test_user)
-    )
+    response = await client.get("/api/admin/debate/templates", headers=auth_header(test_user))
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_superadmin_update_template(
-    client: AsyncClient, test_superadmin, test_template
-):
+async def test_superadmin_update_template(client: AsyncClient, test_superadmin, test_template):
     """슈퍼관리자는 템플릿을 수정할 수 있다."""
     response = await client.patch(
         f"/api/admin/debate/templates/{test_template.id}",

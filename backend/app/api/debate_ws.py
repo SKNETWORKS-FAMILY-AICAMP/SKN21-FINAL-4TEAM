@@ -93,9 +93,7 @@ async def agent_websocket(
             return
 
         # 3. 에이전트 소유권 + provider 검증
-        result = await db.execute(
-            select(DebateAgent).where(DebateAgent.id == agent_id)
-        )
+        result = await db.execute(select(DebateAgent).where(DebateAgent.id == agent_id))
         agent = result.scalar_one_or_none()
 
         if agent is None:

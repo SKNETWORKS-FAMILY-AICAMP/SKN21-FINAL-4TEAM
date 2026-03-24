@@ -64,9 +64,7 @@ class DebateTurnLog(Base):
     response_time_ms: Mapped[int | None] = mapped_column(Integer)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     # Relationships
     match = relationship("DebateMatch", back_populates="turns")

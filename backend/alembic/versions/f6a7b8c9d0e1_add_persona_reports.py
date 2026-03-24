@@ -8,15 +8,16 @@ Create Date: 2026-02-20 00:00:00.000000
 사용자가 부적절한 페르소나를 신고하고 관리자가 검토/처리할 수 있는 구조.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = "f6a7b8c9d0e1"
-down_revision: Union[str, None] = "e5f6a7b8c9d0"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "e5f6a7b8c9d0"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

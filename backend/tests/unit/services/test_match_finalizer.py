@@ -7,7 +7,6 @@ import pytest
 
 from app.services.debate.finalizer import MatchFinalizer
 
-
 # finalizer.py 내 지역 import 경로 상수화
 _AGENT_SVC = "app.services.debate.agent_service.DebateAgentService"
 _PROMO_SVC = "app.services.debate.promotion_service.DebatePromotionService"

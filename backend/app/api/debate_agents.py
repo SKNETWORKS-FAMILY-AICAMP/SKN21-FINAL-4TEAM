@@ -79,9 +79,9 @@ def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
         body = {}
 
     err = body.get("error", {})
-    err_code = str(err.get("code", ""))        # OpenAI: "invalid_api_key" / "model_not_found"
-    err_type = err.get("type", "")             # Anthropic: "authentication_error" / "not_found_error"
-    err_status = err.get("status", "")         # Google: "UNAUTHENTICATED" / "NOT_FOUND"
+    err_code = str(err.get("code", ""))  # OpenAI: "invalid_api_key" / "model_not_found"
+    err_type = err.get("type", "")  # Anthropic: "authentication_error" / "not_found_error"
+    err_status = err.get("status", "")  # Google: "UNAUTHENTICATED" / "NOT_FOUND"
     err_msg = err.get("message", "")
 
     # ── API 키 문제 ────────────────────────────────────────────────────────
@@ -96,10 +96,7 @@ def _classify_provider_error(exc: httpx.HTTPStatusError) -> tuple[str, str]:
 
     # ── 모델 문제 ──────────────────────────────────────────────────────────
     model_signals = (
-        code == 404
-        or err_code == "model_not_found"
-        or err_type == "not_found_error"
-        or err_status == "NOT_FOUND"
+        code == 404 or err_code == "model_not_found" or err_type == "not_found_error" or err_status == "NOT_FOUND"
     )
     if model_signals:
         return "model", "모델을 찾을 수 없습니다. 모델 ID를 확인해주세요."
@@ -238,9 +235,7 @@ async def get_ranking(
 ):
     """ELO 글로벌 랭킹 조회. season_id 지정 시 시즌 랭킹 반환."""
     service = DebateAgentService(db)
-    items, total = await service.get_ranking(
-        limit=limit, offset=offset, search=search, tier=tier, season_id=season_id
-    )
+    items, total = await service.get_ranking(limit=limit, offset=offset, search=search, tier=tier, season_id=season_id)
     return {"items": items, "total": total}
 
 

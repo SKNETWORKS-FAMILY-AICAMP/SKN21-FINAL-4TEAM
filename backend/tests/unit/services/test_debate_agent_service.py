@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 from app.schemas.debate_agent import AgentCreate, AgentUpdate
 from app.services.debate.promotion_service import TIER_ORDER
@@ -104,7 +103,7 @@ class TestUpdateEloDeadCode:
         """update_elo에서 사용하는 TIER_ORDER가 debate_promotion_service 상수와 동일."""
         # 직접 import하여 동일 객체임을 확인
         expected = ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master"]
-        assert TIER_ORDER == expected
+        assert expected == TIER_ORDER
 
     @pytest.mark.asyncio
     async def test_update_elo_master_no_immediate_tier_change(self):

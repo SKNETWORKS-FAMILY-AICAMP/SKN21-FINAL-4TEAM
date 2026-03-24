@@ -91,7 +91,9 @@ class NotificationService:
     async def get_unread_count(self, user_id: UUID) -> int:
         """미읽기 알림 수."""
         count = await self.db.scalar(
-            select(func.count()).select_from(UserNotification).where(
+            select(func.count())
+            .select_from(UserNotification)
+            .where(
                 and_(
                     UserNotification.user_id == user_id,
                     UserNotification.is_read == False,  # noqa: E712
@@ -102,9 +104,7 @@ class NotificationService:
 
     async def mark_read(self, notification_id: UUID, user_id: UUID) -> None:
         """단건 읽음 처리. 소유권 체크 실패 시 PermissionError."""
-        result = await self.db.execute(
-            select(UserNotification).where(UserNotification.id == notification_id)
-        )
+        result = await self.db.execute(select(UserNotification).where(UserNotification.id == notification_id))
         notification = result.scalar_one_or_none()
         if notification is None:
             raise ValueError("notification_not_found")
@@ -133,18 +133,14 @@ class NotificationService:
         """
         from app.services.follow_service import FollowService
 
-        match_result = await self.db.execute(
-            select(DebateMatch).where(DebateMatch.id == match_id)
-        )
+        match_result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
         match = match_result.scalar_one_or_none()
         if match is None:
             logger.warning("notify_match_event: match not found: %s", match_id)
             return
 
         agents_result = await self.db.execute(
-            select(DebateAgent).where(
-                DebateAgent.id.in_([match.agent_a_id, match.agent_b_id])
-            )
+            select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
         agents_map = {a.id: a for a in agents_result.scalars().all()}
         agent_a = agents_map.get(match.agent_a_id)
@@ -181,16 +177,13 @@ class NotificationService:
             return
 
         notifications = [
-            {"user_id": uid, "type": notif_type, "title": title, "body": body, "link": link}
-            for uid in recipient_ids
+            {"user_id": uid, "type": notif_type, "title": title, "body": body, "link": link} for uid in recipient_ids
         ]
         await self.create_bulk(notifications)
 
     async def notify_prediction_result(self, match_id: UUID) -> None:
         """예측투표 결과 확정 시 투표자에게 알림."""
-        match_result = await self.db.execute(
-            select(DebateMatch).where(DebateMatch.id == match_id)
-        )
+        match_result = await self.db.execute(select(DebateMatch).where(DebateMatch.id == match_id))
         match = match_result.scalar_one_or_none()
         if match is None:
             logger.warning("notify_prediction_result: match not found: %s", match_id)
@@ -204,9 +197,7 @@ class NotificationService:
             return
 
         agents_result = await self.db.execute(
-            select(DebateAgent).where(
-                DebateAgent.id.in_([match.agent_a_id, match.agent_b_id])
-            )
+            select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
         agents_map = {a.id: a for a in agents_result.scalars().all()}
         agent_a = agents_map.get(match.agent_a_id)
@@ -235,17 +226,13 @@ class NotificationService:
         ]
         await self.create_bulk(notifications)
 
-    async def notify_new_follower(
-        self, follower_id: UUID, target_type: str, target_id: UUID
-    ) -> None:
+    async def notify_new_follower(self, follower_id: UUID, target_type: str, target_id: UUID) -> None:
         """새 팔로워 알림.
 
         - target_type='user': 대상 User에게 직접 알림
         - target_type='agent': DebateAgent.owner_id에게 알림
         """
-        follower_result = await self.db.execute(
-            select(User).where(User.id == follower_id)
-        )
+        follower_result = await self.db.execute(select(User).where(User.id == follower_id))
         follower = follower_result.scalar_one_or_none()
         follower_name = follower.nickname if follower else str(follower_id)
 
@@ -255,9 +242,7 @@ class NotificationService:
             body = f"{follower_name}님이 회원님을 팔로우합니다."
             link = None
         elif target_type == "agent":
-            agent_result = await self.db.execute(
-                select(DebateAgent).where(DebateAgent.id == target_id)
-            )
+            agent_result = await self.db.execute(select(DebateAgent).where(DebateAgent.id == target_id))
             agent = agent_result.scalar_one_or_none()
             if agent is None:
                 logger.warning("notify_new_follower: agent not found: %s", target_id)
@@ -270,12 +255,14 @@ class NotificationService:
             logger.warning("notify_new_follower: unknown target_type '%s'", target_type)
             return
 
-        await self.create_bulk([
-            {
-                "user_id": recipient_id,
-                "type": "new_follower",
-                "title": title,
-                "body": body,
-                "link": link,
-            }
-        ])
+        await self.create_bulk(
+            [
+                {
+                    "user_id": recipient_id,
+                    "type": "new_follower",
+                    "title": title,
+                    "body": body,
+                    "link": link,
+                }
+            ]
+        )

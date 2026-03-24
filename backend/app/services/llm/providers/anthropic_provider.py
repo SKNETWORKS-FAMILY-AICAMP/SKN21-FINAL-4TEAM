@@ -39,9 +39,7 @@ class AnthropicProvider(BaseProvider):
         """사용자 제공 Anthropic API 키(BYOK)로 비스트리밍 호출한다."""
         return await self._call_impl(model_id, api_key, messages, **kwargs)
 
-    async def stream(
-        self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    async def stream(self, model_id: str, messages: list[dict], usage_out: dict, **kwargs) -> AsyncGenerator[str, None]:
         """플랫폼 Anthropic API 키로 SSE 스트리밍 호출한다."""
         async for chunk in self._stream_impl(model_id, settings.anthropic_api_key, messages, usage_out, **kwargs):
             yield chunk
@@ -97,7 +95,8 @@ class AnthropicProvider(BaseProvider):
         if not response.is_success:
             raise httpx.HTTPStatusError(
                 f"Anthropic API {response.status_code}: {response.text[:300]}",
-                request=response.request, response=response,
+                request=response.request,
+                response=response,
             )
         data = response.json()
         content_blocks = data.get("content", [])
@@ -176,7 +175,8 @@ class AnthropicProvider(BaseProvider):
                 body_bytes = await response.aread()
                 raise httpx.HTTPStatusError(
                     f"Anthropic API {response.status_code}: {body_bytes.decode(errors='replace')[:300]}",
-                    request=response.request, response=response,
+                    request=response.request,
+                    response=response,
                 )
             async for chunk in _iter_anthropic_sse(response, usage_out):
                 yield chunk
@@ -196,31 +196,35 @@ class AnthropicProvider(BaseProvider):
                 if msg.get("content"):
                     content_blocks.append({"type": "text", "text": msg["content"]})
                 for tc in msg["tool_calls"]:
-                    content_blocks.append({
-                        "type": "tool_use",
-                        "id": tc["id"],
-                        "name": tc["function"]["name"],
-                        "input": json.loads(tc["function"]["arguments"]),
-                    })
+                    content_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc["id"],
+                            "name": tc["function"]["name"],
+                            "input": json.loads(tc["function"]["arguments"]),
+                        }
+                    )
                 api_messages.append({"role": "assistant", "content": content_blocks})
             elif msg["role"] == "tool":
                 # OpenAI tool role → Anthropic user+tool_result content block
-                api_messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg["tool_call_id"],
-                        "content": msg["content"],
-                    }],
-                })
+                api_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg["tool_call_id"],
+                                "content": msg["content"],
+                            }
+                        ],
+                    }
+                )
             else:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         return "\n\n".join(system_parts), api_messages
 
 
-async def _iter_anthropic_sse(
-    response: httpx.Response, usage_out: dict
-) -> AsyncGenerator[str, None]:
+async def _iter_anthropic_sse(response: httpx.Response, usage_out: dict) -> AsyncGenerator[str, None]:
     """Anthropic Messages API SSE 스트림을 파싱하여 텍스트 청크를 생성한다.
 
     message_start 이벤트에서 input_tokens, message_delta 이벤트에서 output_tokens를 캡처한다.

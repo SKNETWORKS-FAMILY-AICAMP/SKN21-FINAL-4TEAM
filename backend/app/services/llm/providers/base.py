@@ -56,9 +56,7 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    async def stream(
-        self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    async def stream(self, model_id: str, messages: list[dict], usage_out: dict, **kwargs) -> AsyncGenerator[str, None]:
         """플랫폼 API 키로 SSE 스트리밍 호출한다.
 
         Args:

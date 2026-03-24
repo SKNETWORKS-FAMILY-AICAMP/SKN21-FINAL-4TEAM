@@ -7,7 +7,9 @@ Revision ID: t0o1p2q3r4s5
 Revises: s9n0o1p2q3r4
 Create Date: 2026-02-26
 """
+
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "t0o1p2q3r4s5"

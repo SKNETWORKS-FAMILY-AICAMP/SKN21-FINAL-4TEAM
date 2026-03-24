@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 
 import httpx
 
-from app.core.config import settings
 from app.core.observability import create_generation, record_llm_metrics
 from app.models.llm_model import LLMModel
 from app.services.llm.providers import AnthropicProvider, GoogleProvider, OpenAIProvider, RunPodProvider
@@ -117,9 +116,7 @@ class InferenceClient:
         async for chunk in self._route_stream(model, messages, usage_out, **kwargs):
             yield chunk
 
-    async def generate_byok(
-        self, provider: str, model_id: str, api_key: str, messages: list[dict], **kwargs
-    ) -> dict:
+    async def generate_byok(self, provider: str, model_id: str, api_key: str, messages: list[dict], **kwargs) -> dict:
         """사용자 제공 API 키(BYOK)로 LLM을 비스트리밍 호출한다. 토론 엔진 전용.
 
         Args:

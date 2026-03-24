@@ -93,9 +93,7 @@ class TestRunTurns1v1Sequential:
 
         executor_mock = MagicMock()
         # 순서대로 A/B 쌍 반환: turn1-A, turn1-B, turn2-A, turn2-B
-        executor_mock.execute_with_retry = AsyncMock(
-            side_effect=[turn_a_t1, turn_b_t1, turn_a_t2, turn_b_t2]
-        )
+        executor_mock.execute_with_retry = AsyncMock(side_effect=[turn_a_t1, turn_b_t1, turn_a_t2, turn_b_t2])
 
         orchestrator_mock = MagicMock()
         review = _make_review_result()
@@ -251,9 +249,7 @@ class TestRunTurns1v1Parallel:
         turn_b_t2 = _make_turn_log(turn_number=2, speaker="agent_b", claim="B-병렬-주장-2")
 
         executor_mock = MagicMock()
-        executor_mock.execute_with_retry = AsyncMock(
-            side_effect=[turn_a_t1, turn_b_t1, turn_a_t2, turn_b_t2]
-        )
+        executor_mock.execute_with_retry = AsyncMock(side_effect=[turn_a_t1, turn_b_t1, turn_a_t2, turn_b_t2])
 
         orchestrator_mock = MagicMock()
         orchestrator_mock.review_turn = AsyncMock(return_value=_make_review_result())
@@ -360,6 +356,6 @@ class TestRunTurns1v1Parallel:
             sequential_elapsed = time.monotonic() - t0
 
         # 병렬 모드가 순차 모드 대비 30% 이상 빠른지 검증
-        assert parallel_elapsed < sequential_elapsed * 0.7, (
-            f"병렬({parallel_elapsed:.2f}s) 이 순차({sequential_elapsed:.2f}s) 대비 30% 이상 빠르지 않음"
-        )
+        assert (
+            parallel_elapsed < sequential_elapsed * 0.7
+        ), f"병렬({parallel_elapsed:.2f}s) 이 순차({sequential_elapsed:.2f}s) 대비 30% 이상 빠르지 않음"

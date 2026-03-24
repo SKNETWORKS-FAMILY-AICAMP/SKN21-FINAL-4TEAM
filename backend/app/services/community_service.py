@@ -35,6 +35,7 @@ def _calc_tier(score: int) -> tuple[str, str | None, int | None]:
             return tier_name, next_tier, next_score_needed
     return "Diamond", None, None
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,9 +92,7 @@ class CommunityService:
         elo_delta = (elo_after or 0) - (elo_before or 0)
 
         # 토픽 제목 조회
-        topic_res = await self.db.execute(
-            select(DebateTopic.title).where(DebateTopic.id == match.topic_id)
-        )
+        topic_res = await self.db.execute(select(DebateTopic.title).where(DebateTopic.id == match.topic_id))
         topic_title = topic_res.scalar_one_or_none() or "알 수 없는 주제"
 
         match_result_data = {
@@ -150,14 +149,16 @@ class CommunityService:
                 if input_tokens > 0 or output_tokens > 0:
                     input_cost = Decimal(str(input_tokens)) * llm_model.input_cost_per_1m / Decimal("1000000")
                     output_cost = Decimal(str(output_tokens)) * llm_model.output_cost_per_1m / Decimal("1000000")
-                    self.db.add(TokenUsageLog(
-                        user_id=agent.owner_id,
-                        session_id=None,
-                        llm_model_id=llm_model.id,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        cost=input_cost + output_cost,
-                    ))
+                    self.db.add(
+                        TokenUsageLog(
+                            user_id=agent.owner_id,
+                            session_id=None,
+                            llm_model_id=llm_model.id,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            cost=input_cost + output_cost,
+                        )
+                    )
 
         except Exception as exc:
             logger.warning("Community post generation failed for agent %s: %s", agent.id, exc)
@@ -210,9 +211,7 @@ class CommunityService:
         total_res = await self.db.execute(count_q)
         total = total_res.scalar() or 0
 
-        posts_res = await self.db.execute(
-            base_q.order_by(CommunityPost.created_at.desc()).offset(offset).limit(limit)
-        )
+        posts_res = await self.db.execute(base_q.order_by(CommunityPost.created_at.desc()).offset(offset).limit(limit))
         posts = list(posts_res.scalars().all())
 
         if not posts:
@@ -246,29 +245,29 @@ class CommunityService:
         items = []
         for post in posts:
             agent = agents_map.get(post.agent_id)
-            items.append({
-                "id": post.id,
-                "agent_id": post.agent_id,
-                "agent_name": agent.name if agent else "(삭제된 에이전트)",
-                "agent_image_url": agent.image_url if agent else None,
-                "agent_tier": agent.tier if agent else None,
-                "agent_model": agent.model_id if agent else None,
-                "content": post.content,
-                "match_result": post.match_result,
-                "likes_count": post.likes_count,
-                "dislikes_count": post.dislikes_count,
-                "is_liked": post.id in liked_post_ids,
-                "is_disliked": post.id in disliked_post_ids,
-                "created_at": post.created_at,
-            })
+            items.append(
+                {
+                    "id": post.id,
+                    "agent_id": post.agent_id,
+                    "agent_name": agent.name if agent else "(삭제된 에이전트)",
+                    "agent_image_url": agent.image_url if agent else None,
+                    "agent_tier": agent.tier if agent else None,
+                    "agent_model": agent.model_id if agent else None,
+                    "content": post.content,
+                    "match_result": post.match_result,
+                    "likes_count": post.likes_count,
+                    "dislikes_count": post.dislikes_count,
+                    "is_liked": post.id in liked_post_ids,
+                    "is_disliked": post.id in disliked_post_ids,
+                    "created_at": post.created_at,
+                }
+            )
 
         return items, total
 
     async def get_or_create_stats(self, user_id: UUID) -> MyCommunityStatsResponse:
         """사용자 참여통계를 반환한다. 레코드가 없으면 DB에서 집계 후 생성한다."""
-        res = await self.db.execute(
-            select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
-        )
+        res = await self.db.execute(select(UserCommunityStats).where(UserCommunityStats.user_id == user_id))
         stats = res.scalar_one_or_none()
 
         if stats is None:
@@ -303,9 +302,7 @@ class CommunityService:
             except IntegrityError:
                 # 동시 요청으로 인한 중복 삽입 → 기존 레코드 재조회
                 await self.db.rollback()
-                res2 = await self.db.execute(
-                    select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
-                )
+                res2 = await self.db.execute(select(UserCommunityStats).where(UserCommunityStats.user_id == user_id))
                 stats = res2.scalar_one()
 
         tier, next_tier, next_tier_score = _calc_tier(stats.total_score)
@@ -325,9 +322,7 @@ class CommunityService:
         follows_delta: int = 0,
     ) -> None:
         """참여통계를 증분(delta) 업데이트한다. 레코드가 없으면 생성 후 업데이트한다."""
-        res = await self.db.execute(
-            select(UserCommunityStats).where(UserCommunityStats.user_id == user_id)
-        )
+        res = await self.db.execute(select(UserCommunityStats).where(UserCommunityStats.user_id == user_id))
         stats = res.scalar_one_or_none()
 
         if stats is None:
@@ -384,9 +379,7 @@ class CommunityService:
             )
             await self.db.commit()
 
-            updated = await self.db.execute(
-                select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
-            )
+            updated = await self.db.execute(select(CommunityPost.likes_count).where(CommunityPost.id == post_id))
             count = updated.scalar() or 0
             # 좋아요 취소 → stats 비동기 업데이트
             _schedule_stats_update(str(user_id), likes_delta=-1)
@@ -400,9 +393,7 @@ class CommunityService:
         except IntegrityError:
             # 동시 요청으로 인한 중복 삽입 — 이미 좋아요 상태로 처리
             await self.db.rollback()
-            updated = await self.db.execute(
-                select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
-            )
+            updated = await self.db.execute(select(CommunityPost.likes_count).where(CommunityPost.id == post_id))
             count = updated.scalar() or 0
             return LikeToggleResponse(liked=True, likes_count=count)
 
@@ -413,9 +404,7 @@ class CommunityService:
         )
         await self.db.commit()
 
-        updated = await self.db.execute(
-            select(CommunityPost.likes_count).where(CommunityPost.id == post_id)
-        )
+        updated = await self.db.execute(select(CommunityPost.likes_count).where(CommunityPost.id == post_id))
         count = updated.scalar() or 0
         # 좋아요 추가 → stats 비동기 업데이트
         _schedule_stats_update(str(user_id), likes_delta=1)
@@ -444,9 +433,7 @@ class CommunityService:
                 .values(dislikes_count=CommunityPost.dislikes_count - 1)
             )
             await self.db.commit()
-            updated = await self.db.execute(
-                select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
-            )
+            updated = await self.db.execute(select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id))
             return DislikeToggleResponse(disliked=False, dislikes_count=max(0, updated.scalar() or 0))
 
         dislike = CommunityPostDislike(post_id=post_id, user_id=user_id)
@@ -455,9 +442,7 @@ class CommunityService:
             await self.db.flush()
         except IntegrityError:
             await self.db.rollback()
-            updated = await self.db.execute(
-                select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
-            )
+            updated = await self.db.execute(select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id))
             return DislikeToggleResponse(disliked=True, dislikes_count=updated.scalar() or 0)
 
         await self.db.execute(
@@ -466,9 +451,7 @@ class CommunityService:
             .values(dislikes_count=CommunityPost.dislikes_count + 1)
         )
         await self.db.commit()
-        updated = await self.db.execute(
-            select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id)
-        )
+        updated = await self.db.execute(select(CommunityPost.dislikes_count).where(CommunityPost.id == post_id))
         return DislikeToggleResponse(disliked=True, dislikes_count=updated.scalar() or 0)
 
 

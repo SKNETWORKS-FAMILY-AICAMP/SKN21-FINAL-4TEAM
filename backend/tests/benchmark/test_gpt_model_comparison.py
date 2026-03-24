@@ -12,37 +12,27 @@
 실행: pytest tests/benchmark/test_gpt_model_comparison.py -v -s
 """
 
-import asyncio
-import json
-import time
-from dataclasses import dataclass, field
-from typing import ClassVar
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
-from app.services.debate.orchestrator import (
-    DebateOrchestrator,
-    OptimizedDebateOrchestrator,
-)
+from dataclasses import dataclass
 
 # ─── 모델 카탈로그 ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ModelSpec:
     """OpenAI 모델 스펙 + 오케스트레이터 적합성 메타데이터."""
+
     model_id: str
     display_name: str
-    input_cost_per_1m: float   # USD
+    input_cost_per_1m: float  # USD
     output_cost_per_1m: float  # USD
-    context_window_k: int      # K tokens
+    context_window_k: int  # K tokens
     # 오케스트레이터 역할별 추정 성능 (0-10 스케일, 실측/공개 벤치 기반)
-    review_json_accuracy: float   # JSON 형식 준수율 추정
+    review_json_accuracy: float  # JSON 형식 준수율 추정
     review_violation_recall: float  # 위반 탐지 재현율 추정
-    review_latency_ms: float   # 256토큰 응답 예상 지연 (ms)
+    review_latency_ms: float  # 256토큰 응답 예상 지연 (ms)
     judge_reasoning_quality: float  # 채점 추론 품질 추정
-    judge_consistency: float   # 동일 입력 반복 시 일관성 추정
-    judge_latency_ms: float    # 1024토큰 응답 예상 지연 (ms)
+    judge_consistency: float  # 동일 입력 반복 시 일관성 추정
+    judge_latency_ms: float  # 1024토큰 응답 예상 지연 (ms)
     is_reasoning_model: bool = False  # o-series 여부
     notes: str = ""
 
@@ -53,125 +43,190 @@ ALL_MODELS: list[ModelSpec] = [
     ModelSpec(
         model_id="gpt-4o",
         display_name="GPT-4o",
-        input_cost_per_1m=2.50, output_cost_per_1m=10.00,
+        input_cost_per_1m=2.50,
+        output_cost_per_1m=10.00,
         context_window_k=128,
-        review_json_accuracy=9.5, review_violation_recall=8.5, review_latency_ms=1800,
-        judge_reasoning_quality=8.5, judge_consistency=8.5, judge_latency_ms=4200,
+        review_json_accuracy=9.5,
+        review_violation_recall=8.5,
+        review_latency_ms=1800,
+        judge_reasoning_quality=8.5,
+        judge_consistency=8.5,
+        judge_latency_ms=4200,
         notes="현행 기본값. 검증된 안정성, 높은 비용",
     ),
     ModelSpec(
         model_id="gpt-4o-mini",
         display_name="GPT-4o-mini",
-        input_cost_per_1m=0.15, output_cost_per_1m=0.60,
+        input_cost_per_1m=0.15,
+        output_cost_per_1m=0.60,
         context_window_k=128,
-        review_json_accuracy=9.0, review_violation_recall=7.8, review_latency_ms=900,
-        judge_reasoning_quality=6.5, judge_consistency=7.0, judge_latency_ms=2200,
+        review_json_accuracy=9.0,
+        review_violation_recall=7.8,
+        review_latency_ms=900,
+        judge_reasoning_quality=6.5,
+        judge_consistency=7.0,
+        judge_latency_ms=2200,
         notes="현행 검토 모델. 비용 대비 양호, 판정엔 부족",
     ),
     # ─────────────────────── GPT-4.1 계열 ──────────────────────
     ModelSpec(
         model_id="gpt-4.1",
         display_name="GPT-4.1",
-        input_cost_per_1m=2.00, output_cost_per_1m=8.00,
+        input_cost_per_1m=2.00,
+        output_cost_per_1m=8.00,
         context_window_k=1040,  # 1.04M
-        review_json_accuracy=9.6, review_violation_recall=8.8, review_latency_ms=1600,
-        judge_reasoning_quality=9.0, judge_consistency=9.0, judge_latency_ms=3800,
+        review_json_accuracy=9.6,
+        review_violation_recall=8.8,
+        review_latency_ms=1600,
+        judge_reasoning_quality=9.0,
+        judge_consistency=9.0,
+        judge_latency_ms=3800,
         notes="GPT-4o 대비 20% 저렴, 8배 큰 컨텍스트, 향상된 명령 추종",
     ),
     ModelSpec(
         model_id="gpt-4.1-mini",
         display_name="GPT-4.1-mini",
-        input_cost_per_1m=0.40, output_cost_per_1m=1.60,
+        input_cost_per_1m=0.40,
+        output_cost_per_1m=1.60,
         context_window_k=1040,
-        review_json_accuracy=9.2, review_violation_recall=8.2, review_latency_ms=750,
-        judge_reasoning_quality=7.5, judge_consistency=7.8, judge_latency_ms=1800,
+        review_json_accuracy=9.2,
+        review_violation_recall=8.2,
+        review_latency_ms=750,
+        judge_reasoning_quality=7.5,
+        judge_consistency=7.8,
+        judge_latency_ms=1800,
         notes="gpt-4o-mini 대비 더 나은 명령 추종, 2.7배 비쌈",
     ),
     ModelSpec(
         model_id="gpt-4.1-nano",
         display_name="GPT-4.1-nano",
-        input_cost_per_1m=0.10, output_cost_per_1m=0.40,
+        input_cost_per_1m=0.10,
+        output_cost_per_1m=0.40,
         context_window_k=1040,
-        review_json_accuracy=8.5, review_violation_recall=7.5, review_latency_ms=450,
-        judge_reasoning_quality=6.0, judge_consistency=6.5, judge_latency_ms=1200,
+        review_json_accuracy=8.5,
+        review_violation_recall=7.5,
+        review_latency_ms=450,
+        judge_reasoning_quality=6.0,
+        judge_consistency=6.5,
+        judge_latency_ms=1200,
         notes="최저가 최고속. 간단한 검토에 최적, 판정엔 부적합",
     ),
     # ─────────────────────── GPT-5 계열 ────────────────────────
     ModelSpec(
         model_id="gpt-5",
         display_name="GPT-5",
-        input_cost_per_1m=1.25, output_cost_per_1m=10.00,
+        input_cost_per_1m=1.25,
+        output_cost_per_1m=10.00,
         context_window_k=400,
-        review_json_accuracy=9.8, review_violation_recall=9.5, review_latency_ms=1400,
-        judge_reasoning_quality=9.8, judge_consistency=9.5, judge_latency_ms=3500,
+        review_json_accuracy=9.8,
+        review_violation_recall=9.5,
+        review_latency_ms=1400,
+        judge_reasoning_quality=9.8,
+        judge_consistency=9.5,
+        judge_latency_ms=3500,
         notes="차세대 최고 성능. 입력 비용 저렴, 출력은 gpt-4o 동급",
     ),
     ModelSpec(
         model_id="gpt-5-mini",
         display_name="GPT-5-mini",
-        input_cost_per_1m=0.25, output_cost_per_1m=2.00,
+        input_cost_per_1m=0.25,
+        output_cost_per_1m=2.00,
         context_window_k=400,
-        review_json_accuracy=9.4, review_violation_recall=9.0, review_latency_ms=700,
-        judge_reasoning_quality=8.0, judge_consistency=8.5, judge_latency_ms=1900,
+        review_json_accuracy=9.4,
+        review_violation_recall=9.0,
+        review_latency_ms=700,
+        judge_reasoning_quality=8.0,
+        judge_consistency=8.5,
+        judge_latency_ms=1900,
         notes="GPT-5 경량화. gpt-4o-mini 대비 성능 우수, 비용 약 3배",
     ),
     ModelSpec(
         model_id="gpt-5-nano",
         display_name="GPT-5-nano",
-        input_cost_per_1m=0.05, output_cost_per_1m=0.40,
+        input_cost_per_1m=0.05,
+        output_cost_per_1m=0.40,
         context_window_k=400,
-        review_json_accuracy=8.7, review_violation_recall=8.0, review_latency_ms=380,
-        judge_reasoning_quality=6.5, judge_consistency=7.0, judge_latency_ms=1000,
+        review_json_accuracy=8.7,
+        review_violation_recall=8.0,
+        review_latency_ms=380,
+        judge_reasoning_quality=6.5,
+        judge_consistency=7.0,
+        judge_latency_ms=1000,
         notes="최저가 모델. gpt-4.1-nano와 경쟁. 안정성 검증 필요",
     ),
     # ─────────────────────── O-Series 추론 모델 ─────────────────
     ModelSpec(
         model_id="o3",
         display_name="o3",
-        input_cost_per_1m=2.00, output_cost_per_1m=8.00,
+        input_cost_per_1m=2.00,
+        output_cost_per_1m=8.00,
         context_window_k=200,
-        review_json_accuracy=9.7, review_violation_recall=9.2, review_latency_ms=8000,  # 추론 체인 포함
-        judge_reasoning_quality=9.9, judge_consistency=9.7, judge_latency_ms=18000,
+        review_json_accuracy=9.7,
+        review_violation_recall=9.2,
+        review_latency_ms=8000,  # 추론 체인 포함
+        judge_reasoning_quality=9.9,
+        judge_consistency=9.7,
+        judge_latency_ms=18000,
         is_reasoning_model=True,
         notes="최고 추론 품질. 토론 판정에 이론적 최적이나 지연 큼 (18s+)",
     ),
     ModelSpec(
         model_id="o3-mini",
         display_name="o3-mini",
-        input_cost_per_1m=1.10, output_cost_per_1m=4.40,
+        input_cost_per_1m=1.10,
+        output_cost_per_1m=4.40,
         context_window_k=200,
-        review_json_accuracy=9.3, review_violation_recall=8.8, review_latency_ms=4000,
-        judge_reasoning_quality=9.2, judge_consistency=9.0, judge_latency_ms=9000,
+        review_json_accuracy=9.3,
+        review_violation_recall=8.8,
+        review_latency_ms=4000,
+        judge_reasoning_quality=9.2,
+        judge_consistency=9.0,
+        judge_latency_ms=9000,
         is_reasoning_model=True,
         notes="o3 경량. 판정 품질 우수하나 지연 여전히 큼",
     ),
     ModelSpec(
         model_id="o4-mini",
         display_name="o4-mini",
-        input_cost_per_1m=1.10, output_cost_per_1m=4.40,
+        input_cost_per_1m=1.10,
+        output_cost_per_1m=4.40,
         context_window_k=200,
-        review_json_accuracy=9.4, review_violation_recall=9.0, review_latency_ms=3500,
-        judge_reasoning_quality=9.3, judge_consistency=9.1, judge_latency_ms=8000,
+        review_json_accuracy=9.4,
+        review_violation_recall=9.0,
+        review_latency_ms=3500,
+        judge_reasoning_quality=9.3,
+        judge_consistency=9.1,
+        judge_latency_ms=8000,
         is_reasoning_model=True,
         notes="o3-mini 후속. 코드/수학에 강하나 토론 판정 활용 검증 필요",
     ),
     ModelSpec(
         model_id="o1",
         display_name="o1",
-        input_cost_per_1m=15.00, output_cost_per_1m=60.00,
+        input_cost_per_1m=15.00,
+        output_cost_per_1m=60.00,
         context_window_k=200,
-        review_json_accuracy=9.8, review_violation_recall=9.5, review_latency_ms=15000,
-        judge_reasoning_quality=9.9, judge_consistency=9.8, judge_latency_ms=35000,
+        review_json_accuracy=9.8,
+        review_violation_recall=9.5,
+        review_latency_ms=15000,
+        judge_reasoning_quality=9.9,
+        judge_consistency=9.8,
+        judge_latency_ms=35000,
         is_reasoning_model=True,
         notes="최고가 추론 모델. 토론 판정엔 과사양 + 지연 과다",
     ),
     ModelSpec(
         model_id="o1-mini",
         display_name="o1-mini",
-        input_cost_per_1m=1.10, output_cost_per_1m=4.40,
+        input_cost_per_1m=1.10,
+        output_cost_per_1m=4.40,
         context_window_k=128,
-        review_json_accuracy=9.0, review_violation_recall=8.5, review_latency_ms=5000,
-        judge_reasoning_quality=8.8, judge_consistency=8.7, judge_latency_ms=12000,
+        review_json_accuracy=9.0,
+        review_violation_recall=8.5,
+        review_latency_ms=5000,
+        judge_reasoning_quality=8.8,
+        judge_consistency=8.7,
+        judge_latency_ms=12000,
         is_reasoning_model=True,
         notes="o1 경량. o3-mini로 대체 권장",
     ),
@@ -180,16 +235,16 @@ ALL_MODELS: list[ModelSpec] = [
 # ─── 오케스트레이터 역할별 가중치 ─────────────────────────────────────────────
 
 REVIEW_WEIGHTS = {
-    "json_accuracy": 0.30,       # JSON 파싱 실패 시 검토 무효화
-    "violation_recall": 0.30,    # 위반 탐지 핵심 목적
-    "latency": 0.25,             # 턴 사이 지연에 직접 영향
-    "cost_efficiency": 0.15,     # 12회/매치 호출 누적
+    "json_accuracy": 0.30,  # JSON 파싱 실패 시 검토 무효화
+    "violation_recall": 0.30,  # 위반 탐지 핵심 목적
+    "latency": 0.25,  # 턴 사이 지연에 직접 영향
+    "cost_efficiency": 0.15,  # 12회/매치 호출 누적
 }
 JUDGE_WEIGHTS = {
-    "reasoning_quality": 0.40,   # 채점 정확성이 가장 중요
-    "consistency": 0.30,         # 동일 토론에 반복 판정 시 일관성
-    "latency": 0.10,             # 판정은 매치 끝 1회, 지연 덜 중요
-    "cost_efficiency": 0.20,     # 비용 효율
+    "reasoning_quality": 0.40,  # 채점 정확성이 가장 중요
+    "consistency": 0.30,  # 동일 토론에 반복 판정 시 일관성
+    "latency": 0.10,  # 판정은 매치 끝 1회, 지연 덜 중요
+    "cost_efficiency": 0.20,  # 비용 효율
 }
 
 # 기준 모델 (현행)
@@ -284,6 +339,7 @@ def compute_judge_score(model: ModelSpec) -> dict:
 
 # ─── 테스트 클래스 ─────────────────────────────────────────────────────────────
 
+
 class TestModelCatalog:
     """모델 카탈로그 유효성 검증."""
 
@@ -292,12 +348,14 @@ class TestModelCatalog:
         for m in ALL_MODELS:
             assert m.model_id, f"model_id 없음: {m}"
             assert m.input_cost_per_1m >= 0
-            assert m.output_cost_per_1m >= m.input_cost_per_1m or m.is_reasoning_model, (
-                f"{m.model_id}: 출력 비용이 입력보다 저렴함 (의심)"
-            )
+            assert (
+                m.output_cost_per_1m >= m.input_cost_per_1m or m.is_reasoning_model
+            ), f"{m.model_id}: 출력 비용이 입력보다 저렴함 (의심)"
             for attr in (
-                "review_json_accuracy", "review_violation_recall",
-                "judge_reasoning_quality", "judge_consistency"
+                "review_json_accuracy",
+                "review_violation_recall",
+                "judge_reasoning_quality",
+                "judge_consistency",
             ):
                 val = getattr(m, attr)
                 assert 0 <= val <= 10, f"{m.model_id}.{attr}={val} 범위 초과"
@@ -336,18 +394,14 @@ class TestReviewModelRanking:
         reasoning_ranks = [i for i, r in enumerate(ranked) if r["is_reasoning"]]
         non_reasoning_top3 = [i for i, r in enumerate(ranked) if not r["is_reasoning"]][:3]
         # 추론 모델 중 어느 하나도 상위 3위 안에 없어야 함
-        assert not any(r < 3 for r in reasoning_ranks), (
-            "추론 모델이 Review 상위 3위에 진입 — 지연 패널티 재확인 필요"
-        )
+        assert not any(r < 3 for r in reasoning_ranks), "추론 모델이 Review 상위 3위에 진입 — 지연 패널티 재확인 필요"
 
     def test_review_best_model_better_than_baseline(self):
         """Review 1위 모델이 현행(gpt-4o-mini)보다 높은 점수여야 한다."""
         ranked = self._sorted_review()
         baseline_score = next(r["total_score"] for r in ranked if r["model_id"] == BASELINE_REVIEW)
         best_score = ranked[0]["total_score"]
-        assert best_score >= baseline_score, (
-            f"개선 모델 없음: 현행 {baseline_score:.3f} vs 최고 {best_score:.3f}"
-        )
+        assert best_score >= baseline_score, f"개선 모델 없음: 현행 {baseline_score:.3f} vs 최고 {best_score:.3f}"
 
     def test_print_review_ranking(self):
         """Review 역할 전체 순위표 출력."""
@@ -368,10 +422,12 @@ class TestReviewModelRanking:
                 f"  ${r['per_match_cost_usd']:>8.5f}{marker}{top_marker}"
             )
         print("=" * 78)
-        print(f"  가중치: JSON정확성 {REVIEW_WEIGHTS['json_accuracy']:.0%},"
-              f" 위반탐지 {REVIEW_WEIGHTS['violation_recall']:.0%},"
-              f" 지연 {REVIEW_WEIGHTS['latency']:.0%},"
-              f" 비용효율 {REVIEW_WEIGHTS['cost_efficiency']:.0%}")
+        print(
+            f"  가중치: JSON정확성 {REVIEW_WEIGHTS['json_accuracy']:.0%},"
+            f" 위반탐지 {REVIEW_WEIGHTS['violation_recall']:.0%},"
+            f" 지연 {REVIEW_WEIGHTS['latency']:.0%},"
+            f" 비용효율 {REVIEW_WEIGHTS['cost_efficiency']:.0%}"
+        )
         print("=" * 78)
 
 
@@ -395,9 +451,7 @@ class TestJudgeModelRanking:
         ranked = self._sorted_judge()
         baseline_score = next(r["total_score"] for r in ranked if r["model_id"] == BASELINE_JUDGE)
         best_score = ranked[0]["total_score"]
-        assert best_score >= baseline_score, (
-            f"Judge 개선 모델 없음: 현행 {baseline_score:.3f} vs 최고 {best_score:.3f}"
-        )
+        assert best_score >= baseline_score, f"Judge 개선 모델 없음: 현행 {baseline_score:.3f} vs 최고 {best_score:.3f}"
 
     def test_o1_penalized_by_extreme_latency(self):
         """o1은 지연 패널티로 인해 Judge 최고 점수를 받지 못한다."""
@@ -424,10 +478,12 @@ class TestJudgeModelRanking:
                 f"  ${r['per_match_cost_usd']:>8.5f}{marker}{top_marker}"
             )
         print("=" * 78)
-        print(f"  가중치: 추론품질 {JUDGE_WEIGHTS['reasoning_quality']:.0%},"
-              f" 일관성 {JUDGE_WEIGHTS['consistency']:.0%},"
-              f" 지연 {JUDGE_WEIGHTS['latency']:.0%},"
-              f" 비용효율 {JUDGE_WEIGHTS['cost_efficiency']:.0%}")
+        print(
+            f"  가중치: 추론품질 {JUDGE_WEIGHTS['reasoning_quality']:.0%},"
+            f" 일관성 {JUDGE_WEIGHTS['consistency']:.0%},"
+            f" 지연 {JUDGE_WEIGHTS['latency']:.0%},"
+            f" 비용효율 {JUDGE_WEIGHTS['cost_efficiency']:.0%}"
+        )
         print("=" * 78)
 
 
@@ -463,11 +519,13 @@ class TestOptimalModelSelection:
         """최적 모델 선정 결과 출력."""
         review_candidates = sorted(
             [compute_review_score(m) for m in ALL_MODELS if not m.is_reasoning_model],
-            key=lambda x: x["total_score"], reverse=True,
+            key=lambda x: x["total_score"],
+            reverse=True,
         )
         judge_candidates = sorted(
             [compute_judge_score(m) for m in ALL_MODELS],
-            key=lambda x: x["total_score"], reverse=True,
+            key=lambda x: x["total_score"],
+            reverse=True,
         )
         best_review = review_candidates[0]
         best_judge = judge_candidates[0]
@@ -483,16 +541,20 @@ class TestOptimalModelSelection:
 
         print("\n  [REVIEW 역할 최적 모델]")
         print(f"  1위: {best_review['display_name']} ({best_review['model_id']})")
-        print(f"       종합 점수: {best_review['total_score']:.3f}  "
-              f"(현행 {BASELINE_REVIEW}: {baseline_review['total_score']:.3f})")
+        print(
+            f"       종합 점수: {best_review['total_score']:.3f}  "
+            f"(현행 {BASELINE_REVIEW}: {baseline_review['total_score']:.3f})"
+        )
         print(f"       지연: {best_review['latency_ms']}ms | 비용/매치: ${best_review['per_match_cost_usd']:.5f}")
         if runner_up_review:
             print(f"  2위: {runner_up_review['display_name']} (점수: {runner_up_review['total_score']:.3f})")
 
         print("\n  [JUDGE 역할 최적 모델]")
         print(f"  1위: {best_judge['display_name']} ({best_judge['model_id']})")
-        print(f"       종합 점수: {best_judge['total_score']:.3f}  "
-              f"(현행 {BASELINE_JUDGE}: {baseline_judge['total_score']:.3f})")
+        print(
+            f"       종합 점수: {best_judge['total_score']:.3f}  "
+            f"(현행 {BASELINE_JUDGE}: {baseline_judge['total_score']:.3f})"
+        )
         print(f"       지연: {best_judge['latency_ms']}ms | 비용/매치: ${best_judge['per_match_cost_usd']:.5f}")
         if runner_up_judge:
             print(f"  2위: {runner_up_judge['display_name']} (점수: {runner_up_judge['total_score']:.3f})")
@@ -520,18 +582,16 @@ class TestOptimalModelSelection:
 class TestCostScenarioComparison:
     """월간 사용량 기반 비용 시나리오 비교."""
 
-    MONTHLY_MATCHES = 1000   # 월 1000 매치 기준
+    MONTHLY_MATCHES = 1000  # 월 1000 매치 기준
     TURNS_PER_MATCH = 6
 
     def _compute_monthly_cost(self, review_model: ModelSpec, judge_model: ModelSpec) -> dict:
         reviews_per_match = self.TURNS_PER_MATCH * 2
         review_cost_per_match = (
-            review_model.input_cost_per_1m * 450 / 1_000_000
-            + review_model.output_cost_per_1m * 256 / 1_000_000
+            review_model.input_cost_per_1m * 450 / 1_000_000 + review_model.output_cost_per_1m * 256 / 1_000_000
         ) * reviews_per_match
         judge_cost_per_match = (
-            judge_model.input_cost_per_1m * 1800 / 1_000_000
-            + judge_model.output_cost_per_1m * 1024 / 1_000_000
+            judge_model.input_cost_per_1m * 1800 / 1_000_000 + judge_model.output_cost_per_1m * 1024 / 1_000_000
         )
         per_match = review_cost_per_match + judge_cost_per_match
         return {
@@ -546,14 +606,10 @@ class TestCostScenarioComparison:
         """4가지 조합의 월간 비용 시나리오 출력."""
         models = {m.model_id: m for m in ALL_MODELS}
         scenarios = [
-            ("현행 (gpt-4o-mini + gpt-4o)",
-             models["gpt-4o-mini"], models["gpt-4o"]),
-            ("Phase1 최적 (4.1-nano + gpt-4.1)",
-             models["gpt-4.1-nano"], models["gpt-4.1"]),
-            ("GPT-5 계열 (gpt-5-nano + gpt-5)",
-             models["gpt-5-nano"], models["gpt-5"]),
-            ("추론 모델 (gpt-4.1-nano + o3)",
-             models["gpt-4.1-nano"], models["o3"]),
+            ("현행 (gpt-4o-mini + gpt-4o)", models["gpt-4o-mini"], models["gpt-4o"]),
+            ("Phase1 최적 (4.1-nano + gpt-4.1)", models["gpt-4.1-nano"], models["gpt-4.1"]),
+            ("GPT-5 계열 (gpt-5-nano + gpt-5)", models["gpt-5-nano"], models["gpt-5"]),
+            ("추론 모델 (gpt-4.1-nano + o3)", models["gpt-4.1-nano"], models["o3"]),
         ]
 
         baseline_monthly = None
@@ -578,6 +634,6 @@ class TestCostScenarioComparison:
         models = {m.model_id: m for m in ALL_MODELS}
         baseline = self._compute_monthly_cost(models["gpt-4o-mini"], models["gpt-4o"])
         optimal = self._compute_monthly_cost(models["gpt-4.1-nano"], models["gpt-4.1"])
-        assert optimal["monthly_usd"] <= baseline["monthly_usd"], (
-            f"최적 조합이 현행보다 비쌈: ${optimal['monthly_usd']:.2f} > ${baseline['monthly_usd']:.2f}"
-        )
+        assert (
+            optimal["monthly_usd"] <= baseline["monthly_usd"]
+        ), f"최적 조합이 현행보다 비쌈: ${optimal['monthly_usd']:.2f} > ${baseline['monthly_usd']:.2f}"

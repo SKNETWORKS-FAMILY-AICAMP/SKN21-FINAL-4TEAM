@@ -9,15 +9,16 @@ debate_agents에 image_url 컬럼 추가.
   /api/uploads/image 엔드포인트로 업로드한 이미지 URL을 저장.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "q7l8m9n0o1p6"
-down_revision: Union[str, None] = "p6k7l8m9n0o5"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "p6k7l8m9n0o5"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate.promotion_service import DebatePromotionService, TIER_ORDER
+from app.services.debate.promotion_service import DebatePromotionService
 
 
 def _make_series(
@@ -127,9 +127,7 @@ class TestRecordMatchResult:
 
     async def test_demotion_win_tier_preserved(self):
         """강등전 승리 → tier 유지 + protection=1 보상."""
-        series = _make_series(
-            series_type="demotion", required_wins=1, current_wins=0
-        )
+        series = _make_series(series_type="demotion", required_wins=1, current_wins=0)
         svc = self._make_svc_with_series(series)
 
         result = await svc.record_match_result(str(series.id), "win")
@@ -148,8 +146,10 @@ class TestRecordMatchResult:
         # 최대 패: 3 - 1 = 2이므로 2패 초과(3패) 시 강등. 이는 3판이므로 최대 3경기 진행 가능
         # 실제 테스트: losses=2 상태에서 다시 패 → current_losses=3 > 2 → 강등
         series = _make_series(
-            series_type="demotion", required_wins=1,
-            current_wins=0, current_losses=2,
+            series_type="demotion",
+            required_wins=1,
+            current_wins=0,
+            current_losses=2,
         )
         svc = self._make_svc_with_series(series)
 
@@ -188,11 +188,12 @@ class TestCheckAndTrigger:
         mock_result.scalar_one_or_none = MagicMock(return_value=existing_series)
         svc.db.execute = AsyncMock(return_value=mock_result)
 
-        with patch.object(svc, "create_promotion_series", new=AsyncMock(return_value=MagicMock())) as mock_promo, \
-             patch.object(svc, "create_demotion_series", new=AsyncMock(return_value=MagicMock())) as mock_demo:
+        with (
+            patch.object(svc, "create_promotion_series", new=AsyncMock(return_value=MagicMock())) as mock_promo,
+            patch.object(svc, "create_demotion_series", new=AsyncMock(return_value=MagicMock())) as mock_demo,
+        ):
             result = await svc.check_and_trigger(
-                agent_id=agent_id, old_elo=old_elo, new_elo=new_elo,
-                current_tier=tier, protection_count=protection
+                agent_id=agent_id, old_elo=old_elo, new_elo=new_elo, current_tier=tier, protection_count=protection
             )
             return result, mock_promo, mock_demo
 
@@ -215,9 +216,7 @@ class TestCheckAndTrigger:
         db = AsyncMock()
         svc = DebatePromotionService(db)
 
-        result, _, mock_demo = await self._call(
-            svc, str(uuid.uuid4()), 1280, 1200, "Iron", 0
-        )
+        result, _, mock_demo = await self._call(svc, str(uuid.uuid4()), 1280, 1200, "Iron", 0)
 
         assert result is None
         mock_demo.assert_not_called()
@@ -227,9 +226,7 @@ class TestCheckAndTrigger:
         db = AsyncMock()
         svc = DebatePromotionService(db)
 
-        result, mock_promo, _ = await self._call(
-            svc, str(uuid.uuid4()), 2060, 2200, "Master", 0
-        )
+        result, mock_promo, _ = await self._call(svc, str(uuid.uuid4()), 2060, 2200, "Master", 0)
 
         assert result is None
         mock_promo.assert_not_called()
@@ -239,9 +236,7 @@ class TestCheckAndTrigger:
         db = AsyncMock()
         svc = DebatePromotionService(db)
 
-        result, _, mock_demo = await self._call(
-            svc, str(uuid.uuid4()), 1460, 1280, "Silver", protection=2
-        )
+        result, _, mock_demo = await self._call(svc, str(uuid.uuid4()), 1460, 1280, "Silver", protection=2)
 
         assert result is None
         mock_demo.assert_not_called()

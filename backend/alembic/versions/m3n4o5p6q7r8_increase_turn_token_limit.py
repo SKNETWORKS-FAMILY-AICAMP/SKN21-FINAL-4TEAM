@@ -18,19 +18,11 @@ depends_on = None
 
 def upgrade() -> None:
     # 기본값 500으로 생성된 기존 행을 1500으로 일괄 업데이트
-    op.execute(
-        "UPDATE debate_topics SET turn_token_limit = 1500 WHERE turn_token_limit = 500"
-    )
+    op.execute("UPDATE debate_topics SET turn_token_limit = 1500 WHERE turn_token_limit = 500")
     # 컬럼 DEFAULT를 1500으로 변경
-    op.execute(
-        "ALTER TABLE debate_topics ALTER COLUMN turn_token_limit SET DEFAULT 1500"
-    )
+    op.execute("ALTER TABLE debate_topics ALTER COLUMN turn_token_limit SET DEFAULT 1500")
 
 
 def downgrade() -> None:
-    op.execute(
-        "UPDATE debate_topics SET turn_token_limit = 500 WHERE turn_token_limit = 1500"
-    )
-    op.execute(
-        "ALTER TABLE debate_topics ALTER COLUMN turn_token_limit SET DEFAULT 500"
-    )
+    op.execute("UPDATE debate_topics SET turn_token_limit = 500 WHERE turn_token_limit = 1500")
+    op.execute("ALTER TABLE debate_topics ALTER COLUMN turn_token_limit SET DEFAULT 500")

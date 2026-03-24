@@ -11,8 +11,9 @@ Changes:
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
+
+from alembic import op
 
 revision = "s9n0o1p2q3r4"
 down_revision = "r8m9n0o1p2q3"

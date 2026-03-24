@@ -46,9 +46,7 @@ class DebateTournamentService:
         await self.db.refresh(t)
         return t
 
-    async def join_tournament(
-        self, tournament_id: str, agent_id: str, user: User
-    ) -> DebateTournamentEntry:
+    async def join_tournament(self, tournament_id: str, agent_id: str, user: User) -> DebateTournamentEntry:
         """토너먼트에 에이전트를 참가 등록한다.
 
         FOR UPDATE 잠금으로 동시 요청 시 정원 초과를 방지한다.
@@ -66,9 +64,7 @@ class DebateTournamentService:
         """
         # 토너먼트 행 잠금 — 동시 참가 요청 시 bracket_size 초과 방지
         res = await self.db.execute(
-            select(DebateTournament)
-            .where(DebateTournament.id == tournament_id)
-            .with_for_update()
+            select(DebateTournament).where(DebateTournament.id == tournament_id).with_for_update()
         )
         t = res.scalar_one_or_none()
         if t is None:
@@ -78,8 +74,7 @@ class DebateTournamentService:
 
         # 잠금 후 현재 참가자 수 재확인
         count_res = await self.db.execute(
-            select(func.count(DebateTournamentEntry.id))
-            .where(DebateTournamentEntry.tournament_id == tournament_id)
+            select(func.count(DebateTournamentEntry.id)).where(DebateTournamentEntry.tournament_id == tournament_id)
         )
         current_count = count_res.scalar() or 0
         if current_count >= t.bracket_size:
@@ -111,9 +106,7 @@ class DebateTournamentService:
 
     async def advance_round(self, tournament_id: str) -> None:
         """현재 라운드 전체 완료 → 승자끼리 다음 라운드. 1명 남으면 토너먼트 종료."""
-        res = await self.db.execute(
-            select(DebateTournament).where(DebateTournament.id == tournament_id)
-        )
+        res = await self.db.execute(select(DebateTournament).where(DebateTournament.id == tournament_id))
         t = res.scalar_one_or_none()
         if t is None or t.status != "in_progress":
             return
@@ -175,9 +168,7 @@ class DebateTournamentService:
         Returns:
             id, title, status, entries 등을 포함한 dict. 미존재 시 None.
         """
-        res = await self.db.execute(
-            select(DebateTournament).where(DebateTournament.id == tournament_id)
-        )
+        res = await self.db.execute(select(DebateTournament).where(DebateTournament.id == tournament_id))
         t = res.scalar_one_or_none()
         if t is None:
             return None
@@ -228,10 +219,7 @@ class DebateTournamentService:
         count_res = await self.db.execute(select(func.count(DebateTournament.id)))
         total = count_res.scalar() or 0
         res = await self.db.execute(
-            select(DebateTournament)
-            .order_by(DebateTournament.created_at.desc())
-            .offset(skip)
-            .limit(limit)
+            select(DebateTournament).order_by(DebateTournament.created_at.desc()).offset(skip).limit(limit)
         )
         items = [
             {

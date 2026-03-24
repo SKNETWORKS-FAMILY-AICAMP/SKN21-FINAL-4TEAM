@@ -74,7 +74,8 @@ class RunPodProvider(BaseProvider):
         if not response.is_success:
             raise httpx.HTTPStatusError(
                 f"RunPod API {response.status_code}: {response.text[:300]}",
-                request=response.request, response=response,
+                request=response.request,
+                response=response,
             )
         data = response.json()
         choice = data["choices"][0]
@@ -96,9 +97,7 @@ class RunPodProvider(BaseProvider):
         # api_key를 사용자 키로 교체하는 시나리오가 없어 generate()로 위임
         return await self.generate(model_id, messages, **kwargs)
 
-    async def stream(
-        self, model_id: str, messages: list[dict], usage_out: dict, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    async def stream(self, model_id: str, messages: list[dict], usage_out: dict, **kwargs) -> AsyncGenerator[str, None]:
         """플랫폼 RunPod API 키로 SSE 스트리밍 호출한다."""
         async with self._get_http().stream(
             "POST",
@@ -123,7 +122,8 @@ class RunPodProvider(BaseProvider):
                 body_bytes = await response.aread()
                 raise httpx.HTTPStatusError(
                     f"RunPod API {response.status_code}: {body_bytes.decode(errors='replace')[:300]}",
-                    request=response.request, response=response,
+                    request=response.request,
+                    response=response,
                 )
             async for chunk in _iter_openai_sse(response, usage_out):
                 yield chunk

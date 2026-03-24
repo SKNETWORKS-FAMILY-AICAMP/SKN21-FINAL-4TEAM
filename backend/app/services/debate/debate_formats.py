@@ -59,6 +59,7 @@ class TurnLoopResult:
 
 # ── 이벤트 발행 헬퍼 ──────────────────────────────────────────────────────────
 
+
 async def _publish_turn_event(
     match_id: str,
     turn: DebateTurnLog,
@@ -124,6 +125,7 @@ async def _publish_review_event(
 
 # ── 리뷰 결과 반영 헬퍼 ───────────────────────────────────────────────────────
 
+
 def _apply_review_to_turn(
     turn: DebateTurnLog,
     review: dict,
@@ -172,6 +174,7 @@ def _apply_review_to_turn(
 
 # ── 오케스트레이터 토큰 기록 헬퍼 ────────────────────────────────────────────
 
+
 async def _log_orchestrator_usage(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -203,9 +206,7 @@ async def _log_orchestrator_usage(
     if model_cache is not None and model_str in model_cache:
         model = model_cache[model_str]
     else:
-        result = await db.execute(
-            select(LLMModel).where(LLMModel.model_id == model_str)
-        )
+        result = await db.execute(select(LLMModel).where(LLMModel.model_id == model_str))
         model = result.scalar_one_or_none()
         if model_cache is not None and model is not None:
             model_cache[model_str] = model
@@ -214,6 +215,7 @@ async def _log_orchestrator_usage(
         logger.warning("_log_orchestrator_usage: model_id=%s not found in llm_models", model_str)
         return
     from app.services.debate.match_service import calculate_token_cost
+
     input_cost = calculate_token_cost(input_tokens, model.input_cost_per_1m)
     output_cost = calculate_token_cost(output_tokens, model.output_cost_per_1m)
     log = TokenUsageLog(
@@ -233,6 +235,7 @@ async def _log_orchestrator_usage(
 
 # ── 1v1 턴 루프 ───────────────────────────────────────────────────────────────
 
+
 async def run_turns_1v1(
     executor: TurnExecutor,
     orchestrator: DebateOrchestrator,
@@ -248,7 +251,7 @@ async def run_turns_1v1(
     model_cache: dict,
     usage_batch: list,
     parallel: bool,
-    control_plane: "OrchestrationControlPlane | None" = None,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> TurnLoopResult:
     """1v1 포맷 턴 루프 진입점.
 
@@ -283,15 +286,41 @@ async def run_turns_1v1(
 
     if parallel:
         total_penalty_a, total_penalty_b = await _run_parallel_turns(
-            executor, orchestrator, db, match, topic,
-            agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-            claims_a, claims_b, model_cache, usage_batch, control_plane=control_plane,
+            executor,
+            orchestrator,
+            db,
+            match,
+            topic,
+            agent_a,
+            agent_b,
+            version_a,
+            version_b,
+            api_key_a,
+            api_key_b,
+            claims_a,
+            claims_b,
+            model_cache,
+            usage_batch,
+            control_plane=control_plane,
         )
     else:
         total_penalty_a, total_penalty_b = await _run_sequential_turns(
-            executor, orchestrator, db, match, topic,
-            agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-            claims_a, claims_b, model_cache, usage_batch, control_plane=control_plane,
+            executor,
+            orchestrator,
+            db,
+            match,
+            topic,
+            agent_a,
+            agent_b,
+            version_a,
+            version_b,
+            api_key_a,
+            api_key_b,
+            claims_a,
+            claims_b,
+            model_cache,
+            usage_batch,
+            control_plane=control_plane,
         )
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)
@@ -313,7 +342,7 @@ async def _run_parallel_turns(
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
-    control_plane: "OrchestrationControlPlane | None" = None,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> tuple[int, int]:
     """롤링 병렬 패턴 턴 루프.
 
@@ -349,9 +378,10 @@ async def _run_parallel_turns(
 
     # settings가 MagicMock인 테스트 환경에서는 evidence task를 생성하지 않도록 엄밀 타입 검사
     # bool 타입인 경우만 True로 간주 — MagicMock은 bool이 아니므로 False로 처리됨
-    _ev_enabled = isinstance(
-        getattr(settings, "debate_evidence_search_enabled", False), bool
-    ) and settings.debate_evidence_search_enabled
+    _ev_enabled = (
+        isinstance(getattr(settings, "debate_evidence_search_enabled", False), bool)
+        and settings.debate_evidence_search_enabled
+    )
 
     # 매치 단위 사용 출처 추적 — 동일 URL이 여러 턴에서 반복 인용되지 않도록
     used_sources: set[str] = set()
@@ -380,11 +410,15 @@ async def _run_parallel_turns(
                         prev_turn_b.evidence = evidence_b.format()
                         used_sources.update(evidence_b.sources)
                         await db.flush()
-                        await publish_event(str(match.id), "turn_evidence_patch", {
-                            "turn_number": prev_b_turn_num,
-                            "speaker": "agent_b",
-                            "evidence": prev_turn_b.evidence,
-                        })
+                        await publish_event(
+                            str(match.id),
+                            "turn_evidence_patch",
+                            {
+                                "turn_number": prev_b_turn_num,
+                                "speaker": "agent_b",
+                                "evidence": prev_turn_b.evidence,
+                            },
+                        )
                 except Exception as exc:
                     logger.warning("B evidence task failed: %s", exc)
                 prev_b_evidence_task = None
@@ -393,13 +427,16 @@ async def _run_parallel_turns(
                 logger.error("prev_turn_b unexpectedly None at turn %d, skipping B review", turn_num)
             else:
                 total_penalty_b = _apply_review_to_turn(
-                    prev_turn_b, review_prev_b, claims_b,
-                    total_penalty_b, update_last_claim=True
+                    prev_turn_b, review_prev_b, claims_b, total_penalty_b, update_last_claim=True
                 )
                 await _log_orchestrator_usage(
-                    db, agent_b.owner_id, review_prev_b.get("model_id", ""),
-                    review_prev_b["input_tokens"], review_prev_b["output_tokens"],
-                    model_cache=model_cache, usage_batch=usage_batch,
+                    db,
+                    agent_b.owner_id,
+                    review_prev_b.get("model_id", ""),
+                    review_prev_b["input_tokens"],
+                    review_prev_b["output_tokens"],
+                    model_cache=model_cache,
+                    usage_batch=usage_batch,
                 )
                 fallback_reason = review_prev_b.get("fallback_reason")
                 if control_plane and fallback_reason:
@@ -418,14 +455,23 @@ async def _run_parallel_turns(
                         turn_number=prev_b_turn_num,
                         speaker="agent_b",
                         fallback_reason=fallback_reason,
-                    ) if control_plane else None,
+                    )
+                    if control_plane
+                    else None,
                     fallback_reason=fallback_reason,
                 )
 
         # Agent A 턴
         turn_a = await executor.execute_with_retry(
-            match, topic, turn_num, "agent_a",
-            agent_a, version_a, api_key_a, claims_a, claims_b,
+            match,
+            topic,
+            turn_num,
+            "agent_a",
+            agent_a,
+            version_a,
+            api_key_a,
+            claims_a,
+            claims_b,
             my_accumulated_penalty=total_penalty_a,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
         )
@@ -470,14 +516,23 @@ async def _run_parallel_turns(
             )
             # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
             # tool_used=web_search인 경우 이미 검색 결과가 있으므로 사후 evidence 검색 스킵
-            evidence_a_task: asyncio.Task | None = asyncio.create_task(
-                _evidence_service.search(turn_a.claim, exclude_urls=set(used_sources))
-            ) if (_ev_enabled and turn_a.claim and (turn_a.raw_response or {}).get("tool_used") != "web_search") else None
+            evidence_a_task: asyncio.Task | None = (
+                asyncio.create_task(_evidence_service.search(turn_a.claim, exclude_urls=set(used_sources)))
+                if (_ev_enabled and turn_a.claim and (turn_a.raw_response or {}).get("tool_used") != "web_search")
+                else None
+            )
 
             # B 실행 (A 검토와 병렬)
             turn_b = await executor.execute_with_retry(
-                match, topic, turn_num, "agent_b",
-                agent_b, version_b, api_key_b, claims_b, claims_a,
+                match,
+                topic,
+                turn_num,
+                "agent_b",
+                agent_b,
+                version_b,
+                api_key_b,
+                claims_b,
+                claims_a,
                 my_accumulated_penalty=total_penalty_b,
                 event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
@@ -521,9 +576,11 @@ async def _run_parallel_turns(
             )
             # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
             # tool_used=web_search인 경우 이미 검색 결과가 있으므로 사후 evidence 검색 스킵
-            prev_b_evidence_task = asyncio.create_task(
-                _evidence_service.search(turn_b.claim, exclude_urls=set(used_sources))
-            ) if (_ev_enabled and turn_b.claim and (turn_b.raw_response or {}).get("tool_used") != "web_search") else None
+            prev_b_evidence_task = (
+                asyncio.create_task(_evidence_service.search(turn_b.claim, exclude_urls=set(used_sources)))
+                if (_ev_enabled and turn_b.claim and (turn_b.raw_response or {}).get("tool_used") != "web_search")
+                else None
+            )
             prev_turn_b = turn_b
             prev_b_turn_num = turn_num
 
@@ -542,25 +599,30 @@ async def _run_parallel_turns(
                         turn_a.evidence = evidence_a.format()
                         used_sources.update(evidence_a.sources)
                         await db.flush()
-                        await publish_event(str(match.id), "turn_evidence_patch", {
-                            "turn_number": turn_num,
-                            "speaker": "agent_a",
-                            "evidence": turn_a.evidence,
-                        })
+                        await publish_event(
+                            str(match.id),
+                            "turn_evidence_patch",
+                            {
+                                "turn_number": turn_num,
+                                "speaker": "agent_a",
+                                "evidence": turn_a.evidence,
+                            },
+                        )
                 except Exception as exc:
                     logger.warning("A evidence task failed: %s", exc)
                 evidence_a_task = None
             turn_elapsed = time.monotonic() - review_start
 
             # A 검토 결과 반영 (차단 시 claims_a 마지막 항목 패치)
-            total_penalty_a = _apply_review_to_turn(
-                turn_a, review_a, claims_a,
-                total_penalty_a, update_last_claim=True
-            )
+            total_penalty_a = _apply_review_to_turn(turn_a, review_a, claims_a, total_penalty_a, update_last_claim=True)
             await _log_orchestrator_usage(
-                db, agent_a.owner_id, review_a.get("model_id", ""),
-                review_a["input_tokens"], review_a["output_tokens"],
-                model_cache=model_cache, usage_batch=usage_batch,
+                db,
+                agent_a.owner_id,
+                review_a.get("model_id", ""),
+                review_a["input_tokens"],
+                review_a["output_tokens"],
+                model_cache=model_cache,
+                usage_batch=usage_batch,
             )
             fallback_reason = review_a.get("fallback_reason")
             if control_plane and fallback_reason:
@@ -575,16 +637,26 @@ async def _run_parallel_turns(
                 turn_num,
                 "agent_a",
                 review_a,
-                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason)
-                if control_plane else None,
+                event_meta=control_plane.event_meta(
+                    turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason
+                )
+                if control_plane
+                else None,
                 fallback_reason=fallback_reason,
             )
         else:
             # 리뷰 비활성: B 순차 실행
             b_exec_start = time.monotonic()
             turn_b = await executor.execute_with_retry(
-                match, topic, turn_num, "agent_b",
-                agent_b, version_b, api_key_b, claims_b, claims_a,
+                match,
+                topic,
+                turn_num,
+                "agent_b",
+                agent_b,
+                version_b,
+                api_key_b,
+                claims_b,
+                claims_a,
                 my_accumulated_penalty=total_penalty_b,
                 event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
             )
@@ -615,11 +687,15 @@ async def _run_parallel_turns(
                 if isinstance(evidence_last_b, EvidenceResult) and raw.get("tool_used") != "web_search":
                     prev_turn_b.evidence = evidence_last_b.format()
                     await db.flush()
-                    await publish_event(str(match.id), "turn_evidence_patch", {
-                        "turn_number": prev_b_turn_num,
-                        "speaker": "agent_b",
-                        "evidence": prev_turn_b.evidence,
-                    })
+                    await publish_event(
+                        str(match.id),
+                        "turn_evidence_patch",
+                        {
+                            "turn_number": prev_b_turn_num,
+                            "speaker": "agent_b",
+                            "evidence": prev_turn_b.evidence,
+                        },
+                    )
             except Exception as exc:
                 logger.warning("Last B evidence task failed: %s", exc)
         else:
@@ -637,13 +713,16 @@ async def _run_parallel_turns(
             logger.error("prev_turn_b unexpectedly None after loop, skipping last B review")
         else:
             total_penalty_b = _apply_review_to_turn(
-                prev_turn_b, review_last_b, claims_b,
-                total_penalty_b, update_last_claim=True
+                prev_turn_b, review_last_b, claims_b, total_penalty_b, update_last_claim=True
             )
             await _log_orchestrator_usage(
-                db, agent_b.owner_id, review_last_b.get("model_id", ""),
-                review_last_b["input_tokens"], review_last_b["output_tokens"],
-                model_cache=model_cache, usage_batch=usage_batch,
+                db,
+                agent_b.owner_id,
+                review_last_b.get("model_id", ""),
+                review_last_b["input_tokens"],
+                review_last_b["output_tokens"],
+                model_cache=model_cache,
+                usage_batch=usage_batch,
             )
             fallback_reason = review_last_b.get("fallback_reason")
             if control_plane and fallback_reason:
@@ -662,7 +741,9 @@ async def _run_parallel_turns(
                     turn_number=prev_b_turn_num,
                     speaker="agent_b",
                     fallback_reason=fallback_reason,
-                ) if control_plane else None,
+                )
+                if control_plane
+                else None,
                 fallback_reason=fallback_reason,
             )
 
@@ -685,7 +766,7 @@ async def _run_sequential_turns(
     claims_b: list[str],
     model_cache: dict,
     usage_batch: list,
-    control_plane: "OrchestrationControlPlane | None" = None,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> tuple[int, int]:
     """순차 턴 루프. DEBATE_ORCHESTRATOR_OPTIMIZED=false 시 또는 롤백 경로에서 사용.
 
@@ -721,8 +802,15 @@ async def _run_sequential_turns(
     for turn_num in range(1, topic.max_turns + 1):
         # Agent A 턴
         turn_a = await executor.execute_with_retry(
-            match, topic, turn_num, "agent_a",
-            agent_a, version_a, api_key_a, claims_a, claims_b,
+            match,
+            topic,
+            turn_num,
+            "agent_a",
+            agent_a,
+            version_a,
+            api_key_a,
+            claims_a,
+            claims_b,
             my_accumulated_penalty=total_penalty_a,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
         )
@@ -752,9 +840,13 @@ async def _run_sequential_turns(
                 turn_a, review_a, claims_a, total_penalty_a, update_last_claim=False
             )
             await _log_orchestrator_usage(
-                db, agent_a.owner_id, review_a.get("model_id", ""),
-                review_a["input_tokens"], review_a["output_tokens"],
-                model_cache=model_cache, usage_batch=usage_batch,
+                db,
+                agent_a.owner_id,
+                review_a.get("model_id", ""),
+                review_a["input_tokens"],
+                review_a["output_tokens"],
+                model_cache=model_cache,
+                usage_batch=usage_batch,
             )
         else:
             review_a = None
@@ -781,8 +873,11 @@ async def _run_sequential_turns(
                 turn_num,
                 "agent_a",
                 review_a,
-                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason)
-                if control_plane else None,
+                event_meta=control_plane.event_meta(
+                    turn_number=turn_num, speaker="agent_a", fallback_reason=fallback_reason
+                )
+                if control_plane
+                else None,
                 fallback_reason=fallback_reason,
             )
 
@@ -793,8 +888,15 @@ async def _run_sequential_turns(
 
         # Agent B 턴
         turn_b = await executor.execute_with_retry(
-            match, topic, turn_num, "agent_b",
-            agent_b, version_b, api_key_b, claims_b, claims_a,
+            match,
+            topic,
+            turn_num,
+            "agent_b",
+            agent_b,
+            version_b,
+            api_key_b,
+            claims_b,
+            claims_a,
             my_accumulated_penalty=total_penalty_b,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
         )
@@ -824,9 +926,13 @@ async def _run_sequential_turns(
                 turn_b, review_b, claims_b, total_penalty_b, update_last_claim=False
             )
             await _log_orchestrator_usage(
-                db, agent_b.owner_id, review_b.get("model_id", ""),
-                review_b["input_tokens"], review_b["output_tokens"],
-                model_cache=model_cache, usage_batch=usage_batch,
+                db,
+                agent_b.owner_id,
+                review_b.get("model_id", ""),
+                review_b["input_tokens"],
+                review_b["output_tokens"],
+                model_cache=model_cache,
+                usage_batch=usage_batch,
             )
         else:
             review_b = None
@@ -853,8 +959,11 @@ async def _run_sequential_turns(
                 turn_num,
                 "agent_b",
                 review_b,
-                event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b", fallback_reason=fallback_reason)
-                if control_plane else None,
+                event_meta=control_plane.event_meta(
+                    turn_number=turn_num, speaker="agent_b", fallback_reason=fallback_reason
+                )
+                if control_plane
+                else None,
                 fallback_reason=fallback_reason,
             )
 
@@ -868,6 +977,7 @@ async def _run_sequential_turns(
 
 
 # ── 멀티에이전트 슬롯 단일 턴 헬퍼 ───────────────────────────────────────────
+
 
 async def _run_multi_slot_turn(
     executor: TurnExecutor,
@@ -886,7 +996,7 @@ async def _run_multi_slot_turn(
     total_penalty: int,
     model_cache: dict,
     usage_batch: list,
-    control_plane: "OrchestrationControlPlane | None" = None,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> int:
     """멀티에이전트 슬롯 단일 턴: 실행 → 검토 → 이벤트 발행.
 
@@ -895,8 +1005,15 @@ async def _run_multi_slot_turn(
     1v1과 동일한 이벤트 형식으로 발행한다.
     """
     turn = await executor.execute_with_retry(
-        match, topic, turn_num, speaker_role,
-        agent, version, api_key, my_claims, opp_claims,
+        match,
+        topic,
+        turn_num,
+        speaker_role,
+        agent,
+        version,
+        api_key,
+        my_claims,
+        opp_claims,
         my_accumulated_penalty=total_penalty,
         event_meta=control_plane.event_meta(turn_number=turn_num, speaker=speaker_label) if control_plane else None,
     )
@@ -919,13 +1036,15 @@ async def _run_multi_slot_turn(
             tools_available=settings.debate_tool_use_enabled and agent.provider in _TOOL_USE_PROVIDERS,
             tool_result=(turn.raw_response or {}).get("tool_result"),
         )
-        total_penalty = _apply_review_to_turn(
-            turn, review, my_claims, total_penalty, update_last_claim=False
-        )
+        total_penalty = _apply_review_to_turn(turn, review, my_claims, total_penalty, update_last_claim=False)
         await _log_orchestrator_usage(
-            db, agent.owner_id, review.get("model_id", ""),
-            review["input_tokens"], review["output_tokens"],
-            model_cache=model_cache, usage_batch=usage_batch,
+            db,
+            agent.owner_id,
+            review.get("model_id", ""),
+            review["input_tokens"],
+            review["output_tokens"],
+            model_cache=model_cache,
+            usage_batch=usage_batch,
         )
         fallback_reason = review.get("fallback_reason")
         if control_plane and fallback_reason:
@@ -940,8 +1059,11 @@ async def _run_multi_slot_turn(
             turn_num,
             speaker_label,
             review,
-            event_meta=control_plane.event_meta(turn_number=turn_num, speaker=speaker_label, fallback_reason=fallback_reason)
-            if control_plane else None,
+            event_meta=control_plane.event_meta(
+                turn_number=turn_num, speaker=speaker_label, fallback_reason=fallback_reason
+            )
+            if control_plane
+            else None,
             fallback_reason=fallback_reason,
         )
     else:
@@ -965,6 +1087,7 @@ async def _run_multi_slot_turn(
 
 # ── 멀티에이전트 턴 루프 ──────────────────────────────────────────────────────
 
+
 async def run_turns_multi(
     executor: TurnExecutor,
     orchestrator: DebateOrchestrator,
@@ -975,7 +1098,7 @@ async def run_turns_multi(
     agent_b: DebateAgent,
     model_cache: dict,
     usage_batch: list,
-    control_plane: "OrchestrationControlPlane | None" = None,
+    control_plane: OrchestrationControlPlane | None = None,
 ) -> TurnLoopResult:
     """멀티에이전트 턴 루프 (2v2/3v3 라운드 로빈).
 
@@ -1019,18 +1142,15 @@ async def run_turns_multi(
 
     # 루프 진입 전 에이전트/버전을 한 번에 배치 조회
     from app.models.debate_agent import DebateAgentVersion as AgentVersion
+
     all_agent_ids = list({p.agent_id for p in parts if p.agent_id is not None})
-    agents_res = await db.execute(
-        select(DebateAgent).where(DebateAgent.id.in_(all_agent_ids))
-    )
+    agents_res = await db.execute(select(DebateAgent).where(DebateAgent.id.in_(all_agent_ids)))
     agents_cache: dict = {str(a.id): a for a in agents_res.scalars().all()}
 
     all_version_ids = list({p.version_id for p in parts if p.version_id is not None})
     versions_cache: dict = {}
     if all_version_ids:
-        versions_res = await db.execute(
-            select(AgentVersion).where(AgentVersion.id.in_(all_version_ids))
-        )
+        versions_res = await db.execute(select(AgentVersion).where(AgentVersion.id.in_(all_version_ids)))
         versions_cache = {str(v.id): v for v in versions_res.scalars().all()}
 
     claims_a: list[str] = []
@@ -1057,16 +1177,42 @@ async def run_turns_multi(
             ver_b = versions_cache.get(str(b_part.version_id)) if b_part.version_id else None
 
             total_penalty_a = await _run_multi_slot_turn(
-                executor, orchestrator, db, match, topic, turn_num,
-                "agent_a", f"agent_a_slot{i}",
-                multi_agent_a, ver_a, api_key_a, claims_a, claims_b,
-                total_penalty_a, model_cache, usage_batch, control_plane=control_plane,
+                executor,
+                orchestrator,
+                db,
+                match,
+                topic,
+                turn_num,
+                "agent_a",
+                f"agent_a_slot{i}",
+                multi_agent_a,
+                ver_a,
+                api_key_a,
+                claims_a,
+                claims_b,
+                total_penalty_a,
+                model_cache,
+                usage_batch,
+                control_plane=control_plane,
             )
             total_penalty_b = await _run_multi_slot_turn(
-                executor, orchestrator, db, match, topic, turn_num,
-                "agent_b", f"agent_b_slot{i}",
-                multi_agent_b, ver_b, api_key_b, claims_b, claims_a,
-                total_penalty_b, model_cache, usage_batch, control_plane=control_plane,
+                executor,
+                orchestrator,
+                db,
+                match,
+                topic,
+                turn_num,
+                "agent_b",
+                f"agent_b_slot{i}",
+                multi_agent_b,
+                ver_b,
+                api_key_b,
+                claims_b,
+                claims_a,
+                total_penalty_b,
+                model_cache,
+                usage_batch,
+                control_plane=control_plane,
             )
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)

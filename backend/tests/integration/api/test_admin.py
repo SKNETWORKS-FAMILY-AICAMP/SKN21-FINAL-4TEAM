@@ -452,11 +452,15 @@ async def test_admin_create_episode_webtoon_not_found(client: AsyncClient, test_
 @pytest.mark.asyncio
 async def test_admin_upload_live2d_model(client: AsyncClient, test_admin):
     headers = auth_header(test_admin)
-    response = await client.post("/api/admin/content/live2d-models", json={
-        "name": "Happy Character",
-        "model_path": "/assets/live2d/happy.model3.json",
-        "emotion_mappings": {"happy": "motion_01", "sad": "motion_02"},
-    }, headers=headers)
+    response = await client.post(
+        "/api/admin/content/live2d-models",
+        json={
+            "name": "Happy Character",
+            "model_path": "/assets/live2d/happy.model3.json",
+            "emotion_mappings": {"happy": "motion_01", "sad": "motion_02"},
+        },
+        headers=headers,
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "Happy Character"
