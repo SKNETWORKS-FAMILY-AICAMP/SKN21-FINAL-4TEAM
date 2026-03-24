@@ -20,25 +20,17 @@ from app.models.user import User
 from app.schemas.debate_ws import WSMatchReady
 from app.services.debate.broadcast import publish_event
 from app.services.debate.control_plane import OrchestrationControlPlane
+from app.services.debate.debate_formats import (
+    TurnLoopResult,
+    _log_orchestrator_usage,  # 테스트 import 경로 유지 — debate_formats에서 re-export
+    get_format_runner,
+    run_turns_1v1,
+)
 from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.finalizer import MatchFinalizer
 from app.services.debate.forfeit import ForfeitError, ForfeitHandler
-from app.services.debate.debate_formats import (
-    TurnLoopResult,
-    _apply_review_to_turn,
-    _log_orchestrator_usage,
-    _publish_review_event,
-    _publish_turn_event,
-    get_format_runner,
-    run_turns_1v1,
-    run_turns_multi,
-)
 from app.services.debate.helpers import (
-    _build_messages,
     _resolve_api_key,
-    calculate_elo,
-    validate_response_schema,
-    RESPONSE_SCHEMA_INSTRUCTION,
 )
 from app.services.debate.judge import DebateJudge
 from app.services.debate.orchestrator import DebateOrchestrator
@@ -76,7 +68,9 @@ def _calculate_required_credits(
             f"cannot calculate required credits for agent {agent.id}. "
             "Register the model in llm_models table or disable credit system."
         )
-    return math.ceil(max_turns * turn_token_limit * settings.debate_credit_buffer_ratio * model.credit_per_1k_tokens / 1000)
+    return math.ceil(
+        max_turns * turn_token_limit * settings.debate_credit_buffer_ratio * model.credit_per_1k_tokens / 1000
+    )
 
 
 class CreditInsufficientError(Exception):
@@ -91,6 +85,7 @@ __all__ = ["run_debate", "DebateEngine"]
 # ── 테스트 하위 호환 래퍼 ──────────────────────────────────────────────────────
 # 기존 테스트가 engine 모듈에서 직접 import하는 경로를 유지한다.
 # 향후 테스트를 turn_executor / formats 모듈 경로로 마이그레이션하면 제거 가능.
+
 
 async def _execute_turn_with_retry(
     db: AsyncSession,
@@ -110,14 +105,22 @@ async def _execute_turn_with_retry(
     """TurnExecutor.execute_with_retry 래퍼 — 테스트 import 경로 유지."""
     executor = TurnExecutor(client, db)
     return await executor.execute_with_retry(
-        match, topic, turn_number, speaker,
-        agent, version, api_key, my_claims, opponent_claims,
+        match,
+        topic,
+        turn_number,
+        speaker,
+        agent,
+        version,
+        api_key,
+        my_claims,
+        opponent_claims,
         my_accumulated_penalty=my_accumulated_penalty,
         event_meta=event_meta,
     )
 
 
 # 하위 호환 래퍼 — formats.run_turns_1v1로 마이그레이션 후 제거 예정
+
 
 async def _run_turn_loop(
     db: AsyncSession,
@@ -139,14 +142,27 @@ async def _run_turn_loop(
     """formats.run_turns_1v1 위임 래퍼 — 테스트 import 경로 유지."""
     executor = TurnExecutor(client, db)
     result = await run_turns_1v1(
-        executor, orchestrator, db, match, topic,
-        agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-        model_cache, usage_batch, parallel, control_plane,
+        executor,
+        orchestrator,
+        db,
+        match,
+        topic,
+        agent_a,
+        agent_b,
+        version_a,
+        version_b,
+        api_key_a,
+        api_key_b,
+        model_cache,
+        usage_batch,
+        parallel,
+        control_plane,
     )
     return result.claims_a, result.claims_b, result.total_penalty_a, result.total_penalty_b
 
 
 # ── DebateEngine 클래스 ────────────────────────────────────────────────────────
+
 
 class DebateEngine:
     """매치 실행 오케스트레이터 — 엔티티 로드 + 포맷 dispatch + finalize."""
@@ -184,7 +200,9 @@ class DebateEngine:
 
     async def _load_entities(
         self, match_id: str
-    ) -> tuple[DebateMatch, DebateTopic, DebateAgent, DebateAgent, DebateAgentVersion | None, DebateAgentVersion | None]:
+    ) -> tuple[
+        DebateMatch, DebateTopic, DebateAgent, DebateAgent, DebateAgentVersion | None, DebateAgentVersion | None
+    ]:
         """매치 실행에 필요한 모든 엔티티를 병렬 조회한다.
 
         Args:
@@ -259,9 +277,7 @@ class DebateEngine:
         await publish_event(str(match.id), "waiting_agent", {"match_id": str(match.id)})
 
         local_agents = [
-            (agent, side)
-            for agent, side in [(agent_a, "agent_a"), (agent_b, "agent_b")]
-            if agent.provider == "local"
+            (agent, side) for agent, side in [(agent_a, "agent_a"), (agent_b, "agent_b")] if agent.provider == "local"
         ]
 
         async def _try_connect(agent: DebateAgent, side: str) -> bool:
@@ -275,14 +291,17 @@ class DebateEngine:
                     return True
                 logger.warning(
                     "Agent %s connect attempt %d/%d failed for match %s",
-                    agent.name, attempt, settings.debate_agent_connect_retries, match.id,
+                    agent.name,
+                    attempt,
+                    settings.debate_agent_connect_retries,
+                    match.id,
                 )
             return False
 
         # 로컬 에이전트가 여럿이면 병렬 대기 — 순차 시 최대 N×90초 낭비 방지
         results = await asyncio.gather(*[_try_connect(agent, side) for agent, side in local_agents])
 
-        for (agent, side), connected in zip(local_agents, results):
+        for (agent, side), connected in zip(local_agents, results, strict=False):
             if not connected:
                 winner_agent = agent_b if side == "agent_a" else agent_a
                 await ForfeitHandler(self.db).handle_disconnect(match, agent, winner_agent, side)
@@ -292,12 +311,15 @@ class DebateEngine:
         # 모든 로컬 에이전트 접속 완료 — match_ready 전송
         for agent, side in local_agents:
             opponent = agent_b if side == "agent_a" else agent_a
-            await ws_manager.send_match_ready(agent.id, WSMatchReady(
-                match_id=match.id,
-                topic_title=topic.title,
-                opponent_name=opponent.name,
-                your_side=side,
-            ))
+            await ws_manager.send_match_ready(
+                agent.id,
+                WSMatchReady(
+                    match_id=match.id,
+                    topic_title=topic.title,
+                    opponent_name=opponent.name,
+                    your_side=side,
+                ),
+            )
 
     async def _deduct_credits(
         self,
@@ -317,9 +339,7 @@ class DebateEngine:
 
         # 에이전트별 모델 조회 후 필요 크레딧 계산
         model_ids = {agent_a.model_id, agent_b.model_id}
-        models_res = await self.db.execute(
-            select(LLMModel).where(LLMModel.model_id.in_(model_ids))
-        )
+        models_res = await self.db.execute(select(LLMModel).where(LLMModel.model_id.in_(model_ids)))
         models_map = {m.model_id: m for m in models_res.scalars().all()}
 
         for agent in (agent_a, agent_b):
@@ -334,13 +354,17 @@ class DebateEngine:
             )
             if deduct_result.fetchone() is None:
                 message = f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {required}석)"
-                await publish_event(str(match.id), "credit_insufficient", {
-                    "agent_id": str(agent.id),
-                    "agent_name": agent.name,
-                    "required": required,
-                    "message": message,
-                    "match_status": "error",
-                })
+                await publish_event(
+                    str(match.id),
+                    "credit_insufficient",
+                    {
+                        "agent_id": str(agent.id),
+                        "agent_name": agent.name,
+                        "required": required,
+                        "message": message,
+                        "match_status": "error",
+                    },
+                )
                 # credit_insufficient SSE를 이미 발행했으므로 error SSE 재발행 방지용 전용 예외
                 raise CreditInsufficientError(message)
             # 차감 성공 시 누적 기록 — _refund_credits가 이 값을 참조해 환불 금액을 결정한다
@@ -382,9 +406,7 @@ class DebateEngine:
         if not owner_ids:
             return
         await self.db.execute(
-            update(User)
-            .where(User.id.in_(owner_ids))
-            .values(credit_balance=User.credit_balance + refund)
+            update(User).where(User.id.in_(owner_ids)).values(credit_balance=User.credit_balance + refund)
         )
         await self.db.commit()
 
@@ -433,27 +455,48 @@ class DebateEngine:
             trace_id=str(match.id),
             orchestration_mode=match_format,
         )
-        await publish_event(str(match.id), "judge_intro", {
-            "message": intro.get("message"),
-            "topic_title": topic.title,
-            "model_id": intro.get("model_id"),
-            "input_tokens": intro.get("input_tokens", 0),
-            "output_tokens": intro.get("output_tokens", 0),
-            "fallback_reason": intro.get("fallback_reason"),
-        })
+        await publish_event(
+            str(match.id),
+            "judge_intro",
+            {
+                "message": intro.get("message"),
+                "topic_title": topic.title,
+                "model_id": intro.get("model_id"),
+                "input_tokens": intro.get("input_tokens", 0),
+                "output_tokens": intro.get("output_tokens", 0),
+                "fallback_reason": intro.get("fallback_reason"),
+            },
+        )
 
         try:
             if match_format == "1v1":
                 loop_result: TurnLoopResult = await runner(
-                    executor, orchestrator, self.db, match, topic,
-                    agent_a, agent_b, version_a, version_b, api_key_a, api_key_b,
-                    model_cache, usage_batch,
+                    executor,
+                    orchestrator,
+                    self.db,
+                    match,
+                    topic,
+                    agent_a,
+                    agent_b,
+                    version_a,
+                    version_b,
+                    api_key_a,
+                    api_key_b,
+                    model_cache,
+                    usage_batch,
                     parallel=orchestrator.optimized,
                 )
             else:
                 loop_result = await runner(
-                    executor, orchestrator, self.db, match, topic,
-                    agent_a, agent_b, model_cache, usage_batch,
+                    executor,
+                    orchestrator,
+                    self.db,
+                    match,
+                    topic,
+                    agent_a,
+                    agent_b,
+                    model_cache,
+                    usage_batch,
                 )
         except MatchVoidError as void_err:
             await self._void_match(match, str(void_err))
@@ -485,12 +528,17 @@ class DebateEngine:
 
         finalizer = MatchFinalizer(self.db)
         await finalizer.finalize(
-            match, judgment, agent_a, agent_b,
-            loop_result.model_cache, loop_result.usage_batch,
+            match,
+            judgment,
+            agent_a,
+            agent_b,
+            loop_result.model_cache,
+            loop_result.usage_batch,
         )
 
 
 # ── 매치 실행 진입점 ──────────────────────────────────────────────────────────
+
 
 async def run_debate(match_id: str) -> None:
     """매치 실행 진입점. app-level DB 세션 풀로 백그라운드 태스크에서 호출된다.

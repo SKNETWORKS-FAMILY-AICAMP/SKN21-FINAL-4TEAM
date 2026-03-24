@@ -147,13 +147,15 @@ def _resolve_api_key(agent: DebateAgent, force_platform: bool = False) -> str:
         case _:
             logger.warning(
                 "Unknown provider '%s' for agent %s — cannot resolve platform API key",
-                agent.provider, agent.id,
+                agent.provider,
+                agent.id,
             )
             return ""
     if not key:
         logger.warning(
             "Platform API key not set for provider '%s' (agent %s) — LLM call will fail",
-            agent.provider, agent.id,
+            agent.provider,
+            agent.id,
         )
     return key
 
@@ -165,6 +167,7 @@ def _build_messages(
     speaker: str,
     my_claims: list[str],
     opponent_claims: list[str],
+    prefetch_evidence: str | None = None,
 ) -> list[dict]:
     """에이전트에게 보낼 LLM 메시지 컨텍스트를 구성한다.
 
@@ -185,7 +188,9 @@ def _build_messages(
     """
     side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
     tools_line = (
-        "툴 사용: 허용됨 (web_search — 현재 주장을 뒷받침하는 웹 근거 검색)"
+        "툴 사용: 허용됨 (web_search — 현재 주장을 뒷받침하는 웹 근거 검색)\n"
+        "web_search 결과를 받은 경우 반드시 한국어로 요약하여 발언에 인용하세요 "
+        "(예: '검색 결과에 따르면 ...', '~에 따르면 ...')."
         if topic.tools_enabled
         else "툴 사용: 이 토론에서는 툴 사용이 금지되어 있습니다. tool_used는 반드시 null로 설정하세요."
     )
@@ -211,7 +216,7 @@ def _build_messages(
 
     # 상대방이 더 많이 말한 경우
     if len(opponent_claims) > len(my_claims):
-        for opp_c in opponent_claims[len(my_claims):]:
+        for opp_c in opponent_claims[len(my_claims) :]:
             all_turns.append({"role": "user", "content": f"[상대방]: {opp_c}"})
 
     # 최근 4개만 유지
@@ -258,6 +263,9 @@ def _build_messages(
             base_content += (
                 "\n\n(참고: 상대가 먼저 발언했지만, 당신도 새로운 논거로 주도적으로 쟁점을 선점할 수 있습니다.)"
             )
+        # tool-use 미지원 provider용 pre-fetch 검색 결과 주입
+        if prefetch_evidence:
+            base_content += f"\n\n[참고 출처 (참고용, 직접 인용 권장)]\n{prefetch_evidence}"
         messages.append({"role": "user", "content": base_content})
     else:
         messages.append({"role": "user", "content": "당신의 차례입니다. 주제에 대한 다음 주장을 한국어로 제시하세요."})
