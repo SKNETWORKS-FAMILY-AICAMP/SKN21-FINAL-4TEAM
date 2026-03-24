@@ -3,7 +3,7 @@
 > 시즌 생성·활성 시즌 조회·시즌별 ELO 집계·시즌 종료(결과 저장·보상 지급·누적 ELO soft reset)를 담당하는 서비스
 
 **파일 경로:** `backend/app/services/debate/season_service.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
@@ -45,9 +45,9 @@ def __init__(self, db: AsyncSession)
 | `get_or_create_season_stats` | `(agent_id: str, season_id: str) -> DebateAgentSeasonStats` | 에이전트의 시즌 통계 행 조회 또는 생성 (초기값: `elo_rating=1500`, `tier="Iron"`). `begin_nested()` SAVEPOINT로 동시 INSERT 충돌 처리 |
 | `update_season_stats` | `(agent_id: str, season_id: str, new_elo: int, result_type: str) -> None` | 시즌 ELO·전적 갱신 + `get_tier_from_elo(new_elo)`로 tier 재계산. `result_type`: `'win'`/`'loss'`/`'draw'` |
 | `get_season_results` | `(season_id: str) -> list[dict]` | 시즌 최종 순위 조회 (`rank ASC`). `DebateSeasonResult JOIN DebateAgent` |
-| `close_season` | `(season_id: str) -> None` | 시즌 종료 4단계 처리. 활성 상태가 아니면 `ValueError` 발생 |
+| `close_season` | `(season_id: str) -> None` | 시즌 종료 5단계 처리. 활성 상태가 아니면 `ValueError` 발생 |
 
-### `close_season` 4단계 처리
+### `close_season` 5단계 처리
 
 ```
 1. 시즌 검증
@@ -164,5 +164,6 @@ engine.py (_finalize_match)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | `close_season` 단계 수 수정 (4단계 → 5단계). 메서드 표의 단계 수 동기화 |
 | 2026-03-12 | 규칙 준수 전면 재작성. H2 섹션 순서 정렬, 주요 상수 섹션 추가, close_season 처리 단계 상세화, 호출 흐름 3개 시나리오로 확장, 에러 처리 표 보강 |
 | 2026-03-11 | 실제 코드 기반으로 초기 재작성 |

@@ -3,7 +3,7 @@
 > Redis Pub/Sub 기반 SSE 브로드캐스트 — 매치 관전 이벤트와 매칭 큐 상태 이벤트를 통합 관리하는 모듈
 
 **파일 경로:** `backend/app/services/debate/broadcast.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
@@ -104,6 +104,9 @@ Redis pub/sub 메시지를 SSE 형식(`data: ...\n\n`)으로 yield하는 공통 
 
 `debate:queue:{topic_id}:{agent_id}` 채널에 큐 이벤트를 발행한다. `publish_event`와 동일하게 공유 `redis_client`를 사용한다.
 
+- `topic_id` 또는 `agent_id`가 `None`이면 `logger.warning` 후 발행을 건너뛴다 (None 가드).
+- Redis 발행 중 예외가 발생해도 내부에서 처리하고 호출자에게 전파하지 않는다 (best-effort). DB 커밋 이후에 호출되므로 실패해도 큐 등록/매치 생성 상태는 유지된다.
+
 #### `subscribe_queue(topic_id: str, agent_id: str, max_wait_seconds: int = 120) -> AsyncGenerator[str, None]`
 
 큐 채널을 구독하고 SSE 형식 문자열을 yield한다.
@@ -187,6 +190,7 @@ api/debate_topics.py (GET /topics/{id}/queue/stream)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | `publish_queue_event()`의 None 가드 로직 및 best-effort 예외 처리 설명 추가 |
 | 2026-03-17 | 매치 채널 이벤트 목록 추가. `waiting_agent`, `credit_insufficient`, `match_void`, `series_update`, `turn_slot` 이벤트 문서화 |
 | 2026-03-12 | 레퍼런스 형식에 맞춰 전면 재작성. 모듈 수준 함수 섹션으로 구조 재편, 호출 흐름 두 시나리오로 확장, Redis 채널 구조 표 추가 |
 | 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |

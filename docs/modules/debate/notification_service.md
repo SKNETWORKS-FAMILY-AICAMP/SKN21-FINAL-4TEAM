@@ -3,7 +3,7 @@
 > 매치 이벤트·예측투표 결과·신규 팔로워 알림을 생성하고 사용자별로 조회하는 서비스 계층
 
 **파일 경로:** `backend/app/services/notification_service.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
@@ -121,10 +121,12 @@ API 라우터 (팔로우 생성 완료 후)
       ├─ [target_type='user']
       │   → recipient_id = target_id
       │   → body = "{nickname}님이 회원님을 팔로우합니다."
+      │   → link = None
       └─ [target_type='agent']
           → DebateAgent 조회 (미존재 시 warning 후 반환)
           → recipient_id = agent.owner_id
           → body = "{nickname}님이 에이전트 '{name}'을 팔로우합니다."
+          → link = "/debate/agents/{target_id}"
       → create_bulk([단건 알림])
 ```
 
@@ -159,4 +161,5 @@ API 라우터 (팔로우 생성 완료 후)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | `notify_new_follower` 호출 흐름에 `link` 값 반영 — `user` 타입은 `None`, `agent` 타입은 `/debate/agents/{id}` |
 | 2026-03-12 | 신규 작성 — 팔로우/알림 시스템 도입 |

@@ -3,16 +3,17 @@
 > 큐 등록·준비 완료 처리·자동 매칭을 담당하는 매칭 서비스 모듈
 
 **파일 경로:** `backend/app/services/debate/matching_service.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
 ## 모듈 목적
 
-이 파일에는 두 개의 클래스가 함께 존재한다.
+`DebateMatchingService` 하나만 포함한다.
 
 - **`DebateMatchingService`** — 사용자 요청 기반 큐 등록(`join_queue`)과 준비 완료 처리(`ready_up`). 양쪽 에이전트가 모두 준비되면 `DebateMatch`를 생성하고 토론 엔진을 시작한다.
-- **`DebateAutoMatcher`** — 싱글톤 백그라운드 루프. 만료된 큐 항목 정리, 장시간 대기 항목의 플랫폼 에이전트 자동 매칭, 비정상 pending 매치 복구를 주기적으로 수행한다.
+
+> 백그라운드 자동 매칭 데몬(`DebateAutoMatcher`)은 `auto_matcher.py`로 분리되어 있다. 상세 내용은 [`docs/modules/debate/auto_matcher.md`](auto_matcher.md)를 참조한다.
 
 ---
 
@@ -44,35 +45,6 @@ def __init__(self, db: AsyncSession)
 
 ---
 
-## 클래스: DebateAutoMatcher
-
-### 생성자
-
-```python
-def __init__(self)
-```
-
-싱글톤 패턴이므로 직접 인스턴스화하지 않고 `get_instance()`를 사용한다.
-
-| 클래스 변수 | 타입 | 설명 |
-|---|---|---|
-| `_instance` | `DebateAutoMatcher \| None` | 싱글톤 인스턴스 |
-
-### 메서드
-
-| 메서드 | 시그니처 | 역할 |
-|---|---|---|
-| `get_instance` | `() -> DebateAutoMatcher` | 싱글톤 인스턴스를 반환. 없으면 생성 |
-| `start` | `() -> None` | `lifespan`에서 호출. `_running = True`로 설정 후 `_loop()` 백그라운드 태스크 시작 |
-| `stop` | `() -> None` | 앱 종료 시 호출. `_running = False` + 태스크 취소 |
-| `_loop` | `() -> None` | 서버 시작 직후 즉시 정리 1회 실행 후, `debate_auto_match_check_interval`초마다 3개 점검 메서드를 반복 호출 |
-| `_check_stuck_matches` | `() -> None` | `pending`/`waiting_agent` 상태로 `debate_pending_timeout_seconds`(기본 600초)를 초과한 매치를 `error` 상태로 일괄 전환 |
-| `_purge_expired_queue_entries` | `() -> None` | 만료된 큐 항목 삭제 + 해당 에이전트에 `timeout` SSE 이벤트 발행. `SKIP LOCKED`로 동시 실행 충돌 방지 |
-| `_check_stale_entries` | `() -> None` | `debate_queue_timeout_seconds`를 초과한 큐 항목을 탐지하여 `_auto_match_with_platform_agent()` 호출 |
-| `_auto_match_with_platform_agent` | `(db: AsyncSession, entry: DebateMatchQueue) -> None` | `is_platform=True` 활성 에이전트 중 entry 소유자가 아닌 것을 `random()` 으로 선택해 `DebateMatch` 생성 후 `run_debate` 시작. 플랫폼 에이전트 없으면 `timeout` 이벤트 발행 후 종료 |
-
----
-
 ## 의존 모듈
 
 | 모듈 | 경로 | 용도 |
@@ -87,7 +59,6 @@ def __init__(self)
 | `User` | `app.models.user` | 크레딧 잔액 조회 |
 | `get_latest_version` | `app.services.debate.agent_service` | 매치 생성 시 에이전트 버전 스냅샷 연결 |
 | `publish_queue_event` | `app.services.debate.broadcast` | 큐 상태 변경 SSE 이벤트 발행 |
-| `run_debate` | `app.services.debate.engine` | 토론 엔진 백그라운드 태스크 시작 |
 | `DebatePromotionService` | `app.services.debate.promotion_service` | 활성 시리즈 조회 → `match_type`/`series_id` 태깅 |
 | `DebateSeasonService` | `app.services.debate.season_service` | 활성 시즌 조회 → `season_id` 태깅 |
 
@@ -145,31 +116,7 @@ API 라우터 (POST /topics/{id}/ready)
               → {"status": "matched", "match_id": ...}
 ```
 
-### DebateAutoMatcher 백그라운드 루프
-
-```
-app.main.py lifespan
-  → DebateAutoMatcher.get_instance().start()
-      → asyncio.create_task(_loop())
-          → [즉시 1회] _purge_expired_queue_entries()
-                        _check_stale_entries()
-                        _check_stuck_matches()
-          → while _running:
-              → 동일 3개 메서드 반복
-              → asyncio.sleep(debate_auto_match_check_interval)
-
-_check_stale_entries()
-  → cutoff = now - debate_queue_timeout_seconds
-  → SELECT debate_match_queues WHERE joined_at < cutoff SKIP LOCKED
-  → for entry in stale:
-      → _auto_match_with_platform_agent(db, entry)
-          → 엔트리 재확인 (이미 처리됐으면 return)
-          → SELECT debate_agents WHERE is_platform=True ORDER BY random() LIMIT 1
-          → [없음] publish_queue_event(..., "timeout", {...})
-          → [있음] DebateMatch INSERT → entry 삭제 → commit
-                   → publish_queue_event(..., "matched", {...})
-                   → asyncio.create_task(run_debate(match_id))
-```
+> 백그라운드 자동 매칭 루프(`DebateAutoMatcher`) 흐름은 [`auto_matcher.md`](auto_matcher.md)를 참조한다.
 
 ---
 
@@ -198,5 +145,6 @@ _check_stale_entries()
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | `DebateAutoMatcher` 클래스 섹션 제거 (`auto_matcher.py`로 분리됨). 모듈 목적 단일 클래스로 정정. 의존 모듈에서 `run_debate` 항목 제거 (실제 import 없음). `DebateAutoMatcher` 백그라운드 루프 호출 흐름 → `auto_matcher.md` 참조로 대체 |
 | 2026-03-12 | 레퍼런스 형식에 맞춰 전면 재작성. 클래스 2개 분리 표기, join_queue 10단계 검증 흐름 상세화, DebateAutoMatcher 백그라운드 루프 흐름 추가, 에러 처리 표 확장 |
 | 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |

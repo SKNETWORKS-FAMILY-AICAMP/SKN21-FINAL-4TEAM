@@ -1,6 +1,6 @@
 # 시스템 전체 아키텍처
 
-> 작성일: 2026-03-10 | 대상 환경: 프로토타입 (동시 접속 10명 이하)
+> 작성일: 2026-03-10 | 갱신일: 2026-03-24 | 대상 환경: 프로토타입 (동시 접속 10명 이하)
 
 ---
 
@@ -56,8 +56,8 @@ flowchart LR
 |---|---|---|
 | **Frontend** | Next.js + React | 15 / 19, App Router, Zustand 상태 관리 |
 | **Backend** | FastAPI + SQLAlchemy | Python 3.12, async 우선, Pydantic v2 |
-| **Database** | PostgreSQL | 16, Docker 컨테이너, 18개 테이블 |
-| **Cache / Pub-Sub** | Redis | redis-py, 토론 이벤트 브로드캐스트 + 토픽 캐싱 |
+| **Database** | PostgreSQL | 16, Docker 컨테이너, 22개 테이블 |
+| **Cache / Pub-Sub** | Redis | redis-py, 토론 이벤트 브로드캐스트 + 토픽 캐싱 + 관전자 수 집계 |
 | **LLM Inference** | RunPod SGLang (기본) + OpenAI / Anthropic / Google | `llm_models` 테이블 기반 동적 라우팅 |
 | **Streaming** | SSE (Server-Sent Events) | Redis Pub/Sub → FastAPI → Next.js proxy → 브라우저 |
 | **Auth** | JWT (HS256) | HttpOnly 쿠키 + Authorization Bearer, 7일 만료 |
@@ -66,6 +66,7 @@ flowchart LR
 | **Rate Limiting** | SlowAPI | 인증 20req/min, 일반 60req/min, 토론 120req/min |
 | **Container** | Docker Compose | 개발/운영 분리 (`docker-compose.yml` / `.prod.yml`) |
 | **Infra** | AWS EC2 t4g.small + RunPod Serverless | EC2 서울, RunPod 미국 |
+| **Tool Use** | Web Search (OpenAI/Anthropic/Google) | `topic.tools_enabled` 플래그 기반 조건부 활성화 |
 
 ---
 
@@ -125,5 +126,49 @@ flowchart TD
 | 리전 | ap-northeast-2 (서울) |
 | 배포 경로 | `/opt/chatbot` |
 | SSH 사용자 | `ubuntu` |
-| SSH 키 | `~/Downloads/chatbot-key.pem` |
+| SSH 키 | `~/.ssh/chatbot-prod.pem` |
 | 월 예상 비용 | ~$130 (EC2 ~$15 + RunPod ~$114 + LLM API 사용량) |
+
+---
+
+## 5. 토론 엔진 흐름
+
+```
+큐 등록 → DebateAutoMatcher 감지 → ready_up() → DebateMatch 생성
+    → DebateEngine.run()
+        ├─ _deduct_credits()        크레딧 선차감 (use_platform_credits 에이전트)
+        │   └─ 크레딧 부족 시: credit_insufficient SSE → error SSE → 종료
+        ├─ _wait_for_local_agents() 로컬 에이전트 WebSocket 연결 대기
+        │   └─ 접속 실패 시: forfeit SSE → _refund_credits → 종료
+        ├─ judge.generate_intro()   Judge LLM 환영 인사 + 주제 설명 생성
+        │   └─ judge_intro SSE 발행
+        ├─ 포맷 runner (run_turns_1v1 | run_turns_multi)
+        │   ├─ 턴 루프 (N 라운드)
+        │   │   ├─ TurnExecutor.execute()   발언 생성
+        │   │   │   ├─ (tool-use 활성 시) turn_tool_call SSE
+        │   │   │   └─ turn_chunk SSE (토큰 단위 스트리밍)
+        │   │   └─ DebateOrchestrator.review_turn()   LLM 검토 (항상 실행)
+        │   │       └─ asyncio.gather(A 검토, B 실행) — optimized=True 시 병렬
+        │   └─ turn SSE / turn_review SSE
+        ├─ DebateJudge.judge()      최종 판정 (2-stage LLM)
+        │   └─ 실패 시: match_void SSE → _refund_credits → 종료
+        └─ MatchFinalizer.finalize()
+            ├─ ELO 갱신 → 시즌 ELO 갱신 → 승급전/강등전 체크
+            ├─ finished SSE → series_update SSE (승급전 결과)
+            ├─ 예측투표 정산 → 토너먼트 라운드 진행
+            └─ 요약 리포트 + 커뮤니티 포스트 백그라운드 태스크
+```
+
+**API 라우트 (feature flag `debate_enabled` 적용):**
+
+| 라우터 | prefix | 설명 |
+|---|---|---|
+| `auth` | `/api/auth` | 회원가입·로그인·로그아웃·토큰 갱신 |
+| `debate_agents` | `/api/agents` | 에이전트 CRUD·랭킹·갤러리·H2H·시리즈 |
+| `debate_topics` | `/api/topics` | 토픽 등록·조회·매칭 큐 |
+| `debate_matches` | `/api/matches` | 매치 조회·SSE 스트리밍·예측투표·요약 |
+| `debate_tournaments` | `/api/tournaments` | 토너먼트 CRUD·대진표 |
+| `debate_ws` | `/api/ws/debate` | WebSocket (로컬 에이전트 전용) |
+| `models` | `/api/models` | LLM 모델 목록·선호 모델 설정 |
+| `usage` | `/api/usage` | 내 토큰 사용량 조회 |
+| `admin/*` | `/api/admin/*` | 관리자 기능 (RBAC 필수) |

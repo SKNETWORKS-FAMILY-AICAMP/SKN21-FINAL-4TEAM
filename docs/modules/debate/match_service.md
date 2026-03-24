@@ -3,7 +3,7 @@
 > 매치 조회, 예측투표, 하이라이트, 요약 리포트 관리 서비스
 
 **파일 경로:** `backend/app/services/debate/match_service.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
@@ -17,7 +17,7 @@
 
 | 상수 | 설명 |
 |---|---|
-| `SUMMARY_SYSTEM_PROMPT` | 요약 LLM에 전달하는 시스템 프롬프트. JSON 형식의 `key_arguments`, `winning_points`, `rule_violations`, `overall_summary` 반환 지시 |
+| `SUMMARY_SYSTEM_PROMPT` | 요약 LLM에 전달하는 시스템 프롬프트. JSON 형식의 `agent_a_arguments`, `agent_b_arguments`, `turning_points`, `overall_summary` 반환 지시 |
 
 ---
 
@@ -29,7 +29,11 @@
 
 ### `_format_summary_log(turns: list, agent_a_name: str, agent_b_name: str) -> str` (내부)
 
-턴 로그를 텍스트로 포맷. 논증품질 점수와 위반 내용을 포함해 요약 LLM에 전달한다.
+턴 로그를 텍스트로 포맷. 발언 내용(`action`, `claim`, `evidence`)만 포함하고 점수·메타데이터는 제외하여 요약 LLM에 전달한다.
+
+### `_build_rule_violations(turns: list, agent_a_name: str, agent_b_name: str) -> list[str]` (내부)
+
+`DebateTurnLog.review_result`의 `violations` 필드를 `'[에이전트명] 턴N: 위반유형(severity) — 설명'` 형식의 문자열 목록으로 변환한다. `DebateSummaryService.generate_summary()`에서 호출되어 LLM 재해석 없이 직접 `summary_report.rule_violations`에 삽입된다.
 
 ### `generate_summary_task(match_id: str) -> None`
 
@@ -81,16 +85,20 @@ def __init__(self, db: AsyncSession)
 
 ## SUMMARY_SYSTEM_PROMPT 응답 형식
 
+LLM이 반환하는 JSON 형식 (시스템 프롬프트로 강제):
+
 ```json
 {
-  "key_arguments": ["핵심 논거 1", "핵심 논거 2", "핵심 논거 3"],
-  "winning_points": ["승부 포인트 1", "승부 포인트 2"],
-  "rule_violations": ["[에이전트명] 턴N: 위반유형(심각도) - 세부내용"],
-  "overall_summary": "전체 토론 요약 (3-4문장)"
+  "agent_a_arguments": ["에이전트A의 핵심 논거 1", "핵심 논거 2"],
+  "agent_b_arguments": ["에이전트B의 핵심 논거 1", "핵심 논거 2"],
+  "turning_points": ["승부를 가른 결정적 순간 또는 논거 대립 1", "순간 2"],
+  "overall_summary": "판정 결과를 포함한 전체 토론 총평 (3-4문장)"
 }
 ```
 
-`rule_violations`은 위반이 없으면 빈 배열을 반환한다.
+`turning_points`는 실질적인 승패 갈림 지점이 없으면 빈 배열을 반환한다.
+
+`summary_report` JSONB에 저장되는 최종 구조는 LLM 응답 필드 외에 `rule_violations` (review_result에서 직접 추출), `generated_at`, `model_used`, `input_tokens`, `output_tokens` 필드가 추가된다.
 
 ---
 
@@ -180,5 +188,6 @@ resolve_predictions(match_id, winner_id, agent_a_id, agent_b_id)
 
 | 날짜 | 버전 | 변경 내용 | 작성자 |
 |---|---|---|---|
-| 2026-03-11 | v2.0 | 실제 코드 기반으로 전면 재작성 | Claude |
+| 2026-03-24 | v2.2 | `SUMMARY_SYSTEM_PROMPT` 응답 형식 수정 (`key_arguments`/`winning_points` → `agent_a_arguments`/`agent_b_arguments`/`turning_points`). `_build_rule_violations()` 내부 함수 추가. `_format_summary_log()` 설명 정확화. `summary_report` JSONB 최종 저장 구조 명시 | Claude |
 | 2026-03-12 | v2.1 | resolve_predictions() 알림 훅 흐름 명시, NotificationService 의존 모듈 추가, 에러 처리 표 보강 | Claude |
+| 2026-03-11 | v2.0 | 실제 코드 기반으로 전면 재작성 | Claude |

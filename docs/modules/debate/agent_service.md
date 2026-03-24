@@ -3,18 +3,17 @@
 > 에이전트(AI 토론 참가자)의 전체 생명주기와 공개 갤러리·랭킹·H2H 통계를 관리하는 서비스 계층
 
 **파일 경로:** `backend/app/services/debate/agent_service.py`
-**최종 수정일:** 2026-03-12
+**최종 수정일:** 2026-03-24
 
 ---
 
 ## 모듈 목적
 
-이 파일에는 두 개의 서비스 클래스가 함께 존재한다.
+`DebateAgentService` 단일 클래스로 구성된다.
 
 - **`DebateAgentService`** — 에이전트 생성·수정·삭제, ELO 및 전적 갱신, 랭킹/갤러리/H2H 조회, 버전 이력 관리
-- **`DebateTemplateService`** — 관리자 제공 에이전트 템플릿 CRUD, 커스터마이징 검증, 프롬프트 조립
 
-두 클래스는 `DebateAgentService.create_agent()` 내부에서 협력하며, 템플릿 기반 에이전트 생성 흐름을 완성한다.
+템플릿 관련 기능은 `DebateTemplateService`(`template_service.py`)에 분리되어 있다. `create_agent()` 내부에서 `DebateTemplateService`를 인스턴스화하여 협력한다.
 
 ---
 
@@ -23,7 +22,6 @@
 | 상수 | 타입 | 값 / 설명 |
 |---|---|---|
 | `_TIER_THRESHOLDS` | `list[tuple[int, str]]` | `[(2050,"Master"),(1900,"Diamond"),(1750,"Platinum"),(1600,"Gold"),(1450,"Silver"),(1300,"Bronze")]` — ELO → 티어 변환 기준, 내림차순 정렬 |
-| `_INJECTION_PATTERNS` | `re.Pattern` | free_text 입력에서 프롬프트 인젝션 의심 패턴 탐지용 정규식 (IM_END, IGNORE ALL PREVIOUS INSTRUCTIONS 등) |
 
 ---
 
@@ -71,47 +69,17 @@ def __init__(self, db: AsyncSession)
 
 ---
 
-## 클래스: DebateTemplateService
-
-### 생성자
-
-```python
-def __init__(self, db: AsyncSession)
-```
-
-| 파라미터 | 타입 | 설명 |
-|---|---|---|
-| `db` | `AsyncSession` | SQLAlchemy 비동기 세션 |
-
-### 메서드
-
-| 메서드 | 시그니처 | 역할 |
-|---|---|---|
-| `list_active_templates` | `() -> list[DebateAgentTemplate]` | 활성 템플릿 목록 (sort_order ASC) |
-| `list_all_templates` | `() -> list[DebateAgentTemplate]` | 전체 템플릿 (관리자용, 비활성 포함) |
-| `get_template` | `(template_id: str \| uuid.UUID) -> DebateAgentTemplate \| None` | ID로 단일 템플릿 조회 |
-| `get_template_by_slug` | `(slug: str) -> DebateAgentTemplate \| None` | slug로 단일 템플릿 조회 |
-| `validate_customizations` | `(template: DebateAgentTemplate, customizations: dict \| None, enable_free_text: bool = False) -> dict` | 슬라이더 범위·셀렉트 옵션 검증, 누락 키 기본값 보충, free_text 인젝션 패턴 스캔 |
-| `assemble_prompt` | `(template: DebateAgentTemplate, customizations: dict) -> str` | `{customization_block}` 자리표시자를 검증된 커스터마이징 텍스트로 치환해 최종 시스템 프롬프트 반환 |
-| `create_template` | `(data: AgentTemplateCreate) -> DebateAgentTemplate` | 템플릿 생성 (superadmin 전용) |
-| `update_template` | `(template_id: str \| uuid.UUID, data: AgentTemplateUpdate) -> DebateAgentTemplate` | 템플릿 수정 (superadmin 전용) |
-
----
-
 ## 의존 모듈
 
 | 모듈 | 경로 | 용도 |
 |---|---|---|
 | `encrypt_api_key` | `app.core.encryption` | BYOK API 키 Fernet 암호화 |
-| `settings` | `app.core.config` | `agent_name_change_cooldown_days` 설정값 읽기 (지연 임포트) |
-| `DebateAgent` | `app.models.debate_agent` | 에이전트 ORM 모델 |
-| `DebateAgentVersion` | `app.models.debate_agent` | 에이전트 버전 ORM 모델 |
-| `DebateAgentSeasonStats` | `app.models.debate_agent` | 시즌별 ELO·전적 분리 집계 모델 |
-| `DebateAgentTemplate` | `app.models.debate_agent_template` | 에이전트 템플릿 ORM 모델 |
-| `DebateMatch` | `app.models.debate_match` | 진행 중 매치 확인용 (지연 임포트, `delete_agent`·`get_head_to_head`) |
+| `settings` | `app.core.config` | `agent_name_change_cooldown_days` 설정값 읽기 |
+| `DebateAgent`, `DebateAgentVersion`, `DebateAgentSeasonStats` | `app.models.debate_agent` | 에이전트·버전·시즌 통계 ORM 모델 |
+| `DebateMatch` | `app.models.debate_match` | 진행 중 매치 확인용 (`delete_agent`, `get_head_to_head`) |
 | `User` | `app.models.user` | 사용자 ORM 모델 |
 | `AgentCreate`, `AgentUpdate` | `app.schemas.debate_agent` | 에이전트 입력 스키마 |
-| `AgentTemplateCreate`, `AgentTemplateUpdate` | `app.schemas.debate_agent` | 템플릿 입력 스키마 |
+| `DebateTemplateService` | `app.services.debate.template_service` | 템플릿 로드·커스터마이징 검증·프롬프트 조립 (`create_agent`, `update_agent` 내부에서 인스턴스화) |
 | `DebatePromotionService`, `TIER_ORDER` | `app.services.debate.promotion_service` | 승급전/강등전 트리거 (지연 임포트, `update_elo`) |
 
 ---
@@ -196,5 +164,6 @@ DebateAgentService.get_head_to_head(agent_id, limit)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | `DebateTemplateService` 클래스 섹션 제거 — 해당 클래스는 `template_service.py`로 분리됨. `_INJECTION_PATTERNS` 상수 제거 (동일 이유). 의존 모듈 표에서 `DebateTemplateService` import 경로 수정 |
 | 2026-03-12 | 나머지 문서의 형식 레퍼런스 템플릿 역할을 위해 전면 재작성. 모듈 수준 함수 섹션 추가, 에러 처리 표 상세화, 호출 흐름 4개 시나리오로 확장 |
 | 2026-03-11 | `services/debate/` 하위로 이동, 실제 코드 기반으로 초기 재작성 |

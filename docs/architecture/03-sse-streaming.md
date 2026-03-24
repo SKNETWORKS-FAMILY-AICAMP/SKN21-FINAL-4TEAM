@@ -1,6 +1,6 @@
 # SSE 스트리밍 & 프론트엔드 버퍼 아키텍처
 
-> 작성일: 2026-03-10
+> 작성일: 2026-03-10 | 갱신일: 2026-03-24
 
 ---
 
@@ -14,6 +14,18 @@ sequenceDiagram
     participant NEXT as Next.js Proxy<br/>/api/matches/{id}/stream
     participant HOOK as useDebateStream hook
     participant STORE as debateMatchStore<br/>(Zustand)
+
+    ENGINE->>REDIS: publish_event(match_id, "judge_intro", data)
+    REDIS-->>FAST: message → SSE 포맷 변환
+    FAST-->>NEXT: data: {"event":"judge_intro",...}\n\n
+    NEXT-->>HOOK: stream data
+    HOOK->>STORE: setJudgeIntro(message)
+
+    ENGINE->>REDIS: publish_event(match_id, "turn_tool_call", data)
+    REDIS-->>FAST: message
+    FAST-->>NEXT: data: {"event":"turn_tool_call",...}\n\n
+    NEXT-->>HOOK: stream data
+    HOOK->>STORE: setToolCallState(speaker, query)
 
     ENGINE->>REDIS: publish_event(match_id, "turn_chunk", data)
     REDIS-->>FAST: message → SSE 포맷 변환
@@ -40,14 +52,22 @@ sequenceDiagram
     NEXT-->>HOOK: stream data
     HOOK->>STORE: clearStreamingTurn(), fetchMatch(matchId)
     Note over FAST: pubsub.unsubscribe() 후 SSE 종료
+
+    ENGINE->>REDIS: publish_event(match_id, "series_update", data)
+    Note over ENGINE: finished 직후 발행 — 승급전/강등전 결과
+    REDIS-->>FAST: message
+    FAST-->>NEXT: data: {"event":"series_update",...}\n\n
+    NEXT-->>HOOK: stream data
+    HOOK->>STORE: onSeriesUpdate callback
 ```
 
 **Redis 채널 구조:**
 
 | 채널 | 용도 |
 |---|---|
-| `debate:match:{match_id}` | 매치 관전 이벤트 (turn_chunk, turn, turn_review, finished 등) |
-| `debate:queue:{topic_id}:{agent_id}` | 매칭 큐 상태 이벤트 (opponent_joined, matched, timeout 등) |
+| `debate:match:{match_id}` | 매치 관전 이벤트 (judge_intro, turn_tool_call, turn_chunk, turn, turn_review, finished, series_update, credit_insufficient, match_void, forfeit, error 등) |
+| `debate:queue:{topic_id}:{agent_id}` | 매칭 큐 상태 이벤트 (opponent_joined, matched, timeout, cancelled, countdown_started 등) |
+| `debate:viewers:{match_id}` | 관전자 수 추적 (Redis Set — user_id를 멤버로 저장, 중복 방지) |
 
 **Terminal 이벤트 (수신 후 SSE 연결 종료):**
 
@@ -58,21 +78,46 @@ sequenceDiagram
 
 ## 2. 프론트엔드 SSE 이벤트 타입
 
-| Event | Payload 주요 필드 | Zustand 액션 | 결과 |
-|---|---|---|---|
-| `turn_chunk` | `turn_number`, `speaker`, `chunk` | `appendChunk` | `streamingTurn` 또는 `pendingStreamingTurn`에 청크 누적 |
-| `turn` | `TurnLog` 객체 (turn_number, speaker, claim 등) | `addTurnFromSSE` | `pendingTurnLogs`에 보관 (타이핑 완료 후 `turns`로 이동) |
-| `turn_review` | `TurnReview` 객체 (logic_score, violations, feedback) | `addTurnReview` | `turnReviews` 배열에 추가 |
-| `series_update` | `PromotionSeries` 객체 | `onSeriesUpdate` callback | 승급전/강등전 UI 갱신 |
-| `finished` | `winner_id`, `score_a`, `score_b`, `elo_a_before/after`, `elo_b_before/after` | `clearStreamingTurn`, `fetchMatch` | 결과 화면 렌더링 |
-| `forfeit` | `match_id`, `reason`, `winner_id` | `clearStreamingTurn`, `fetchMatch` | 몰수패 결과 표시 |
-| `error` | `message` | streaming 중단 | 에러 메시지 표시 |
+### 2-1. 매치 채널 이벤트 (`debate:match:{match_id}`)
+
+| Event | 발행 위치 | Payload 주요 필드 | Zustand 액션 | 결과 |
+|---|---|---|---|---|
+| `started` | engine.py | `match_id` | — | 매치 시작 알림 |
+| `judge_intro` | engine.py | `message`, `topic_title`, `model_id`, `input_tokens`, `output_tokens`, `fallback_reason` | `setJudgeIntro` | 토론 시작 전 Judge LLM 환영 인사 표시 |
+| `waiting_agent` | engine.py | `match_id` | — | 로컬 에이전트 접속 대기 중 알림 |
+| `turn_tool_call` | turn_executor.py | `turn_number`, `speaker`, `tool_name`, `query` | `setToolCallState` | web_search 시작 — "검색 중..." UI 표시 |
+| `turn_chunk` | turn_executor.py | `turn_number`, `speaker`, `chunk` | `appendChunk` | `streamingTurn` 또는 `pendingStreamingTurn`에 청크 누적 |
+| `turn` | debate_formats.py | `TurnLog` 객체 (turn_number, speaker, claim 등) | `addTurnFromSSE` | `pendingTurnLogs`에 보관 (타이핑 완료 후 `turns`로 이동) |
+| `turn_review` | debate_formats.py | `TurnReview` 객체 (logic_score, violations, feedback) | `addTurnReview` | `turnReviews` 배열에 추가 |
+| `finished` | finalizer.py | `winner_id`, `score_a`, `score_b`, `elo_a_before`, `elo_a_after`, `elo_b_before`, `elo_b_after` | `clearStreamingTurn`, `fetchMatch` | 결과 화면 렌더링 |
+| `series_update` | finalizer.py | `PromotionSeries` 객체 (`series_type`, `status`, `current_wins` 등) | `onSeriesUpdate` callback | 승급전/강등전 UI 갱신 — `finished` 직후 발행 |
+| `forfeit` | forfeit.py | `match_id`, `reason`, `winner_id` | `clearStreamingTurn`, `fetchMatch` | 몰수패 결과 표시 |
+| `credit_insufficient` | engine.py | `agent_id`, `agent_name`, `required`, `message`, `match_status` | 별도 핸들러 | 크레딧 부족 알림 — 이후 `error` 이벤트가 추가로 발행됨 |
+| `match_void` | engine.py | `reason` | 별도 핸들러 | 기술적 장애로 매치 무효화 |
+| `error` | engine.py | `message`, `error_type?` | streaming 중단 | 에러 메시지 표시 |
+
+> **Terminal 이벤트:** `finished`, `error`, `forfeit` 수신 시 SSE 연결 종료. `credit_insufficient`와 `match_void`는 terminal 이벤트가 아니며, 이후 `error` 이벤트가 함께 발행되어 연결을 종료한다.
+
+### 2-2. 큐 채널 이벤트 (`debate:queue:{topic_id}:{agent_id}`)
+
+| Event | Payload 주요 필드 | 결과 |
+|---|---|---|
+| `matched` | `match_id` | 매칭 완료 — SSE 연결 종료 |
+| `timeout` | `reason: "queue_timeout"` | 대기 초과 — SSE 연결 종료 |
+| `cancelled` | — | 큐 취소 — SSE 연결 종료 |
+| `opponent_joined` | — | 상대방 입장 알림 |
+| `countdown_started` | — | 카운트다운 시작 알림 |
 
 **SSE 연결 재시도:**
 
 - `useDebateStream` 훅이 네트워크 단절 시 최대 2회 재연결 (총 3회 시도)
 - `AbortController`로 컴포넌트 언마운트 시 즉시 연결 취소
 - `in_progress` 상태인 매치에만 SSE 연결 (완료 매치는 REST API 조회)
+
+**서버 측 타임아웃:**
+
+- 매치 채널: `max_wait_seconds=600` (10분) — 초과 시 `error` 이벤트 발행 후 종료
+- 큐 채널: `max_wait_seconds=120` (2분) — 초과 시 `timeout` 이벤트 발행 후 종료
 
 ---
 

@@ -1,6 +1,6 @@
 # 인증/RBAC & 랭킹 시스템
 
-> 작성일: 2026-03-10
+> 작성일: 2026-03-10 | 갱신일: 2026-03-24
 
 ---
 
@@ -68,8 +68,8 @@ flowchart TD
     GCU -->|"밴 상태"| E403_BAN["HTTP 403\nX-Error-Code: USER_BANNED"]
     GCU -->|"User 객체"| ROUTE_CHECK
 
-    ROUTE_CHECK -->|"공개 API\n/api/topics, /api/matches"| PUBLIC["요청 처리"]
-    ROUTE_CHECK -->|"인증 필요 API\n/api/agents, /api/usage"| OWNER_CHECK["소유권 검증\nresource.owner_id == user.id"]
+    ROUTE_CHECK -->|"공개 API\n/api/topics, /api/matches\n/api/community"| PUBLIC["요청 처리"]
+    ROUTE_CHECK -->|"인증 필요 API\n/api/agents, /api/usage\n/api/follows, /api/notifications"| OWNER_CHECK["소유권 검증\nresource.owner_id == user.id"]
     ROUTE_CHECK -->|"관리자 API\n/api/admin/*"| ADMIN_DEP["require_admin()\nrole in admin, superadmin"]
     ROUTE_CHECK -->|"파괴적 API\n사용자 삭제, 역할 변경"| SA_DEP["require_superadmin()\nrole == superadmin"]
 
@@ -87,14 +87,19 @@ flowchart TD
 |---|---|---|
 | `GET /api/topics` | 없음 (공개) | |
 | `GET /api/matches` | 없음 (공개) | |
-| `POST /api/topics/{id}/queue` | user (인증 필요) | 자신의 에이전트만 사용 |
+| `GET /api/community` | 없음 (공개) | |
+| `POST /api/topics/{id}/queue` | user (인증 필요) | 자신의 에이전트만 사용 (admin/superadmin 제외) |
 | `POST /api/agents` | user (인증 필요) | |
 | `PATCH /api/agents/{id}` | user (소유자만) | admin/superadmin은 모든 에이전트 |
 | `GET /api/usage` | user (인증 필요) | 본인 사용량만 |
+| `GET /api/follows` | user (인증 필요) | |
+| `GET /api/notifications` | user (인증 필요) | |
+| `GET /api/agents/{id}/series` | user (인증 필요) | 현재 활성 승급전/강등전 시리즈 조회 |
+| `GET /api/agents/{id}/series/history` | user (인증 필요) | 시리즈 이력 조회 |
 | `GET /api/admin/users` | admin | |
 | `GET /api/admin/monitoring` | admin | |
 | `PATCH /api/admin/debate/matches/{id}/feature` | admin | 하이라이트 설정 |
-| `POST /api/admin/system/models` | superadmin | LLM 모델 등록 |
+| `POST /api/admin/models` | superadmin | LLM 모델 등록 |
 | `DELETE /api/admin/users/{id}` | superadmin | 사용자 삭제 |
 | `PATCH /api/admin/users/{id}/role` | superadmin | 역할 변경 |
 
@@ -117,10 +122,11 @@ flowchart LR
         LLM_CALL --> NEVER["프론트엔드에 키 노출 없음"]
     end
 
-    subgraph FALLBACK["폴백 우선순위"]
-        F1["① BYOK 복호화 성공"] --> F2["② use_platform_credits=True\n→ 플랫폼 환경변수 키"]
+    subgraph FALLBACK["API 키 해석 우선순위 (_resolve_api_key)"]
+        F1["① BYOK 복호화 성공\n(encrypted_api_key 존재)"] --> F2["② use_platform_credits=True\n→ 플랫폼 환경변수 키"]
         F2 --> F3["③ 복호화 실패\n→ 플랫폼 키 폴백 + 경고 로그"]
-        F3 --> F4["④ local provider\n→ 키 불필요"]
+        F3 --> F4["④ local provider\n→ 키 불필요 (WebSocket 경유)"]
+        F4 --> F5["⑤ is_test 매치\n→ force_platform=True 강제 플랫폼 키"]
     end
 ```
 
@@ -154,15 +160,21 @@ flowchart TD
     DELTA --> NEW_ELO["new_elo_a = elo_a + round(delta_a)\nnew_elo_b = elo_b + round(delta_b)"]
 
     NEW_ELO --> CUM_UPDATE["누적 ELO 갱신\ndebate_agents.elo_rating\nwins/losses/draws 카운트"]
-    CUM_UPDATE --> TIER_CALC["get_tier_from_elo(new_elo)\n티어 재계산"]
-    TIER_CALC --> SEASON_CHECK{"match.season_id\n있음?"}
+    CUM_UPDATE --> ELO_SUPPRESS{"judgment.elo_suppressed?\n(판정 폴백 시 True)"}
+    ELO_SUPPRESS -->|"True — 갱신 skip"| SEASON_CHECK
+    ELO_SUPPRESS -->|"False"| TIER_CALC
+
+    TIER_CALC["get_tier_from_elo(new_elo)\n티어 재계산"] --> SEASON_CHECK{"match.season_id\n있음?"}
 
     SEASON_CHECK -->|"Yes"| SEASON_ELO["시즌 ELO 별도 갱신\ndebate_agent_season_stats\nseason_id + agent_id UNIQUE"]
     SEASON_CHECK -->|"No"| PROMO_CHECK
 
-    SEASON_ELO --> PROMO_CHECK{"티어 경계 돌파?"}
-    PROMO_CHECK -->|"No"| DONE["ELO 갱신 완료"]
-    PROMO_CHECK -->|"Yes"| SERIES_CREATE
+    SEASON_ELO --> PROMO_CHECK{"활성 시리즈 있음?"}
+    PROMO_CHECK -->|"No"| CHECK_TRIGGER{"티어 경계 돌파?"}
+    PROMO_CHECK -->|"Yes"| RECORD_SERIES["record_match_result\n승/패 기록"]
+    CHECK_TRIGGER -->|"No"| DONE["ELO 갱신 완료"]
+    CHECK_TRIGGER -->|"Yes"| SERIES_CREATE
+    RECORD_SERIES --> SERIES_CREATE
 ```
 
 **ELO 티어 경계:**

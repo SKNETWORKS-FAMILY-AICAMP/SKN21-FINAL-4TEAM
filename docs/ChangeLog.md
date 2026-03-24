@@ -1,3 +1,42 @@
+## [2026-03-24] 문서 전면 정비 — API / 모델 / 프론트엔드 / 서비스 전체
+
+### Added
+
+**신규 문서 영역 3개:**
+- `docs/api/` — API 라우터 문서 19개 신규 작성 (사용자 13개 + Admin 10개)
+  - 사용자: auth, debate_agents, debate_matches, debate_topics, debate_tournaments, debate_ws, community, follows, models, notifications, usage, health, uploads
+  - Admin: users, llm_models, usage, monitoring, debate_agents, debate_matches, debate_seasons, debate_templates, debate_topics, debate_tournaments
+- `docs/models/` — SQLAlchemy ORM 모델 문서 16개 신규 작성 (22개 테이블 커버)
+  - user, debate_agent(+version+season_stats), debate_match(+participant+prediction+queue), debate_turn_log, debate_season, debate_promotion_series, debate_tournament, debate_agent_template, debate_topic, llm_model, token_usage_log, community_post, user_community_stats, user_follow, user_notification + README(전체 관계도)
+- `docs/frontend/` — 프론트엔드 Zustand 스토어 11개 + 주요 컴포넌트 7개 신규 작성
+
+**신규 서비스 모듈 문서 5개:**
+- `docs/modules/debate/evidence_search.md` — EvidenceSearchService (Tool-Use 검색 + 출처 검증)
+- `docs/modules/debate/forfeit.md` — ForfeitHandler (몰수패·강제종료 처리)
+- `docs/modules/debate/exceptions.md` — MatchVoidError, ForfeitError 예외 정의
+- `docs/modules/debate/template_service.md` — DebateTemplateService (에이전트 템플릿 CRUD + 커스터마이징 검증)
+- `docs/modules/debate/control_plane.md` — OrchestrationControlPlane (정책·점진 롤아웃·SSE 트레이스)
+
+### Changed (문서 최신화)
+
+**서비스 모듈 문서 8개 갱신:**
+- `auto_matcher.md` — `_on_debate_task_done`, `_do_auto_match` 9단계 흐름, Redis 락 계층 추가
+- `broadcast.md` — `publish_queue_event` None 가드 + best-effort 처리 추가
+- `match_service.md` — `summary_report` JSONB 최신 구조, `_build_rule_violations` 신규 함수
+- `matching_service.md` — `DebateAutoMatcher` 분리 반영 (auto_matcher.md로 이동)
+- `promotion_service.md` — `draw` 처리·`expired` 상태·강등전 max_losses 오류 수정
+- `season_service.md` — `close_season` 5단계 구조 수정
+- `agent_service.md` — `DebateTemplateService` 분리 반영 (template_service.py로 이동)
+- `notification_service.md` — `notify_new_follower` link 경로 추가
+
+**아키텍처 문서 4개 갱신:**
+- `01-system-overview.md` — DB 테이블 수 22개, SSH 키 경로, Tool-Use 추가, API 라우트 표
+- `03-sse-streaming.md` — `judge_intro`/`turn_tool_call`/`series_update` 이벤트 추가, 타임아웃 명시
+- `04-auth-ranking.md` — community/follows/notifications 경로, `elo_suppressed` 분기, 승급전 경로
+- `06-scoring-system.md` — 3단계 판정(`generate_intro` 추가), 위반 유형 9종, score overflow 방지
+
+---
+
 ## [2026-03-24] auto-walkthrough 재워크스루 — 버그 수정 6건
 
 ### Fixed (Critical)

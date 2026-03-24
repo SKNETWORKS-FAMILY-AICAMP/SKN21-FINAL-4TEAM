@@ -3,7 +3,7 @@
 > 백그라운드 큐 폴링 및 플랫폼 에이전트 자동 매칭 데몬
 
 **파일 경로:** `backend/app/services/debate/auto_matcher.py`
-**최종 수정일:** 2026-03-17
+**최종 수정일:** 2026-03-24
 
 ---
 
@@ -78,19 +78,32 @@ DebateAutoMatcher.get_instance().stop()
 - `SELECT ... FOR UPDATE SKIP LOCKED`으로 다른 태스크와 충돌 방지
 - 플랫폼 에이전트가 없으면 `publish_queue_event(..., "timeout", {"reason": "no_platform_agents"})` 발행
 
+### `_on_debate_task_done(task: asyncio.Task)`
+
+`run_debate` 백그라운드 태스크 완료 콜백. 태스크에서 예외가 발생했을 때 `capture_exception()`으로 Sentry에 전송한다. 태스크 취소(`cancelled()`) 또는 예외 없음이면 무시한다.
+
 ### `_auto_match_with_platform_agent(db, entry)`
 
-큐 항목과 플랫폼 에이전트를 매칭하고 토론 엔진을 시작한다.
+큐 항목에 대한 Redis 락을 획득한 뒤 `_do_auto_match()`를 호출하는 동시성 보호 래퍼다.
+
+- 락 키: `match_lock:{topic_id}:{agent_id}` (Redis SETNX, TTL 30초)
+- 락 획득 실패 시 즉시 `return` — 다른 태스크가 이미 처리 중임을 의미
+- 락 획득 성공 시 `_do_auto_match()` 실행 후 `finally`에서 락 해제
+
+### `_do_auto_match(db, entry)`
+
+실제 매칭 로직. `_auto_match_with_platform_agent()` 내부의 Redis 락 범위 안에서 호출된다.
 
 ```
-1. 큐 항목 재확인 (다른 태스크가 이미 처리했을 수 있음)
+1. 큐 항목 재확인 (FOR UPDATE SKIP LOCKED) — 다른 태스크가 이미 처리했으면 return
 2. is_platform=True, is_active=True, owner_id != entry.user_id인 에이전트 random() 선택
-3. 각 에이전트 최신 버전(get_latest_version) 조회
-4. DebateMatch 생성 (status="pending")
-5. 큐 엔트리 삭제
-6. DB 커밋
-7. publish_queue_event(..., "matched", {"match_id": ..., "auto_matched": True})
-8. asyncio.create_task(run_debate(match_id))
+3. 플랫폼 에이전트 없으면 publish_queue_event(..., "timeout", {"reason": "no_platform_agents"}) 후 return
+4. 각 에이전트 최신 버전(get_latest_version) 조회
+5. DebateMatch 생성 (status="pending")
+6. 큐 엔트리 삭제
+7. DB 커밋
+8. publish_queue_event(..., "matched", {"match_id": ..., "auto_matched": True})
+9. asyncio.create_task(run_debate(match_id)) + 콜백 등록(_debate_tasks 관리, _on_debate_task_done)
 ```
 
 ---
@@ -109,12 +122,15 @@ FastAPI lifespan
           ↓
           _check_stale_entries()
             → DebateMatchQueue WHERE joined_at < cutoff
-            → _auto_match_with_platform_agent()
-                → DebateAgent WHERE is_platform=True RANDOM
-                → DebateMatch INSERT
-                → DebateMatchQueue DELETE
-                → publish_queue_event("matched")
-                → asyncio.create_task(run_debate(match_id))
+            → _auto_match_with_platform_agent()  (Redis 락 획득)
+                → _do_auto_match()
+                    → 큐 항목 재확인 (FOR UPDATE SKIP LOCKED)
+                    → DebateAgent WHERE is_platform=True RANDOM
+                    → DebateMatch INSERT
+                    → DebateMatchQueue DELETE
+                    → publish_queue_event("matched")
+                    → asyncio.create_task(run_debate(match_id))
+                → Redis 락 해제
           ↓
           _check_stuck_matches()
             → DebateMatch WHERE status IN ('pending','waiting_agent') AND created_at < cutoff
@@ -154,4 +170,5 @@ FastAPI lifespan
 
 | 날짜 | 버전 | 변경 내용 |
 |---|---|---|
+| 2026-03-24 | v1.1 | `_on_debate_task_done()` 콜백 메서드 추가. `_auto_match_with_platform_agent()`의 Redis 락 래퍼 역할 명시. `_do_auto_match()` 내부 메서드 및 실제 매칭 9단계 흐름 추가. 데이터 흐름 다이어그램 Redis 락 구조 반영 |
 | 2026-03-17 | v1.0 | 신규 작성. `auto_matcher.py` 분리 반영. matching_service.py에서 분리된 백그라운드 데몬 구조 문서화 |
