@@ -84,6 +84,7 @@ export default function DebateTopicsPage() {
   const [sort, setSort] = useState<SortOption>('recent');
   const [page, setPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(8);
+  const [topicVisible, setTopicVisible] = useState(12);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 주제 생성 모달
@@ -151,12 +152,14 @@ export default function DebateTopicsPage() {
   const handleFilterChange = (f: StatusFilter) => {
     setFilter(f);
     setVisibleCount(8);
+    setTopicVisible(12);
     setPage(1);
   };
 
   const handleSortChange = (s: SortOption) => {
     setSort(s);
     setVisibleCount(8);
+    setTopicVisible(12);
     setPage(1);
   };
 
@@ -335,11 +338,11 @@ export default function DebateTopicsPage() {
       </div>
 
       {/* 메인 콘텐츠: 토픽 리스트 + 랭킹 사이드바 가로 배치 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* 토픽 리스트 섹션 */}
         <div className="lg:col-span-2">
           <div id="topic-list">
-            <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {topicsLoading && topics.length === 0 ? (
                 Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
               ) : !topicsLoading && topics.length === 0 ? (
@@ -348,7 +351,7 @@ export default function DebateTopicsPage() {
                   <p className="text-sm font-medium">등록된 토픽이 없습니다</p>
                 </div>
               ) : (
-                topics.map((topic) => {
+                topics.slice(0, topicVisible).map((topic) => {
                   const config = STATUS_CONFIG[topic.status] || STATUS_CONFIG.closed;
                   const categoryLabel =
                     MODE_OPTIONS.find((m) => m.value === topic.mode)?.label || '기타';
@@ -393,12 +396,23 @@ export default function DebateTopicsPage() {
                 })
               )}
             </div>
+            {topics.length > topicVisible && (
+              <div className="flex justify-center mt-5">
+                <button
+                  onClick={() => setTopicVisible((v) => v + 12)}
+                  className="px-6 py-2.5 bg-bg-surface text-text text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <ChevronDown size={16} />
+                  더보기 ({topics.length - topicVisible}개 남음)
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* 랭킹 */}
-        <div className="lg:col-span-1 h-full">
-          <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4 h-full">
+        <div className="lg:col-span-1 self-start sticky top-4">
+          <div className="bg-bg-surface rounded-2xl brutal-border brutal-shadow-sm p-4">
             <div className="flex flex-col gap-2">
               {rankingLoading ? (
                 <div className="flex flex-col gap-2 py-4">
