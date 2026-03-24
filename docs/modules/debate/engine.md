@@ -115,6 +115,8 @@ Before the turn loop starts, `DebateJudge.generate_intro(...)` is called first.
 The engine then publishes a `judge_intro` SSE event (welcome + short topic briefing).
 After that intro is sent, agent turns begin.
 
+> **SSE 예외 격리 (2026-03-24):** `judge_intro` SSE 발행은 try/except로 보호된다. Redis 장애 등으로 SSE가 실패해도 매치 실행은 계속된다.
+
 **예외 분기:**
 - `MatchVoidError` → `_void_match` + `_refund_credits` → return
 - `ForfeitError` → `ForfeitHandler.handle_retry_exhaustion(match, agent_a, agent_b, forfeited_speaker)` → return
@@ -168,6 +170,7 @@ After that intro is sent, agent turns begin.
 
 | 날짜 | 버전 | 변경 내용 |
 |---|---|---|
+| 2026-03-24 | v3.1 | `judge_intro` SSE 발행 try/except 보호 추가 — Redis 장애 시 매치 실행 계속 |
 | 2026-03-17 | v3.0 | 클래스 기반 재설계 반영 (3a715c2). DebateEngine 클래스 구조 문서화, 하위 호환 래퍼 명시, 분리된 모듈(judge/finalizer/auto_matcher) 링크 |
 | 2026-03-12 | v2.1 | 알림 훅 명시, 의존 모듈 추가 |
 | 2026-03-11 | v2.0 | 실제 코드 기반 전면 재작성 |

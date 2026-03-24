@@ -1,9 +1,5 @@
 # DebateJudge
 
-> 2026-03-23 업데이트: `generate_intro(...)` 추가.
-> 토론 시작 전에 Judge LLM은 `judge_intro`에서 SSE event (환영 인사 + 주제 브리핑)를 진행한다.
-> 마지막 judge LLM 판정은 수정하지 않았음.
-
 > LLM 2-stage 방식 토론 최종 판정기
 
 **파일 경로:** `backend/app/services/debate/judge.py`
@@ -50,6 +46,25 @@ def __init__(self, client: InferenceClient | None = None) -> None
 `engine.py`의 `DebateEngine._run_with_client()`에서 공유 `InferenceClient`를 주입해 인스턴스화한다.
 
 ### 공개 메서드
+
+#### `generate_intro(topic, agent_a_name, agent_b_name) -> dict`
+
+토론 시작 전 Judge LLM이 생성하는 환영 인사 + 주제 브리핑 (2026-03-23 추가).
+
+**반환값:**
+```python
+{
+    "message": str,        # 한국어 환영 인사 + 주제 요약 (2-3문장)
+    "model_id": str,
+    "input_tokens": int,
+    "output_tokens": int,
+    "fallback_reason": str | None,  # LLM 실패 시 폴백 사유
+}
+```
+
+`engine.py`에서 `judge_intro` SSE 이벤트로 발행되며, 에이전트 턴이 시작되기 전에 관전자에게 표시된다.
+
+---
 
 #### `judge(match, turns, topic, agent_a_name, agent_b_name) -> dict`
 
@@ -116,6 +131,16 @@ for key, max_val in SCORING_CRITERIA.items():
     scorecard["agent_a"][key] = max(0, min(scorecard["agent_a"].get(key, 0), max_val))
     scorecard["agent_b"][key] = max(0, min(scorecard["agent_b"].get(key, 0), max_val))
 ```
+
+**score 합산 (score overflow 방지, 2026-03-24):**
+
+```python
+# SCORING_CRITERIA 키만 합산 — LLM이 extra key를 추가해도 100점 초과 방지
+score_a = sum(scorecard["agent_a"].get(k, 0) for k in SCORING_CRITERIA)
+score_b = sum(scorecard["agent_b"].get(k, 0) for k in SCORING_CRITERIA)
+```
+
+> 이전 코드 `sum(scorecard["agent_a"].values())`는 LLM이 `SCORING_CRITERIA`에 없는 extra key를 추가할 경우 점수가 100점을 초과하는 버그가 있었다. `SCORING_CRITERIA` 키만 명시적으로 합산하도록 수정됨.
 
 **파싱 실패 폴백:**
 
@@ -204,4 +229,6 @@ engine.py (DebateEngine._run_with_client)
 
 | 날짜 | 버전 | 변경 내용 |
 |---|---|---|
+| 2026-03-24 | v1.2 | score 합산 방식 변경 (`values()` → `SCORING_CRITERIA` 키 명시) — score overflow 방지 버그 수정 |
+| 2026-03-23 | v1.1 | `generate_intro()` 추가 — 토론 시작 전 Judge LLM 환영 인사 + 주제 브리핑 |
 | 2026-03-17 | v1.0 | 신규 작성. judge.py 분리 반영. 2-stage 판정, 현행 채점 기준(argumentation/rebuttal/strategy) 문서화 |

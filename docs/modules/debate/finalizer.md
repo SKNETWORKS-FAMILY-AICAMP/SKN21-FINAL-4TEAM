@@ -70,6 +70,7 @@ def __init__(self, db: AsyncSession) -> None
    → db.commit()
 
 8. finished SSE 발행 (커밋 후 발행 — 새로고침 시 DB 결과와 일치 보장)
+   → try/except로 보호: SSE 실패 시에도 match.status를 'error'로 덮어쓰지 않음
    → publish_event(match_id, "finished", {winner_id, score_a, score_b, elo_*})
 
 9. 예측투표 정산
@@ -85,6 +86,7 @@ def __init__(self, db: AsyncSession) -> None
 ### 설계 원칙
 
 - **커밋 전 SSE 발행 금지:** finished SSE는 반드시 DB 커밋 완료 후 발행. 새로고침 시 DB와 SSE 결과가 불일치하는 버그 방지.
+- **SSE 예외 격리 (CRITICAL, 2026-03-24):** `finished` SSE와 `series_update` SSE는 각각 try/except로 감쌓다. DB commit(step 7) 이후 SSE 발행 실패가 `run_debate()` except Exception까지 전파되면, 이미 'completed'로 커밋된 `match.status`가 'error'로 덮어씌워지는 치명적 버그가 있었다. try/except로 격리하여 SSE 실패가 완료 상태에 영향을 주지 않는다.
 - **is_test 플래그:** `match.is_test=True`이면 ELO·시즌·승급전 처리를 건너뜀.
 - **순환 import 방지:** `agent_service`, `match_service`, `promotion_service`, `tournament_service`는 함수 레벨에서 import.
 
@@ -146,4 +148,5 @@ if series_result.get("status") in ("won", "lost", "expired"):
 
 | 날짜 | 버전 | 변경 내용 |
 |---|---|---|
+| 2026-03-24 | v1.1 | `finished` SSE + `series_update` SSE try/except 보호 추가 (CRITICAL 버그 수정 — DB 커밋 후 SSE 실패 시 match.status 'error' 덮어쓰기 방지) |
 | 2026-03-17 | v1.0 | 신규 작성. finalizer.py 분리 반영. 처리 순서, finished SSE 페이로드, 시리즈 재트리거 로직 문서화 |

@@ -1,3 +1,25 @@
+## [2026-03-24] auto-walkthrough 재워크스루 — 버그 수정 6건
+
+### Fixed (Critical)
+
+- **`finalizer.py`** — `finished` SSE + `series_update` SSE를 try/except로 보호 (CRITICAL): DB 커밋 후 SSE 발행 실패가 `run_debate()` 예외 핸들러까지 전파되어 이미 'completed'로 저장된 `match.status`가 'error'로 덮어씌워지는 치명적 버그 수정
+
+### Fixed
+
+- **`engine.py`** — `judge_intro` SSE 발행을 try/except로 보호: Redis 장애 시에도 매치 실행 계속
+- **`turn_executor.py`** — `turn_tool_call` SSE 발행을 try/except로 보호: Redis 장애 시에도 턴 실행 계속
+- **`orchestrator.py`** — `REVIEW_SYSTEM_PROMPT`에 XML 구분자 안내 추가 + `review_turn` user_content에 `<발언 시작>…<발언 끝>` 등 XML 태그로 에이전트 발언 격리 (prompt injection 방어)
+- **`judge.py`** — score 합산 방식 `sum(values())` → `sum(get(k, 0) for k in SCORING_CRITERIA)` 변경: LLM이 extra key 추가 시 score가 100점을 초과하던 버그 수정
+- **`debate_formats.py`** — `_run_parallel_turns` end-of-loop에서 `prev_b_review_task` await를 `prev_b_evidence_task.done()` 체크 앞으로 이동: LLM 리뷰(수백 ms)가 완료되기 전에 evidence_task가 done() 아님을 이유로 불필요하게 취소되던 버그 수정
+
+### Docs
+
+- `docs/modules/debate/turn_executor.md` 신규 작성 (TurnExecutor 클래스 — 이전 문서 없음)
+- `docs/modules/debate/debate_formats.md` 신규 작성 (포맷별 턴 루프 — 이전 문서 없음)
+- `docs/modules/debate/engine.md`, `finalizer.md`, `orchestrator.md`, `judge.md` 최신화
+
+---
+
 ## [2026-03-23] DuckDuckGo Tool-Use 웹 근거 인용 통합
 
 ### Added

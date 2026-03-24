@@ -19,9 +19,9 @@
 
 | 상수 | 설명 |
 |---|---|
-| `PENALTY_KO_LABELS` | 벌점 키 → 한국어 라벨 매핑. `false_source`(코드 기반)와 LLM 탐지 5종 포함 |
-| `LLM_VIOLATION_PENALTIES` | 위반 유형 → 벌점 매핑 (5종) |
-| `REVIEW_SYSTEM_PROMPT` | Review LLM 시스템 프롬프트. logic_score/violations/feedback/block 포함 JSON 응답 강제 |
+| `PENALTY_KO_LABELS` | 벌점 키 → 한국어 라벨 매핑. `false_source`(코드 기반)와 LLM 탐지 7종(Tool-Use 포함) |
+| `LLM_VIOLATION_PENALTIES` | 위반 유형 → 벌점 매핑 (7종, Tool-Use 2종 포함) |
+| `REVIEW_SYSTEM_PROMPT` | Review LLM 시스템 프롬프트. logic_score/violations/feedback/block 포함 JSON 응답 강제. XML 구분자 안내 포함 (2026-03-24) |
 
 ### LLM_VIOLATION_PENALTIES (현행)
 
@@ -29,13 +29,17 @@
 LLM_VIOLATION_PENALTIES: dict[str, int] = {
     "prompt_injection": 10,  # 시스템 지시 무력화
     "ad_hominem": 8,         # 인신공격
+    "false_citation": 8,     # 허위 출처 인용 (Tool-Use 활성 시 — 2026-03-23)
     "straw_man": 6,          # 상대 주장 왜곡·과장
     "off_topic": 5,          # 주제 이탈
     "repetition": 3,         # 의미적 반복
+    "no_web_evidence": 3,    # 웹 검색 가능한데 근거 미제시 (Tool-Use 활성 시 — 2026-03-23)
 }
 ```
 
-> 구버전에 있던 `false_claim`, `hasty_generalization`, `genetic_fallacy`, `appeal`, `slippery_slope`, `circular_reasoning`, `accent`, `division`, `composition` 등은 현행 코드에서 제거됨. ViolationItem의 type Literal도 현행 5종 + `false_claim` 6종으로 정의되어 있으나 `false_claim`은 LLM_VIOLATION_PENALTIES에 없어 벌점이 부과되지 않는다.
+> `no_web_evidence`, `false_citation`은 `DEBATE_TOOL_USE_ENABLED=true`일 때 `REVIEW_SYSTEM_PROMPT`에 조건부 주입되는 위반 유형이다. Tool-Use 비활성 상태에서는 검토 대상이 아니다.
+
+> 구버전에 있던 `false_claim`, `hasty_generalization`, `genetic_fallacy`, `appeal`, `slippery_slope`, `circular_reasoning`, `accent`, `division`, `composition` 등은 제거됨.
 
 ### PENALTY_KO_LABELS (현행)
 
@@ -44,9 +48,13 @@ LLM_VIOLATION_PENALTIES: dict[str, int] = {
 | `false_source` | 허위 출처 | turn_executor.py 코드 기반 |
 | `prompt_injection` | 프롬프트 인젝션(LLM) | review_turn() |
 | `ad_hominem` | 인신공격(LLM) | review_turn() |
+| `false_citation` | 허위 출처 인용(LLM) | review_turn() — Tool-Use 활성 시 |
 | `straw_man` | 허수아비 논증(LLM) | review_turn() |
 | `off_topic` | 주제 이탈(LLM) | review_turn() |
 | `repetition` | 주장 반복(LLM) | review_turn() |
+| `no_web_evidence` | 근거 미제시(LLM) | review_turn() — Tool-Use 활성 시 |
+| `llm_no_web_evidence` | 근거 미제시(LLM) | review_turn() — `llm_` 접두사 경로 |
+| `llm_false_citation` | 허위 출처 인용(LLM) | review_turn() — `llm_` 접두사 경로 |
 
 ---
 
@@ -188,5 +196,7 @@ debate_formats.py (_run_parallel_turns)
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-03-24 | Tool-Use 위반 유형 2종 추가(`no_web_evidence`, `false_citation`); `REVIEW_SYSTEM_PROMPT`에 XML 구분자 안내 추가 (prompt injection 방어); `review_turn` user_content XML 태그로 에이전트 발언 격리 |
+| 2026-03-23 | Tool-Use 연동 — `no_web_evidence`/`false_citation` 벌점, `tools_available` 조건부 규칙 주입 |
 | 2026-03-17 | 현행 코드 기반 전면 재작성. judge/ELO 역할 분리 명시, 위반 유형 현행 5종으로 정정, `calculate_elo` re-export 및 2-stage 판정 내용 judge.md로 이동 |
 | 2026-03-12 | 위반 유형 확장, 규칙 준수 재작성 |
