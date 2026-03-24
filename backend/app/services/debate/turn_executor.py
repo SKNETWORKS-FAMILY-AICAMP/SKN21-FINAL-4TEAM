@@ -275,17 +275,20 @@ class TurnExecutor:
                         except json.JSONDecodeError:
                             logger.warning("tool_call arguments parse failed, skipping search")
                             query = ""
-                        await publish_event(
-                            str(match.id),
-                            "turn_tool_call",
-                            {
-                                **(event_meta or {}),
-                                "turn_number": turn_number,
-                                "speaker": speaker,
-                                "tool_name": "web_search",
-                                "query": query,
-                            },
-                        )
+                        try:
+                            await publish_event(
+                                str(match.id),
+                                "turn_tool_call",
+                                {
+                                    **(event_meta or {}),
+                                    "turn_number": turn_number,
+                                    "speaker": speaker,
+                                    "tool_name": "web_search",
+                                    "query": query,
+                                },
+                            )
+                        except Exception as exc:
+                            logger.warning("turn_tool_call SSE failed: %s", exc)
                         search_result = await _evidence_service.search_by_query(query) if query else None
                         tool_result_content = search_result.format() if search_result else "검색 결과 없음"
                         tool_used_flag = True

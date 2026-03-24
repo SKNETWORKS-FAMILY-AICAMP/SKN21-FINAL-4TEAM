@@ -162,22 +162,29 @@ class MatchFinalizer:
 
         # 6. finished SSE 발행 — 커밋 완료 후 발행하여 새로고침 시에도 DB 결과와 일치
         # series_update 이전에 발행 — 완료 신호가 먼저 도착해야 프론트가 올바른 순서로 처리 가능
-        await publish_event(str(match.id), "finished", {
-            "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
-            "score_a": judgment["score_a"],
-            "score_b": judgment["score_b"],
-            "elo_a_before": elo_a_before,
-            "elo_a_after": new_a,
-            "elo_b_before": elo_b_before,
-            "elo_b_after": new_b,
-            # 하위 호환
-            "elo_a": new_a,
-            "elo_b": new_b,
-        })
+        # SSE 실패를 삼켜 run_debate() except Exception이 match.status를 'error'로 덮어쓰지 않도록 보호
+        try:
+            await publish_event(str(match.id), "finished", {
+                "winner_id": str(judgment["winner_id"]) if judgment["winner_id"] else None,
+                "score_a": judgment["score_a"],
+                "score_b": judgment["score_b"],
+                "elo_a_before": elo_a_before,
+                "elo_a_after": new_a,
+                "elo_b_before": elo_b_before,
+                "elo_b_after": new_b,
+                # 하위 호환
+                "elo_a": new_a,
+                "elo_b": new_b,
+            })
+        except Exception as exc:
+            logger.error("finished SSE failed for match %s: %s", match.id, exc)
 
         # series_update SSE: finished 이후 발행 — 승급전 결과는 완료 화면 위에 오버레이로 표시
         for su in series_updates:
-            await publish_event(str(match.id), "series_update", su)
+            try:
+                await publish_event(str(match.id), "series_update", su)
+            except Exception as exc:
+                logger.error("series_update SSE failed for match %s: %s", match.id, exc)
 
         # 7. 예측투표 정산 — commit 후 독립 단계. 실패해도 후속 단계 진행
         match_service = DebateMatchService(self.db)

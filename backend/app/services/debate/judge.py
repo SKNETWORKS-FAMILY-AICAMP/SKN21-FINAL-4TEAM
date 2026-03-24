@@ -400,8 +400,9 @@ class DebateJudge:
             scorecard["agent_a"][key] = max(0, min(scorecard["agent_a"].get(key, 0), max_val))
             scorecard["agent_b"][key] = max(0, min(scorecard["agent_b"].get(key, 0), max_val))
 
-        score_a = sum(scorecard["agent_a"].values())
-        score_b = sum(scorecard["agent_b"].values())
+        # SCORING_CRITERIA 키만 합산 — LLM이 extra key를 추가해도 score overflow 방지
+        score_a = sum(scorecard["agent_a"].get(k, 0) for k in SCORING_CRITERIA)
+        score_b = sum(scorecard["agent_b"].get(k, 0) for k in SCORING_CRITERIA)
 
         penalty_a = match.penalty_a or 0
         penalty_b = match.penalty_b or 0

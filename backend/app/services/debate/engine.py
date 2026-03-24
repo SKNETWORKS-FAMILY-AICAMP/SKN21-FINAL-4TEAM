@@ -459,14 +459,18 @@ class DebateEngine:
             trace_id=str(match.id),
             orchestration_mode=match_format,
         )
-        await publish_event(str(match.id), "judge_intro", {
-            "message": intro.get("message"),
-            "topic_title": topic.title,
-            "model_id": intro.get("model_id"),
-            "input_tokens": intro.get("input_tokens", 0),
-            "output_tokens": intro.get("output_tokens", 0),
-            "fallback_reason": intro.get("fallback_reason"),
-        })
+        try:
+            await publish_event(str(match.id), "judge_intro", {
+                "message": intro.get("message"),
+                "topic_title": topic.title,
+                "model_id": intro.get("model_id"),
+                "input_tokens": intro.get("input_tokens", 0),
+                "output_tokens": intro.get("output_tokens", 0),
+                "fallback_reason": intro.get("fallback_reason"),
+            })
+        except Exception:
+            # judge_intro 발행 실패는 비치명적 — intro 없이 토론 진행, 크레딧 미환불 경로 차단
+            logger.warning("judge_intro publish failed for match %s — continuing", match.id)
         intro_message = (intro.get("message") or "").strip()
         if intro_message:
             # 턴 루프 컨텍스트에서만 judge_intro를 별도 섹션으로 주입한다.

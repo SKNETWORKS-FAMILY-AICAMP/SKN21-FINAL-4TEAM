@@ -613,27 +613,8 @@ async def _run_parallel_turns(
             if remaining_delay > 0:
                 await asyncio.sleep(remaining_delay)
 
-    # ★ 롤링 병렬: 루프 종료 후 마지막 B 근거 수집
-    # P2: 리뷰 수집 대기 시간 동안 이미 완료됐으면 수집, 미완료면 취소 (백그라운드 태스크 누수 방지)
-    if settings.debate_turn_review_enabled and prev_b_evidence_task is not None and prev_turn_b is not None:
-        if prev_b_evidence_task.done() and not prev_b_evidence_task.cancelled():
-            try:
-                evidence_last_b = prev_b_evidence_task.result()
-                raw = prev_turn_b.raw_response or {}
-                if isinstance(evidence_last_b, EvidenceResult) and raw.get("tool_used") != "web_search":
-                    prev_turn_b.evidence = evidence_last_b.format()
-                    await db.flush()
-                    await publish_event(str(match.id), "turn_evidence_patch", {
-                        "turn_number": prev_b_turn_num,
-                        "speaker": "agent_b",
-                        "evidence": prev_turn_b.evidence,
-                    })
-            except Exception as exc:
-                logger.warning("Last B evidence task failed: %s", exc)
-        else:
-            # 미완료 태스크 취소 — 루프 종료 후 고아 태스크로 남지 않도록
-            prev_b_evidence_task.cancel()
-
+    # ★ 롤링 병렬: 루프 종료 후 마지막 B 리뷰·근거 수집
+    # review_task를 먼저 await — LLM 호출(수백 ms) 완료 후 evidence_task도 done()일 가능성이 높아짐
     if settings.debate_turn_review_enabled and prev_b_review_task is not None:
         try:
             review_last_b = await prev_b_review_task
@@ -673,6 +654,26 @@ async def _run_parallel_turns(
                 ) if control_plane else None,
                 fallback_reason=fallback_reason,
             )
+
+    # review_task await 후 evidence_task 체크 — review LLM 완료 시점에 evidence도 done()일 가능성 높음
+    if settings.debate_turn_review_enabled and prev_b_evidence_task is not None and prev_turn_b is not None:
+        if prev_b_evidence_task.done() and not prev_b_evidence_task.cancelled():
+            try:
+                evidence_last_b = prev_b_evidence_task.result()
+                raw = prev_turn_b.raw_response or {}
+                if isinstance(evidence_last_b, EvidenceResult) and raw.get("tool_used") != "web_search":
+                    prev_turn_b.evidence = evidence_last_b.format()
+                    await db.flush()
+                    await publish_event(str(match.id), "turn_evidence_patch", {
+                        "turn_number": prev_b_turn_num,
+                        "speaker": "agent_b",
+                        "evidence": prev_turn_b.evidence,
+                    })
+            except Exception as exc:
+                logger.warning("Last B evidence task failed: %s", exc)
+        else:
+            # 미완료 태스크 취소 — 루프 종료 후 고아 태스크로 남지 않도록
+            prev_b_evidence_task.cancel()
 
     return total_penalty_a, total_penalty_b
 
