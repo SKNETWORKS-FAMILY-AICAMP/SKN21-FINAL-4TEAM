@@ -142,30 +142,6 @@ function toLLMItems(models: LLMModelStatsResponse[]): DisplayRankingItem[] {
 
 // --- Helper Functions ---
 
-const getRankColors = (rank: number) => {
-  if (rank === 1) return 'bg-yellow-500/10 border-yellow-500';
-  if (rank === 2) return 'bg-gray-500/10 border-gray-400';
-  if (rank === 3) return 'bg-amber-500/10 border-amber-600';
-  return 'bg-bg-surface border-black';
-};
-
-const getRankIconColor = (rank: number) => {
-  if (rank === 1) return 'text-[#F59E0B]';
-  if (rank === 2) return 'text-[#9CA3AF]';
-  if (rank === 3) return 'text-[#D97706]';
-  return 'text-gray-400';
-};
-
-const getCategoryIcon = (category: RankingCategory) => {
-  switch (category) {
-    case 'agent':
-      return <Users size={20} className="text-blue-500" />;
-    case 'debate':
-      return <Swords size={20} className="text-red-500" />;
-    case 'llm':
-      return <Trophy size={20} className="text-orange-500" />;
-  }
-};
 
 const getGradient = (category: RankingCategory) => {
   switch (category) {

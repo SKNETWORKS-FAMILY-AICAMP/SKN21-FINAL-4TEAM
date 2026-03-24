@@ -1,18 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  Bot,
-  Trophy,
-  Users,
-  Zap,
-  Brain,
-  ChevronRight,
-  Star,
-  TrendingUp,
-  Cpu,
-  DollarSign,
-} from 'lucide-react';
+import { Trophy, Zap, Brain, ChevronRight, Cpu, DollarSign } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToastStore } from '@/stores/toastStore';
 

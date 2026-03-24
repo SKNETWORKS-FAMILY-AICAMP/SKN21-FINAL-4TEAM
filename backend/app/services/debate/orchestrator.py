@@ -26,24 +26,30 @@ def _infer_provider(model_id: str) -> str:
 def _platform_api_key(provider: str) -> str:
     """provider에 맞는 플랫폼 API 키 반환. 알 수 없는 provider는 빈 문자열."""
     match provider:
-        case "openai":    return settings.openai_api_key or ""
-        case "anthropic": return settings.anthropic_api_key or ""
-        case "google":    return settings.google_api_key or ""
-        case "runpod":    return settings.runpod_api_key or ""
-        case _:           return ""
+        case "openai":
+            return settings.openai_api_key or ""
+        case "anthropic":
+            return settings.anthropic_api_key or ""
+        case "google":
+            return settings.google_api_key or ""
+        case "runpod":
+            return settings.runpod_api_key or ""
+        case _:
+            return ""
+
 
 # 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
 # 접두사 없음: 코드 기반 탐지 (debate_engine 정규식)
 # LLM review_turn()이 탐지한 시맨틱 위반 — 코드로 잡을 수 없는 맥락 의존 패턴
 PENALTY_KO_LABELS: dict[str, str] = {
     # 코드 기반 탐지 (engine.py)
-    "false_source": "허위 출처",      # PENALTY_FALSE_SOURCE=7 (tool_result 위조)
+    "false_source": "허위 출처",  # PENALTY_FALSE_SOURCE=7 (tool_result 위조)
     # LLM review_turn() 탐지 (5종)
     "prompt_injection": "프롬프트 인젝션(LLM)",
     "ad_hominem": "인신공격(LLM)",
     "straw_man": "허수아비 논증(LLM)",
     "off_topic": "주제 이탈(LLM)",
-    "repetition": "주장 반복(LLM)",   # 의미적 반복 탐지 — LLM 검토로 위임
+    "repetition": "주장 반복(LLM)",  # 의미적 반복 탐지 — LLM 검토로 위임
     # tool-use 관련 위반 (web_search 도구 제공 에이전트 전용)
     "no_web_evidence": "웹 근거 미제시(LLM)",
     "false_citation": "허위 인용(LLM)",
@@ -54,13 +60,13 @@ PENALTY_KO_LABELS: dict[str, str] = {
 # PENALTY_KO_LABELS에서 "llm_" 접두사로 참조됨
 LLM_VIOLATION_PENALTIES: dict[str, int] = {
     "prompt_injection": 10,  # 시스템 지시 무력화 — 탐지 명확, 최고 위반
-    "ad_hominem": 8,         # 인신공격 — 맥락 명확, 탐지 신뢰도 높음
-    "false_claim": 7,        # 허위 주장 — ViolationItem Literal에 포함된 탐지 유형
-    "straw_man": 6,          # 상대 주장 왜곡·과장 — 탐지 가능
-    "off_topic": 5,          # 주제 이탈 — 탐지 가장 쉬움
-    "repetition": 3,         # 이전 발언과 의미적으로 동일한 주장 반복
-    "no_web_evidence": 3,    # web_search 도구를 사용할 수 있었으나 근거 없이 주장만 나열
-    "false_citation": 8,     # web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우
+    "ad_hominem": 8,  # 인신공격 — 맥락 명확, 탐지 신뢰도 높음
+    "false_claim": 7,  # 허위 주장 — ViolationItem Literal에 포함된 탐지 유형
+    "straw_man": 6,  # 상대 주장 왜곡·과장 — 탐지 가능
+    "off_topic": 5,  # 주제 이탈 — 탐지 가장 쉬움
+    "repetition": 3,  # 이전 발언과 의미적으로 동일한 주장 반복
+    "no_web_evidence": 3,  # web_search 도구를 사용할 수 있었으나 근거 없이 주장만 나열
+    "false_citation": 8,  # web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우
 }
 
 # 단일 위반으로 차단이 발생하지 않도록 복합 누적 임계값 설정
@@ -68,8 +74,14 @@ LLM_VIOLATION_PENALTIES: dict[str, int] = {
 BLOCK_PENALTY_THRESHOLD = 15
 
 _ViolationType = Literal[
-    "prompt_injection", "ad_hominem", "straw_man", "off_topic",
-    "false_claim", "repetition", "no_web_evidence", "false_citation",
+    "prompt_injection",
+    "ad_hominem",
+    "straw_man",
+    "off_topic",
+    "false_claim",
+    "repetition",
+    "no_web_evidence",
+    "false_citation",
 ]
 
 
@@ -263,21 +275,19 @@ class DebateOrchestrator:
                 "   - no_web_evidence: web_search 도구를 사용할 수 있었으나 근거 없이 주장만 나열한 경우\n"
                 "     minor: 주제 특성상 검색이 불필요한 일반론/가치판단\n"
                 "     severe: 구체적 사실/통계/사례 주장인데 근거 제시 없음\n"
-                "   - false_citation: web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우\n"
-                "     minor: 검색 결과를 약간 과장/단순화한 경우\n"
-                "     severe: 검색 결과에 없는 내용을 있다고 인용하거나 출처를 날조한 경우\n"
             )
+            # tool_result가 없으면 false_citation 검증 불가 — 스킵
             if tool_result:
-                # 실제 검색 결과가 제공된 경우 — 발언과 직접 비교 가능
                 system_prompt += (
+                    "   - false_citation: web_search 결과를 인용했으나 실제 검색 결과와 내용이 다른 경우\n"
+                    "     minor: 검색 결과를 약간 과장/단순화한 경우\n"
+                    "     severe: 검색 결과에 없는 내용을 있다고 인용하거나 출처를 날조한 경우\n"
                     "실제 검색 결과가 아래 입력에 포함됩니다. "
                     "false_citation 판정은 반드시 실제 검색 결과와 발언 내용을 비교해 판단하세요. "
                     "검색 결과에 없는 수치·사실·출처를 발언이 인용했다면 severe로 분류하세요.\n"
                 )
         user_content = (
-            f"토론 주제: {topic}\n"
-            f"발언자: {speaker} | 턴: {turn_number} | 액션: {action}\n"
-            f"주장: {claim}\n"
+            f"토론 주제: {topic}\n" f"발언자: {speaker} | 턴: {turn_number} | 액션: {action}\n" f"주장: {claim}\n"
         )
         if evidence:
             user_content += f"근거: {evidence}\n"

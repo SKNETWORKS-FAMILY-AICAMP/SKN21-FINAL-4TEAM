@@ -43,17 +43,30 @@ def _build_web_search_tool(provider: str) -> list[dict]:
     }
     match provider:
         case "openai":
-            return [{"type": "function", "function": {
-                "name": "web_search", "description": description,
-                "parameters": query_param,
-            }}]
+            return [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "description": description,
+                        "parameters": query_param,
+                    },
+                }
+            ]
         case "anthropic":
             return [{"name": "web_search", "description": description, "input_schema": query_param}]
         case "google":
-            return [{"function_declarations": [{
-                "name": "web_search", "description": description,
-                "parameters": query_param,
-            }]}]
+            return [
+                {
+                    "function_declarations": [
+                        {
+                            "name": "web_search",
+                            "description": description,
+                            "parameters": query_param,
+                        }
+                    ]
+                }
+            ]
         case _:
             return []
 
@@ -157,7 +170,9 @@ class TurnExecutor:
                 start_time = time.monotonic()
                 ws_response = await asyncio.wait_for(
                     ws_manager.request_turn(
-                        match.id, agent.id, ws_request,
+                        match.id,
+                        agent.id,
+                        ws_request,
                         tool_executor=DebateToolExecutor(),
                         tool_context=tool_ctx,
                     ),
@@ -192,8 +207,32 @@ class TurnExecutor:
 
             else:
                 # 스트리밍 BYOK — 토큰별로 turn_chunk 이벤트 발행
+                # tool-use 미지원 provider: pre-fetch 검색 결과를 메시지에 주입
+                prefetch_evidence: str | None = None
+                if (
+                    settings.debate_tool_use_enabled
+                    and topic.tools_enabled
+                    and agent.provider not in ("openai", "anthropic", "google")
+                ):
+                    prefetch_query = topic.title + (" " + opponent_claims[-1] if opponent_claims else "")
+                    try:
+                        prefetch_result = await asyncio.wait_for(
+                            _evidence_service.search(prefetch_query),
+                            timeout=5.0,
+                        )
+                        if prefetch_result:
+                            prefetch_evidence = prefetch_result.format()
+                    except Exception as exc:
+                        logger.warning("Pre-fetch evidence failed for %s: %s", speaker, exc)
+
                 messages = _build_messages(
-                    system_prompt, topic, turn_number, speaker, my_claims, opponent_claims
+                    system_prompt,
+                    topic,
+                    turn_number,
+                    speaker,
+                    my_claims,
+                    opponent_claims,
+                    prefetch_evidence=prefetch_evidence,
                 )
                 start_time = time.monotonic()
                 usage_out: dict = {}
@@ -211,10 +250,14 @@ class TurnExecutor:
                         tool_choice_val = {"type": "auto"} if agent.provider == "anthropic" else "auto"
                         stage1 = await asyncio.wait_for(
                             self.client.generate_byok(
-                                provider=agent.provider, model_id=agent.model_id,
-                                api_key=api_key, messages=messages,
-                                tools=web_search_tools, tool_choice=tool_choice_val,
-                                max_tokens=topic.turn_token_limit, temperature=0.7,
+                                provider=agent.provider,
+                                model_id=agent.model_id,
+                                api_key=api_key,
+                                messages=messages,
+                                tools=web_search_tools,
+                                tool_choice=tool_choice_val,
+                                max_tokens=topic.turn_token_limit,
+                                temperature=0.7,
                             ),
                             timeout=stage1_timeout,
                         )
@@ -225,27 +268,36 @@ class TurnExecutor:
                     tool_calls = stage1.get("tool_calls", [])
                     if tool_calls:
                         query = json.loads(tool_calls[0]["function"]["arguments"]).get("query", "")
-                        await publish_event(str(match.id), "turn_tool_call", {
-                            **(event_meta or {}),
-                            "turn_number": turn_number, "speaker": speaker,
-                            "tool_name": "web_search",
-                            "query": query,
-                        })
+                        await publish_event(
+                            str(match.id),
+                            "turn_tool_call",
+                            {
+                                **(event_meta or {}),
+                                "turn_number": turn_number,
+                                "speaker": speaker,
+                                "tool_name": "web_search",
+                                "query": query,
+                            },
+                        )
                         search_result = await _evidence_service.search_by_query(query) if query else None
                         tool_result_content = search_result.format() if search_result else "검색 결과 없음"
                         tool_used_flag = True
-                        messages.append({
-                            "role": "assistant",
-                            "content": stage1.get("content") or "",
-                            "tool_calls": tool_calls,
-                        })
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_calls[0]["id"],
-                            # name 포함 — Google _to_gemini_format()이 functionResponse name으로 사용
-                            "name": tool_calls[0]["function"]["name"],
-                            "content": tool_result_content,
-                        })
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": stage1.get("content") or "",
+                                "tool_calls": tool_calls,
+                            }
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_calls[0]["id"],
+                                # name 포함 — Google _to_gemini_format()이 functionResponse name으로 사용
+                                "name": tool_calls[0]["function"]["name"],
+                                "content": tool_result_content,
+                            }
+                        )
                         input_tokens += stage1.get("input_tokens", 0)
                         output_tokens += stage1.get("output_tokens", 0)
 
@@ -308,9 +360,8 @@ class TurnExecutor:
                         "tool_result": tool_result_content if tool_used_flag else parsed.get("tool_result"),
                     }
                 # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 메타 정보만 추가
-                if usage_out.get("finish_reason") == "length":
-                    if isinstance(raw_response, dict):
-                        raw_response["finish_reason"] = "length"
+                if usage_out.get("finish_reason") == "length" and isinstance(raw_response, dict):
+                    raw_response["finish_reason"] = "length"
 
         except Exception:
             # TimeoutError 포함 모든 예외를 그대로 전파 — execute_with_retry가 재시도·부전패 처리
@@ -379,31 +430,47 @@ class TurnExecutor:
         for attempt in range(settings.debate_turn_max_retries + 1):
             try:
                 return await self.execute(
-                    match, topic, turn_number, speaker,
-                    agent, version, api_key, my_claims, opponent_claims,
+                    match,
+                    topic,
+                    turn_number,
+                    speaker,
+                    agent,
+                    version,
+                    api_key,
+                    my_claims,
+                    opponent_claims,
                     my_accumulated_penalty=my_accumulated_penalty,
                     event_meta=event_meta,
                 )
             except APIKeyError as exc:
                 if attempt == 0:
                     # 일시적 인증 오류 가능성 — 1회 재시도
-                    logger.warning("Turn %d %s API key error (attempt 1) — retrying once: %s", turn_number, speaker, exc)
+                    logger.warning(
+                        "Turn %d %s API key error (attempt 1) — retrying once: %s", turn_number, speaker, exc
+                    )
                     await asyncio.sleep(1.0)
                     continue
                 # 2회 연속 실패 → 기술적 장애로 매치 무효화
                 raise MatchVoidError(
                     f"API key authentication failed after retry for agent {getattr(agent, 'id', 'unknown')}: {exc}"
-                )
+                ) from exc
             except Exception as exc:
                 if attempt < settings.debate_turn_max_retries:
                     logger.warning(
                         "Turn %d %s failed (attempt %d/%d): %s — retrying",
-                        turn_number, speaker, attempt + 1, settings.debate_turn_max_retries + 1, exc,
+                        turn_number,
+                        speaker,
+                        attempt + 1,
+                        settings.debate_turn_max_retries + 1,
+                        exc,
                     )
                 else:
                     logger.error(
                         "Turn %d %s failed after %d attempts: %s — forfeit",
-                        turn_number, speaker, settings.debate_turn_max_retries + 1, exc,
+                        turn_number,
+                        speaker,
+                        settings.debate_turn_max_retries + 1,
+                        exc,
                     )
                     return None
         return None

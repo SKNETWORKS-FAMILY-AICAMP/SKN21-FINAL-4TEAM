@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Users, Heart, ThumbsDown, Search, ChevronLeft, ChevronRight, Trophy,
-} from 'lucide-react';
+import { Users, Heart, ThumbsDown, Search, ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
 import {
   fetchCommunityFeed,
   toggleCommunityLike,
@@ -56,7 +54,9 @@ export default function CommunityPage() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = posts.filter(
@@ -74,9 +74,13 @@ export default function CommunityPage() {
     try {
       const res = await toggleCommunityLike(postId);
       setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, is_liked: res.liked, likes_count: res.likes_count } : p)),
+        prev.map((p) =>
+          p.id === postId ? { ...p, is_liked: res.liked, likes_count: res.likes_count } : p,
+        ),
       );
-    } catch { /* 무시 */ }
+    } catch {
+      /* 무시 */
+    }
   };
 
   const handleDislike = async (postId: string, e: React.MouseEvent) => {
@@ -85,10 +89,14 @@ export default function CommunityPage() {
       const res = await toggleCommunityDislike(postId);
       setPosts((prev) =>
         prev.map((p) =>
-          p.id === postId ? { ...p, is_disliked: res.disliked, dislikes_count: res.dislikes_count } : p,
+          p.id === postId
+            ? { ...p, is_disliked: res.disliked, dislikes_count: res.dislikes_count }
+            : p,
         ),
       );
-    } catch { /* 무시 */ }
+    } catch {
+      /* 무시 */
+    }
   };
 
   return (
@@ -106,13 +114,24 @@ export default function CommunityPage() {
 
       {/* 검색 */}
       <div className="flex justify-end mb-4">
-        <form onSubmit={(e) => { e.preventDefault(); setPage(1); }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setPage(1);
+          }}
+        >
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
             <input
               type="text"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="제목 / 에이전트 검색"
               className="pl-8 pr-4 py-2 text-xs font-medium bg-bg-surface text-text border-2 border-black rounded-xl focus:outline-none focus:border-primary w-48 shadow-[3px_3px_0_0_rgba(0,0,0,1)] transition-colors"
             />
@@ -130,24 +149,30 @@ export default function CommunityPage() {
           <span className="text-[11px] font-black text-text-muted text-center">추천</span>
         </div>
 
-        {loading && <div className="py-16 text-center text-sm text-text-muted font-bold">불러오는 중...</div>}
-        {!loading && error && <div className="py-16 text-center text-sm text-rose-500 font-bold">{error}</div>}
+        {loading && (
+          <div className="py-16 text-center text-sm text-text-muted font-bold">불러오는 중...</div>
+        )}
+        {!loading && error && (
+          <div className="py-16 text-center text-sm text-rose-500 font-bold">{error}</div>
+        )}
         {!loading && !error && paginated.length === 0 && (
           <div className="py-16 text-center text-sm text-gray-400 font-bold">
             아직 게시물이 없습니다. 토론이 완료되면 에이전트들의 후기가 여기에 올라옵니다.
           </div>
         )}
-        {!loading && !error && paginated.map((post, i) => (
-          <PostRow
-            key={post.id}
-            post={post}
-            index={i}
-            globalIndex={(page - 1) * PAGE_SIZE + i + 1}
-            onLike={handleLike}
-            onDislike={handleDislike}
-            onClick={() => router.push(`/community/${post.id}`)}
-          />
-        ))}
+        {!loading &&
+          !error &&
+          paginated.map((post, i) => (
+            <PostRow
+              key={post.id}
+              post={post}
+              index={i}
+              globalIndex={(page - 1) * PAGE_SIZE + i + 1}
+              onLike={handleLike}
+              onDislike={handleDislike}
+              onClick={() => router.push(`/community/${post.id}`)}
+            />
+          ))}
       </div>
 
       {/* 페이지네이션 */}
@@ -215,7 +240,9 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
       </div>
       <div className="flex items-center gap-2 min-w-0">
         {result && (
-          <span className={`text-[10px] font-black border rounded px-1 py-0.5 shrink-0 ${RESULT_STYLE[result]}`}>
+          <span
+            className={`text-[10px] font-black border rounded px-1 py-0.5 shrink-0 ${RESULT_STYLE[result]}`}
+          >
             {result === 'win' ? '승' : result === 'lose' ? '패' : '무'}
           </span>
         )}
@@ -225,7 +252,8 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
         {post.match_result && (
           <span className="text-[10px] font-black text-text-muted shrink-0 flex items-center gap-0.5">
             <Trophy size={10} />
-            {post.match_result.elo_delta > 0 ? '+' : ''}{post.match_result.elo_delta}
+            {post.match_result.elo_delta > 0 ? '+' : ''}
+            {post.match_result.elo_delta}
           </span>
         )}
       </div>
@@ -233,7 +261,9 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
         <span className={`text-xs truncate block ${tierClass}`}>{post.agent_name}</span>
       </div>
       <div className="text-center">
-        <span className="text-[11px] text-text-muted font-medium">{formatDate(post.created_at)}</span>
+        <span className="text-[11px] text-text-muted font-medium">
+          {formatDate(post.created_at)}
+        </span>
       </div>
       <div className="flex items-center justify-center gap-2">
         <button

@@ -56,7 +56,9 @@ export default function CommunityPostPage() {
     try {
       const res = await toggleCommunityLike(post.id);
       setPost((p) => p && { ...p, is_liked: res.liked, likes_count: res.likes_count });
-    } catch { /* 무시 */ }
+    } catch {
+      /* 무시 */
+    }
   };
 
   const handleDislike = async () => {
@@ -64,7 +66,9 @@ export default function CommunityPostPage() {
     try {
       const res = await toggleCommunityDislike(post.id);
       setPost((p) => p && { ...p, is_disliked: res.disliked, dislikes_count: res.dislikes_count });
-    } catch { /* 무시 */ }
+    } catch {
+      /* 무시 */
+    }
   };
 
   if (loading) {
@@ -84,7 +88,10 @@ export default function CommunityPostPage() {
     return (
       <div className="max-w-[860px] mx-auto py-12 px-6 text-center">
         <p className="text-text-muted font-bold">게시글을 찾을 수 없습니다.</p>
-        <button onClick={() => router.back()} className="mt-4 text-sm text-primary cursor-pointer bg-transparent border-none">
+        <button
+          onClick={() => router.back()}
+          className="mt-4 text-sm text-primary cursor-pointer bg-transparent border-none"
+        >
           돌아가기
         </button>
       </div>
@@ -124,7 +131,9 @@ export default function CommunityPostPage() {
             <p className={`text-base font-black ${tierClass}`}>{post.agent_name}</p>
             <p className="text-xs text-text-muted font-medium mt-0.5">{post.agent_model ?? ''}</p>
           </div>
-          <span className="text-xs text-text-muted font-medium shrink-0">{formatDate(post.created_at)}</span>
+          <span className="text-xs text-text-muted font-medium shrink-0">
+            {formatDate(post.created_at)}
+          </span>
         </div>
 
         {/* 매치 결과 */}
@@ -135,7 +144,9 @@ export default function CommunityPostPage() {
                 <Swords size={14} className="text-primary shrink-0" />
                 <span className="text-sm font-black text-text">{post.match_result.topic}</span>
               </div>
-              <span className={`text-xs font-black border rounded-lg px-2.5 py-1 shrink-0 ml-3 ${RESULT_STYLE[result]}`}>
+              <span
+                className={`text-xs font-black border rounded-lg px-2.5 py-1 shrink-0 ml-3 ${RESULT_STYLE[result]}`}
+              >
                 {RESULT_LABEL[result]}
               </span>
             </div>
@@ -152,8 +163,13 @@ export default function CommunityPostPage() {
               <span className="flex items-center gap-1">
                 <TrendingUp size={11} />
                 ELO&nbsp;
-                <span className={post.match_result.elo_delta >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                  {post.match_result.elo_delta > 0 ? '+' : ''}{post.match_result.elo_delta}
+                <span
+                  className={
+                    post.match_result.elo_delta >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                  }
+                >
+                  {post.match_result.elo_delta > 0 ? '+' : ''}
+                  {post.match_result.elo_delta}
                 </span>
                 <span className="text-text-muted/60">→ {post.match_result.elo_after}</span>
               </span>
@@ -177,7 +193,9 @@ export default function CommunityPostPage() {
           <button
             onClick={handleLike}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-black text-sm font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all cursor-pointer ${
-              post.is_liked ? 'bg-rose-500 text-white' : 'bg-bg-surface text-rose-400 hover:bg-rose-50'
+              post.is_liked
+                ? 'bg-rose-500 text-white'
+                : 'bg-bg-surface text-rose-400 hover:bg-rose-50'
             }`}
           >
             <Heart size={14} fill={post.is_liked ? 'currentColor' : 'none'} />
@@ -186,7 +204,9 @@ export default function CommunityPostPage() {
           <button
             onClick={handleDislike}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-black text-sm font-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all cursor-pointer ${
-              post.is_disliked ? 'bg-blue-500 text-white' : 'bg-bg-surface text-blue-400 hover:bg-blue-50'
+              post.is_disliked
+                ? 'bg-blue-500 text-white'
+                : 'bg-bg-surface text-blue-400 hover:bg-blue-50'
             }`}
           >
             <ThumbsDown size={14} fill={post.is_disliked ? 'currentColor' : 'none'} />

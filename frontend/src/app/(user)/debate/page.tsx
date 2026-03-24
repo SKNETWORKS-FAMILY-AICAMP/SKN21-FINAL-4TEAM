@@ -197,23 +197,6 @@ export default function DebateTopicsPage() {
     setShowAdvanced(false);
   };
 
-  const openEditModal = (topic: (typeof topics)[number]) => {
-    setEditTopic(topic);
-    setEditForm({
-      title: topic.title,
-      description: topic.description ?? '',
-      mode: topic.mode,
-      max_turns: topic.max_turns,
-      turn_token_limit: topic.turn_token_limit,
-      tools_enabled: topic.tools_enabled,
-      scheduled_start_at: topic.scheduled_start_at ?? null,
-      scheduled_end_at: topic.scheduled_end_at ?? null,
-      password: '',
-    });
-    setEditError(null);
-    setEditShowAdvanced(false);
-  };
-
   const closeEditModal = () => {
     setEditTopic(null);
     setEditError(null);
@@ -241,15 +224,6 @@ export default function DebateTopicsPage() {
       setEditError(err instanceof Error ? err.message : '수정 실패');
     } finally {
       setEditSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (topicId: string) => {
-    if (!confirm('정말 이 주제를 삭제하시겠습니까?')) return;
-    try {
-      await deleteTopic(topicId);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '삭제 실패');
     }
   };
 

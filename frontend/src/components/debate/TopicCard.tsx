@@ -1,9 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, Clock, Shield, CalendarClock, Lock } from 'lucide-react';
+import { Users, Shield, Lock } from 'lucide-react';
 import type { DebateTopic } from '@/stores/debateStore';
-import { getTimeAgo } from '@/lib/format';
 
 type Props = {
   topic: DebateTopic;

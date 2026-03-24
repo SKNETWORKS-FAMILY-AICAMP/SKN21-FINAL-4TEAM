@@ -12,14 +12,13 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-KEYWORD_PROMPT = """다음 주장에서 영어 웹 검색 키워드를 추출하세요.
-- 핵심 개념 2~3개 (너무 많으면 안 됨)
-- 반드시 영어로 변환
+KEYWORD_PROMPT = """다음 주장에서 웹 검색 키워드를 추출하세요.
+- 영어 키워드 2~3개 + 한국어 키워드 1~2개를 함께 추출
 - JSON 배열만 출력, 설명 없이
 
 주장: {claim}
 
-출력 예시: ["AI regulation startup investment decline", "EU AI Act 2024 funding"]"""
+출력 예시: ["AI regulation 2024", "EU AI Act funding", "AI 규제 스타트업 투자"]"""
 
 
 @dataclass
@@ -149,7 +148,7 @@ class EvidenceSearchService:
                     loop.run_in_executor(None, self._ddg_search, kw),
                     timeout=5.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("DDG search timed out: %s", kw)
                 return []
             except asyncio.CancelledError:
@@ -201,7 +200,7 @@ class EvidenceSearchService:
             seen.add(url)
 
             title = r.get("title", "")
-            body = r.get("body", "")[:200]
+            body = r.get("body", "")[:400]
             if body:
                 snippets.append(f"- {title}: {body}")
                 sources.append(url)
