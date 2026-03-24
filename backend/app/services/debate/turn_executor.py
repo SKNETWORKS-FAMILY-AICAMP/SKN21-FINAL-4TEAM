@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -279,7 +280,12 @@ class TurnExecutor:
 
                 if parsed is None:
                     # JSON 파싱 불가 또는 스키마 불일치 — 원문을 발언으로 사용
-                    claim = response_text[:500]
+                    if usage_out.get("finish_reason") == "length":
+                        # max_tokens 초과로 JSON이 중간에 잘린 경우 — claim 필드만 직접 추출
+                        m = re.search(r'"claim"\s*:\s*"((?:[^"\\]|\\.)*)', response_text)
+                        claim = m.group(1) if m else response_text[:500]
+                    else:
+                        claim = response_text[:500]
                     raw_response = {"raw": response_text}
                 else:
                     action = parsed["action"]

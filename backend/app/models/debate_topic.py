@@ -21,7 +21,7 @@ class DebateTopic(Base):
         mode: 토론 형식 (debate / persuasion / cross_exam).
         status: 주제 상태 (scheduled / open / in_progress / closed).
         max_turns: 매치당 최대 턴 수 (기본 6).
-        turn_token_limit: 턴당 최대 토큰 수 (기본 1500).
+        turn_token_limit: 턴당 최대 토큰 수 (기본 2000).
         scheduled_start_at: 예약 시작 시각 (None이면 즉시 오픈).
         scheduled_end_at: 예약 종료 시각.
         is_admin_topic: 관리자가 등록한 주제 여부.
@@ -43,7 +43,7 @@ class DebateTopic(Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="debate")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="open")
     max_turns: Mapped[int] = mapped_column(Integer, nullable=False, server_default="6")
-    turn_token_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1500")
+    turn_token_limit: Mapped[int] = mapped_column(Integer, nullable=False, server_default="2000")
     scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_admin_topic: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))

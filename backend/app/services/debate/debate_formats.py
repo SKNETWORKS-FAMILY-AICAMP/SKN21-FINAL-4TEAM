@@ -353,6 +353,9 @@ async def _run_parallel_turns(
         getattr(settings, "debate_evidence_search_enabled", False), bool
     ) and settings.debate_evidence_search_enabled
 
+    # 매치 단위 사용 출처 추적 — 동일 URL이 여러 턴에서 반복 인용되지 않도록
+    used_sources: set[str] = set()
+
     prev_b_review_task: asyncio.Task | None = None
     prev_b_evidence_task: asyncio.Task | None = None
     prev_turn_b: DebateTurnLog | None = None
@@ -375,6 +378,7 @@ async def _run_parallel_turns(
                     raw = prev_turn_b.raw_response or {}
                     if isinstance(evidence_b, EvidenceResult) and raw.get("tool_used") != "web_search":
                         prev_turn_b.evidence = evidence_b.format()
+                        used_sources.update(evidence_b.sources)
                         await db.flush()
                         await publish_event(str(match.id), "turn_evidence_patch", {
                             "turn_number": prev_b_turn_num,
@@ -461,12 +465,13 @@ async def _run_parallel_turns(
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                     tools_available=settings.debate_tool_use_enabled and agent_a.provider in _TOOL_USE_PROVIDERS,
+                    tool_result=(turn_a.raw_response or {}).get("tool_result"),
                 )
             )
             # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
             # tool_used=web_search인 경우 이미 검색 결과가 있으므로 사후 evidence 검색 스킵
             evidence_a_task: asyncio.Task | None = asyncio.create_task(
-                _evidence_service.search(turn_a.claim)
+                _evidence_service.search(turn_a.claim, exclude_urls=set(used_sources))
             ) if (_ev_enabled and turn_a.claim and (turn_a.raw_response or {}).get("tool_used") != "web_search") else None
 
             # B 실행 (A 검토와 병렬)
@@ -511,12 +516,13 @@ async def _run_parallel_turns(
                     trace_id=control_plane.runtime.trace_id if control_plane else None,
                     orchestration_mode=control_plane.runtime.mode if control_plane else None,
                     tools_available=settings.debate_tool_use_enabled and agent_b.provider in _TOOL_USE_PROVIDERS,
+                    tool_result=(turn_b.raw_response or {}).get("tool_result"),
                 )
             )
             # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
             # tool_used=web_search인 경우 이미 검색 결과가 있으므로 사후 evidence 검색 스킵
             prev_b_evidence_task = asyncio.create_task(
-                _evidence_service.search(turn_b.claim)
+                _evidence_service.search(turn_b.claim, exclude_urls=set(used_sources))
             ) if (_ev_enabled and turn_b.claim and (turn_b.raw_response or {}).get("tool_used") != "web_search") else None
             prev_turn_b = turn_b
             prev_b_turn_num = turn_num
@@ -534,6 +540,7 @@ async def _run_parallel_turns(
                     raw = turn_a.raw_response or {}
                     if isinstance(evidence_a, EvidenceResult) and raw.get("tool_used") != "web_search":
                         turn_a.evidence = evidence_a.format()
+                        used_sources.update(evidence_a.sources)
                         await db.flush()
                         await publish_event(str(match.id), "turn_evidence_patch", {
                             "turn_number": turn_num,
@@ -737,6 +744,7 @@ async def _run_sequential_turns(
                 trace_id=control_plane.runtime.trace_id if control_plane else None,
                 orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 tools_available=settings.debate_tool_use_enabled and agent_a.provider in _TOOL_USE_PROVIDERS,
+                tool_result=(turn_a.raw_response or {}).get("tool_result"),
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -808,6 +816,7 @@ async def _run_sequential_turns(
                 trace_id=control_plane.runtime.trace_id if control_plane else None,
                 orchestration_mode=control_plane.runtime.mode if control_plane else None,
                 tools_available=settings.debate_tool_use_enabled and agent_b.provider in _TOOL_USE_PROVIDERS,
+                tool_result=(turn_b.raw_response or {}).get("tool_result"),
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -908,6 +917,7 @@ async def _run_multi_slot_turn(
             trace_id=control_plane.runtime.trace_id if control_plane else None,
             orchestration_mode=control_plane.runtime.mode if control_plane else None,
             tools_available=settings.debate_tool_use_enabled and agent.provider in _TOOL_USE_PROVIDERS,
+            tool_result=(turn.raw_response or {}).get("tool_result"),
         )
         total_penalty = _apply_review_to_turn(
             turn, review, my_claims, total_penalty, update_last_claim=False

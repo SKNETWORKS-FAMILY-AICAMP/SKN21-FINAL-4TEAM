@@ -242,6 +242,7 @@ class DebateOrchestrator:
         trace_id: str | None = None,
         orchestration_mode: str | None = None,
         tools_available: bool = False,
+        tool_result: str | None = None,  # 에이전트가 실제로 받은 web_search 결과 (false_citation 검증용)
     ) -> dict:
         """LLM으로 단일 턴 품질 검토. 위반 감지 + 벌점 산출 + 차단 여부 반환.
 
@@ -266,6 +267,13 @@ class DebateOrchestrator:
                 "     minor: 검색 결과를 약간 과장/단순화한 경우\n"
                 "     severe: 검색 결과에 없는 내용을 있다고 인용하거나 출처를 날조한 경우\n"
             )
+            if tool_result:
+                # 실제 검색 결과가 제공된 경우 — 발언과 직접 비교 가능
+                system_prompt += (
+                    "실제 검색 결과가 아래 입력에 포함됩니다. "
+                    "false_citation 판정은 반드시 실제 검색 결과와 발언 내용을 비교해 판단하세요. "
+                    "검색 결과에 없는 수치·사실·출처를 발언이 인용했다면 severe로 분류하세요.\n"
+                )
         user_content = (
             f"토론 주제: {topic}\n"
             f"발언자: {speaker} | 턴: {turn_number} | 액션: {action}\n"
@@ -273,6 +281,9 @@ class DebateOrchestrator:
         )
         if evidence:
             user_content += f"근거: {evidence}\n"
+        if tool_result:
+            # 에이전트가 실제로 받은 검색 결과 — false_citation 교차 검증에 사용
+            user_content += f"실제 검색 결과:\n{tool_result}\n"
         if opponent_last_claim:
             user_content += f"직전 상대 발언: {opponent_last_claim}\n"
         if recent_history:

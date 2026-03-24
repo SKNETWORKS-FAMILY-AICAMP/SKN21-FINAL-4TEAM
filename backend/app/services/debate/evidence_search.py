@@ -41,8 +41,13 @@ class EvidenceSearchService:
     3. 결과 중복 제거 후 EvidenceResult 반환
     """
 
-    async def search(self, claim: str) -> EvidenceResult | None:
-        """claim에 대한 웹 근거를 검색한다. 실패 시 None을 반환한다."""
+    async def search(self, claim: str, exclude_urls: set[str] | None = None) -> EvidenceResult | None:
+        """claim에 대한 웹 근거를 검색한다. 실패 시 None을 반환한다.
+
+        Args:
+            claim: 검색 대상 주장 텍스트.
+            exclude_urls: 이미 이전 턴에서 사용된 출처 URL 집합. 동일 출처 반복 방지용.
+        """
         if not settings.debate_evidence_search_enabled:
             return None
 
@@ -56,7 +61,7 @@ class EvidenceSearchService:
                 if not results:
                     return None
 
-                return self._aggregate(results)
+                return self._aggregate(results, exclude_urls=exclude_urls)
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Evidence search timed out for claim: %.60s...", claim)
             return None
@@ -64,11 +69,15 @@ class EvidenceSearchService:
             logger.warning("Evidence search failed: %s", exc)
             return None
 
-    async def search_by_query(self, query: str) -> EvidenceResult | None:
+    async def search_by_query(self, query: str, exclude_urls: set[str] | None = None) -> EvidenceResult | None:
         """이미 추출된 검색 쿼리로 직접 DuckDuckGo 검색을 실행한다.
 
         search()와 달리 LLM 키워드 추출 단계를 스킵하여 비용·지연을 절감한다.
         tool_call.query처럼 이미 키워드가 준비된 경우 사용한다.
+
+        Args:
+            query: 검색 쿼리 문자열.
+            exclude_urls: 이미 이전 턴에서 사용된 출처 URL 집합. 동일 출처 반복 방지용.
         """
         if not settings.debate_evidence_search_enabled:
             return None
@@ -80,7 +89,7 @@ class EvidenceSearchService:
                 results = await self._search_all([query.strip()])
                 if not results:
                     return None
-                return self._aggregate(results)
+                return self._aggregate(results, exclude_urls=exclude_urls)
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Evidence search_by_query timed out for query: %.60s...", query)
             return None
@@ -173,9 +182,15 @@ class EvidenceSearchService:
             logger.debug("DDG '%s' failed: %s", query, exc)
             return []
 
-    def _aggregate(self, results: list[dict]) -> EvidenceResult:
-        """중복 URL 제거 후 snippet과 출처를 조합한다."""
-        seen: set[str] = set()
+    def _aggregate(self, results: list[dict], exclude_urls: set[str] | None = None) -> EvidenceResult:
+        """중복 URL 제거 후 snippet과 출처를 조합한다.
+
+        Args:
+            results: DuckDuckGo 검색 결과 목록.
+            exclude_urls: 이미 이전 턴에서 사용된 출처 URL — 크로스-턴 중복 방지.
+        """
+        # exclude_urls 포함 초기화 — 이전 턴 출처가 다시 등장해도 건너뜀
+        seen: set[str] = set(exclude_urls) if exclude_urls else set()
         snippets: list[str] = []
         sources: list[str] = []
 
