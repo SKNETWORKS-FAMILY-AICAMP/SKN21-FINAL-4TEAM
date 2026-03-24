@@ -136,12 +136,21 @@ class TurnExecutor:
             if agent.provider == "local":
                 # WebSocket 경유 턴 요청 — 응답 시간 측정
                 ws_manager = WSConnectionManager.get_instance()
+                ws_topic_description = topic.description
+                judge_intro = (getattr(topic, "judge_intro", None) or "").strip()
+                if judge_intro:
+                    base_desc = (topic.description or "").strip()
+                    ws_topic_description = (
+                        f"{base_desc}\n\n[judge_intro]\n{judge_intro}"
+                        if base_desc
+                        else f"[judge_intro]\n{judge_intro}"
+                    )
                 ws_request = WSTurnRequest(
                     match_id=match.id,
                     turn_number=turn_number,
                     speaker=speaker,
                     topic_title=topic.title,
-                    topic_description=topic.description,
+                    topic_description=ws_topic_description,
                     max_turns=topic.max_turns,
                     turn_token_limit=topic.turn_token_limit,
                     my_previous_claims=my_claims,

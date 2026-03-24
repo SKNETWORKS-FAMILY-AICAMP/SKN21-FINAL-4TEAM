@@ -21,7 +21,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function ProfileTab() {
-  const { user, setUser, logout } = useUserStore();
+  const { user, logout } = useUserStore();
   const { addToast } = useToastStore();
   const router = useRouter();
 

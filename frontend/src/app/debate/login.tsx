@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Swords, Check, X, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Swords, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { login, register, checkNickname, checkLoginId } from '@/lib/auth';
 import { useUserStore } from '@/stores/userStore';
 import { api } from '@/lib/api';

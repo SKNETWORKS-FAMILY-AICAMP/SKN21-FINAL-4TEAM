@@ -8,10 +8,8 @@ import {
   ChevronDown,
   Shuffle,
   Users,
-  Clock,
   MessageSquare,
   Shield,
-  Monitor,
   ShoppingCart,
   Trophy,
 } from 'lucide-react';
@@ -20,13 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useDebateStore } from '@/stores/debateStore';
 import { useDebateAgentStore } from '@/stores/debateAgentStore';
 import { useUserStore } from '@/stores/userStore';
-import { TopicCard } from '@/components/debate/TopicCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { TierBadge } from '@/components/debate/TierBadge';
-import { HighlightBanner } from '@/components/debate/HighlightBanner';
-import { SeasonBanner } from '@/components/debate/SeasonBanner';
-
-import { Footer } from '@/components/layout/Footer';
 
 type StatusFilter = 'all' | 'open' | 'in_progress' | 'closed' | 'scheduled';
 type SortOption = 'recent' | 'queue' | 'matches';
@@ -50,12 +42,6 @@ const STATUS_CONFIG: Record<
   scheduled: { label: '예정', dotColor: '', bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
   closed: { label: '종료', dotColor: '', bgColor: 'bg-gray-400/10', textColor: 'text-gray-400' },
 };
-
-const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'open', label: '실시간' },
-  { key: 'scheduled', label: '예정' },
-];
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'recent', label: '최신순' },
@@ -87,7 +73,6 @@ export default function DebateTopicsPage() {
   const router = useRouter();
   const {
     topics,
-    topicsTotal,
     ranking,
     topicsLoading,
     rankingLoading,
@@ -138,11 +123,6 @@ export default function DebateTopicsPage() {
     fetchTopics({ status: filter === 'all' ? undefined : filter, sort, page, pageSize: PAGE_SIZE });
   }, [filter, sort, page, fetchTopics]);
 
-  const handleFilterChange = (f: StatusFilter) => {
-    setFilter(f);
-    setPage(1);
-  };
-
   const handleSortChange = (s: SortOption) => {
     setSort(s);
     setPage(1);
@@ -180,22 +160,6 @@ export default function DebateTopicsPage() {
     setForm(defaultForm);
   };
 
-  const openEditModal = (topic: (typeof topics)[number]) => {
-    setEditTopic(topic);
-    setEditForm({
-      title: topic.title,
-      description: topic.description ?? '',
-      mode: topic.mode,
-      max_turns: topic.max_turns,
-      turn_token_limit: topic.turn_token_limit,
-      tools_enabled: topic.tools_enabled,
-      scheduled_start_at: topic.scheduled_start_at ?? null,
-      scheduled_end_at: topic.scheduled_end_at ?? null,
-      password: '',
-    });
-    setEditError(null);
-  };
-
   const closeEditModal = () => {
     setEditTopic(null);
     setEditError(null);
@@ -225,15 +189,6 @@ export default function DebateTopicsPage() {
     }
   };
 
-  const handleDelete = async (topicId: string) => {
-    if (!confirm('정말 이 주제를 삭제하시겠습니까?')) return;
-    try {
-      await deleteTopic(topicId);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '삭제 실패');
-    }
-  };
-
   const handleRandomMatch = async () => {
     if (!randomAgentId) return;
     setRandomError(null);
@@ -248,13 +203,6 @@ export default function DebateTopicsPage() {
       setRandomMatching(false);
     }
   };
-
-  const currentUserId = user?.id ?? null;
-
-  // 통계 계산
-  const liveCount = topics.filter((t) => t.status === 'open' || t.status === 'in_progress').length;
-  const totalParticipants = topics.reduce((sum, t) => sum + t.queue_count, 0);
-  const upcomingCount = topics.filter((t) => t.status === 'scheduled').length;
 
   return (
     <div className="max-w-[1200px] mx-auto">

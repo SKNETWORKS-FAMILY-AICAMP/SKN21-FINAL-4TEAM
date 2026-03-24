@@ -18,7 +18,6 @@ import {
   Loader2,
   Search,
   Zap,
-  ExternalLink,
   Calendar,
   Play,
   Eraser,

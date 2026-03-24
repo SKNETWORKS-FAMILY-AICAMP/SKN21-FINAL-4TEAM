@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebateStore } from '@/stores/debateStore';
-import type { DebateMatch, TurnLog, TurnReview, PromotionSeries } from '@/stores/debateStore';
+import type { DebateMatch, PromotionSeries } from '@/stores/debateStore';
 import { TurnBubble } from './TurnBubble';
 import { StreamingTurnBubble } from './StreamingTurnBubble';
 import { ReplayControls } from './ReplayControls';
@@ -137,7 +137,7 @@ export function DebateViewer({ match, onSeriesUpdate }: Props) {
       }
       setReplayTyping(false);
     };
-  }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [replayIndex, replayMode, replaySpeed, turns, setReplayTyping]);
 
   // turnReviews를 Map으로 캐싱 — visibleTurns.map 안의 find()를 O(1) 조회로 전환
   // SSE 청크 수신(appendChunk)마다 find()가 반복 실행되는 O(n*m) 탐색 방지

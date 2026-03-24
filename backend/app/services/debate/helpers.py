@@ -187,6 +187,8 @@ def _build_messages(
         OpenAI/Anthropic 호환 messages 리스트.
     """
     side_label = "A (찬성)" if speaker == "agent_a" else "B (반대)"
+    judge_intro = (getattr(topic, "judge_intro", None) or "").strip()
+    judge_intro_section = f"[judge_intro]\n{judge_intro}" if judge_intro else "[judge_intro]\n없음"
     tools_line = (
         "툴 사용: 허용됨 (web_search — 현재 주장을 뒷받침하는 웹 근거 검색)\n"
         "web_search 결과를 받은 경우 반드시 한국어로 요약하여 발언에 인용하세요 "
@@ -198,6 +200,7 @@ def _build_messages(
 
 토론 주제: {topic.title}
 설명: {topic.description or '없음'}
+{judge_intro_section}
 현재 턴: {turn_number} / {topic.max_turns}
 {tools_line}
 
