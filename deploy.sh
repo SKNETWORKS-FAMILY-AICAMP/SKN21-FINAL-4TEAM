@@ -194,14 +194,32 @@ if [ "$MODE" = "update" ]; then
   log "=== 업데이트 배포 시작 (환경: $ENV) ==="
   check_env
   cleanup_containers  # 빌드 전 좀비 컨테이너 선제 정리
+
+  # git diff로 변경된 서비스 감지 — 변경이 없는 서비스는 빌드 스킵
+  CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "backend/")
+  BUILD_TARGETS=""
+  UP_TARGETS=""
+  if echo "$CHANGED" | grep -q "^backend/"; then
+    BUILD_TARGETS="$BUILD_TARGETS backend"
+    UP_TARGETS="$UP_TARGETS backend"
+  fi
+  if echo "$CHANGED" | grep -q "^frontend/"; then
+    BUILD_TARGETS="$BUILD_TARGETS frontend"
+    UP_TARGETS="$UP_TARGETS frontend"
+  fi
+  # 감지 실패 또는 변경 없을 때 backend 기본 빌드
+  [ -z "$BUILD_TARGETS" ] && BUILD_TARGETS="backend" && UP_TARGETS="backend"
+
+  log "변경 감지: 빌드 대상 →${BUILD_TARGETS}"
   log "이미지 빌드 중 (레이어 캐시 활용)..."
-  DOCKER_BUILDKIT=1 $COMPOSE_CMD build backend frontend
+  DOCKER_BUILDKIT=1 $COMPOSE_CMD build $BUILD_TARGETS
   log "서비스 재시작 중..."
   cleanup_containers  # 빌드 후 up 직전 재정리 — 이름 충돌 방지
-  $COMPOSE_CMD up -d --no-deps backend frontend nginx
-  verify_service_running "backend" 30
-  verify_service_running "frontend" 30
-  # backend/frontend 재시작 후 컨테이너 IP가 바뀔 수 있으므로 nginx도 강제 재시작
+  $COMPOSE_CMD up -d --no-deps $UP_TARGETS nginx
+  for svc in $UP_TARGETS; do
+    verify_service_running "$svc" 30
+  done
+  # 재시작 후 컨테이너 IP가 바뀔 수 있으므로 nginx도 강제 재시작
   $COMPOSE_CMD restart nginx
   run_migrations
   cleanup_containers
