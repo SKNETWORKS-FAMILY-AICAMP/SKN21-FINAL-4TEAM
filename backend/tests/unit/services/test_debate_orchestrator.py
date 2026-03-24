@@ -142,14 +142,13 @@ class TestJudge:
         topic.description = description
         return topic
 
-    def _scorecard(self, a_logic=25, a_evidence=20, a_rebuttal=22, a_relevance=17,
-                   b_logic=18, b_evidence=16, b_rebuttal=15, b_relevance=14,
+    def _scorecard(self, a_argumentation=30, a_rebuttal=32, a_strategy=22,
+                   b_argumentation=22, b_rebuttal=27, b_strategy=14,
                    reasoning="판정 결과") -> str:
+        # 기본값: A=84(30+32+22), B=63(22+27+14)
         return json.dumps({
-            "agent_a": {"logic": a_logic, "evidence": a_evidence,
-                        "rebuttal": a_rebuttal, "relevance": a_relevance},
-            "agent_b": {"logic": b_logic, "evidence": b_evidence,
-                        "rebuttal": b_rebuttal, "relevance": b_relevance},
+            "agent_a": {"argumentation": a_argumentation, "rebuttal": a_rebuttal, "strategy": a_strategy},
+            "agent_b": {"argumentation": b_argumentation, "rebuttal": b_rebuttal, "strategy": b_strategy},
             "reasoning": reasoning,
         })
 
@@ -171,11 +170,11 @@ class TestJudge:
     async def test_judge_b_wins_when_b_score_higher(self):
         """B 점수가 A보다 5 이상 높으면 B가 승자."""
         judge = DebateJudge()
-        # A=49, B=84 → B wins
+        # A=49(15+20+14), B=84(30+32+22) → B wins
         judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
-                a_logic=15, a_evidence=12, a_rebuttal=12, a_relevance=10,
-                b_logic=25, b_evidence=20, b_rebuttal=22, b_relevance=17,
+                a_argumentation=15, a_rebuttal=20, a_strategy=14,
+                b_argumentation=30, b_rebuttal=32, b_strategy=22,
             )}
         )
         result = await judge.judge(self._make_match(), [], self._make_topic())
@@ -187,11 +186,11 @@ class TestJudge:
     async def test_judge_draw_when_scores_equal(self):
         """점수가 동일하면 무승부 (winner_id=None)."""
         judge = DebateJudge()
-        # A=80, B=80 → diff=0 < 1 → draw
+        # A=80(28+30+22), B=80(28+30+22) → diff=0 < 1 → draw
         judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
-                a_logic=20, a_evidence=20, a_rebuttal=20, a_relevance=20,
-                b_logic=20, b_evidence=20, b_rebuttal=20, b_relevance=20,
+                a_argumentation=28, a_rebuttal=30, a_strategy=22,
+                b_argumentation=28, b_rebuttal=30, b_strategy=22,
             )}
         )
         result = await judge.judge(self._make_match(), [], self._make_topic())
@@ -203,11 +202,11 @@ class TestJudge:
     async def test_judge_exact_5_diff_is_not_draw(self):
         """점수차가 정확히 5이면 무승부가 아닌 승/패로 처리된다."""
         judge = DebateJudge()
-        # A=84, B=79 → diff=5 → A wins (not draw)
+        # A=84(30+32+22), B=79(27+31+21) → diff=5 → A wins (not draw)
         judge.client.generate_byok = AsyncMock(
             return_value={"content": self._scorecard(
-                a_logic=25, a_evidence=20, a_rebuttal=22, a_relevance=17,
-                b_logic=22, b_evidence=19, b_rebuttal=21, b_relevance=17,
+                a_argumentation=30, a_rebuttal=32, a_strategy=22,
+                b_argumentation=27, b_rebuttal=31, b_strategy=21,
             )}
         )
         result = await judge.judge(self._make_match(), [], self._make_topic())
