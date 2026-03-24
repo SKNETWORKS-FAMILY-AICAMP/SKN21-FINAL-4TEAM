@@ -91,6 +91,7 @@ class TurnExecutor:
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
         event_meta: dict | None = None,
+        prev_evidence: str | None = None,
     ) -> DebateTurnLog:
         """단일 턴을 실행하고 DB에 기록한다.
 
@@ -233,6 +234,7 @@ class TurnExecutor:
                     my_claims,
                     opponent_claims,
                     prefetch_evidence=prefetch_evidence,
+                    prev_evidence=prev_evidence,
                 )
                 start_time = time.monotonic()
                 usage_out: dict = {}
@@ -352,12 +354,13 @@ class TurnExecutor:
 
                 if parsed is None:
                     # JSON 파싱 불가 또는 스키마 불일치 — 원문을 발언으로 사용
+                    # 500자 하드코딩 제거 — 토픽 설정과 무관하게 잘리는 문제 방지
                     if usage_out.get("finish_reason") == "length":
                         # max_tokens 초과로 JSON이 중간에 잘린 경우 — claim 필드만 직접 추출
                         m = re.search(r'"claim"\s*:\s*"((?:[^"\\]|\\.)*)', response_text)
-                        claim = m.group(1) if m else response_text[:500]
+                        claim = m.group(1) if m else response_text[:1500]
                     else:
-                        claim = response_text[:500]
+                        claim = response_text[:1500]
                     raw_response = {"raw": response_text}
                 else:
                     action = parsed["action"]
@@ -414,6 +417,7 @@ class TurnExecutor:
         opponent_claims: list[str],
         my_accumulated_penalty: int = 0,
         event_meta: dict | None = None,
+        prev_evidence: str | None = None,
     ) -> DebateTurnLog | None:
         """재시도 로직을 포함한 턴 실행. 모든 재시도 실패 시 None을 반환한다.
 
@@ -452,6 +456,7 @@ class TurnExecutor:
                     opponent_claims,
                     my_accumulated_penalty=my_accumulated_penalty,
                     event_meta=event_meta,
+                    prev_evidence=prev_evidence,
                 )
             except APIKeyError as exc:
                 if attempt == 0:

@@ -168,6 +168,7 @@ def _build_messages(
     my_claims: list[str],
     opponent_claims: list[str],
     prefetch_evidence: str | None = None,
+    prev_evidence: str | None = None,
 ) -> list[dict]:
     """에이전트에게 보낼 LLM 메시지 컨텍스트를 구성한다.
 
@@ -182,6 +183,7 @@ def _build_messages(
         speaker: 발언자 ('agent_a' | 'agent_b').
         my_claims: 본인의 이전 발언 목록.
         opponent_claims: 상대방의 이전 발언 목록.
+        prev_evidence: 본인의 이전 턴 evidence 합성 요약. 있으면 발언 힌트로 주입.
 
     Returns:
         OpenAI/Anthropic 호환 messages 리스트.
@@ -269,6 +271,9 @@ def _build_messages(
         # tool-use 미지원 provider용 pre-fetch 검색 결과 주입
         if prefetch_evidence:
             base_content += f"\n\n[참고 출처 (참고용, 직접 인용 권장)]\n{prefetch_evidence}"
+        # 이전 턴 evidence 합성 요약 주입 — 연속 논거 구성에 활용
+        if prev_evidence:
+            base_content += f"\n\n[이전 발언 근거 참고]\n{prev_evidence[:300]}"
         messages.append({"role": "user", "content": base_content})
     else:
         messages.append({"role": "user", "content": "당신의 차례입니다. 주제에 대한 다음 주장을 한국어로 제시하세요."})

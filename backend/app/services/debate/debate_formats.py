@@ -360,6 +360,9 @@ async def _run_parallel_turns(
     prev_b_evidence_task: asyncio.Task | None = None
     prev_turn_b: DebateTurnLog | None = None
     prev_b_turn_num: int = 0
+    # 이전 턴 evidence를 다음 턴 시스템 프롬프트에 주입 — 연속 논거 구성 지원
+    prev_evidence_a: str | None = None
+    prev_evidence_b: str | None = None
 
     for turn_num in range(1, topic.max_turns + 1):
         # ★ 롤링 병렬: 이전 턴의 B 리뷰 + 근거 검색 결과를 A 실행 시작 전에 수집
@@ -388,6 +391,9 @@ async def _run_parallel_turns(
                 except Exception as exc:
                     logger.warning("B evidence task failed: %s", exc)
                 prev_b_evidence_task = None
+            # 이번 수집된 B evidence를 다음 턴 시스템 프롬프트에 주입하기 위해 저장
+            if prev_turn_b is not None:
+                prev_evidence_b = prev_turn_b.evidence
 
             if prev_turn_b is None:
                 logger.error("prev_turn_b unexpectedly None at turn %d, skipping B review", turn_num)
@@ -428,6 +434,7 @@ async def _run_parallel_turns(
             agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
+            prev_evidence=prev_evidence_a,
         )
         if turn_a is None:
             for _t in [prev_b_review_task, prev_b_evidence_task]:
@@ -470,6 +477,9 @@ async def _run_parallel_turns(
                         and agent_a.provider in _TOOL_USE_PROVIDERS
                     ),
                     tool_result=(turn_a.raw_response or {}).get("tool_result"),
+                    debater_position="A (찬성)",
+                    opponent_recent_history=claims_b[-2:] if claims_b else None,
+                    max_turns=topic.max_turns,
                 )
             )
             # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
@@ -484,6 +494,7 @@ async def _run_parallel_turns(
                 agent_b, version_b, api_key_b, claims_b, claims_a,
                 my_accumulated_penalty=total_penalty_b,
                 event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
+                prev_evidence=prev_evidence_b,
             )
             if turn_b is None:
                 # P1: turn_b 실패 시 현재 실행 중인 review_a_task와 evidence_a_task도 취소
@@ -525,6 +536,9 @@ async def _run_parallel_turns(
                         and agent_b.provider in _TOOL_USE_PROVIDERS
                     ),
                     tool_result=(turn_b.raw_response or {}).get("tool_result"),
+                    debater_position="B (반대)",
+                    opponent_recent_history=claims_a[-2:] if claims_a else None,
+                    max_turns=topic.max_turns,
                 )
             )
             # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
@@ -557,7 +571,9 @@ async def _run_parallel_turns(
                         })
                 except Exception as exc:
                     logger.warning("A evidence task failed: %s", exc)
-                evidence_a_task = None
+            # 이번 턴 A evidence를 다음 턴 시스템 프롬프트에 주입하기 위해 저장
+            prev_evidence_a = turn_a.evidence
+            evidence_a_task = None
             turn_elapsed = time.monotonic() - review_start
 
             # A 검토 결과 반영 (차단 시 claims_a 마지막 항목 패치)
@@ -726,6 +742,8 @@ async def _run_sequential_turns(
     """
     total_penalty_a = 0
     total_penalty_b = 0
+    prev_evidence_a: str | None = None
+    prev_evidence_b: str | None = None
 
     for turn_num in range(1, topic.max_turns + 1):
         # Agent A 턴
@@ -734,6 +752,7 @@ async def _run_sequential_turns(
             agent_a, version_a, api_key_a, claims_a, claims_b,
             my_accumulated_penalty=total_penalty_a,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_a") if control_plane else None,
+            prev_evidence=prev_evidence_a,
         )
         if turn_a is None:
             raise ForfeitError(forfeited_speaker="agent_a")
@@ -756,6 +775,9 @@ async def _run_sequential_turns(
                     settings.debate_tool_use_enabled and topic.tools_enabled and agent_a.provider in _TOOL_USE_PROVIDERS
                 ),
                 tool_result=(turn_a.raw_response or {}).get("tool_result"),
+                debater_position="A (찬성)",
+                opponent_recent_history=claims_b[-2:] if claims_b else None,
+                max_turns=topic.max_turns,
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -802,12 +824,16 @@ async def _run_sequential_turns(
         if remaining_delay > 0:
             await asyncio.sleep(remaining_delay)
 
+        # A evidence 저장 (sequential 모드에서는 review 전 evidence가 없으나, 다음 턴 주입용으로 현 값 저장)
+        prev_evidence_a = turn_a.evidence
+
         # Agent B 턴
         turn_b = await executor.execute_with_retry(
             match, topic, turn_num, "agent_b",
             agent_b, version_b, api_key_b, claims_b, claims_a,
             my_accumulated_penalty=total_penalty_b,
             event_meta=control_plane.event_meta(turn_number=turn_num, speaker="agent_b") if control_plane else None,
+            prev_evidence=prev_evidence_b,
         )
         if turn_b is None:
             raise ForfeitError(forfeited_speaker="agent_b")
@@ -830,6 +856,9 @@ async def _run_sequential_turns(
                     settings.debate_tool_use_enabled and topic.tools_enabled and agent_b.provider in _TOOL_USE_PROVIDERS
                 ),
                 tool_result=(turn_b.raw_response or {}).get("tool_result"),
+                debater_position="B (반대)",
+                opponent_recent_history=claims_a[-2:] if claims_a else None,
+                max_turns=topic.max_turns,
             )
             review_elapsed = time.monotonic() - review_start
 
@@ -870,6 +899,9 @@ async def _run_sequential_turns(
                 if control_plane else None,
                 fallback_reason=fallback_reason,
             )
+
+        # B evidence 저장 — 다음 턴 B 시스템 프롬프트 주입용
+        prev_evidence_b = turn_b.evidence
 
         # 라운드 사이 딜레이 (마지막 제외)
         if turn_num < topic.max_turns:
@@ -933,6 +965,9 @@ async def _run_multi_slot_turn(
                 settings.debate_tool_use_enabled and topic.tools_enabled and agent.provider in _TOOL_USE_PROVIDERS
             ),
             tool_result=(turn.raw_response or {}).get("tool_result"),
+            debater_position=speaker_role.replace("agent_", "").upper() + " 측",
+            opponent_recent_history=opp_claims[-2:] if opp_claims else None,
+            max_turns=topic.max_turns,
         )
         total_penalty = _apply_review_to_turn(
             turn, review, my_claims, total_penalty, update_last_claim=False

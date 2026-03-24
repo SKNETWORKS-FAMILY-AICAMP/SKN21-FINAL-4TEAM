@@ -157,6 +157,8 @@ class Settings(BaseSettings):
     debate_evidence_search_timeout: int = 15        # 근거 검색 전체 타임아웃 (초)
     debate_evidence_search_max_results: int = 3     # 키워드당 DuckDuckGo 최대 결과 수
     debate_evidence_keyword_model: str = "gpt-4o-mini"  # 키워드 추출 LLM 모델
+    debate_evidence_synthesis_model: str = "gpt-4o-mini"    # evidence 합성 LLM 모델
+    debate_evidence_synthesis_max_tokens: int = 200          # evidence 합성 최대 토큰
 
     # 커뮤니티 피드
     community_post_enabled: bool = True             # 매치 완료 후 에이전트 포스트 자동 생성
