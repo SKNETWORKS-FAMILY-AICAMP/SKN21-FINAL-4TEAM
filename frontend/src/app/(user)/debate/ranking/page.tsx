@@ -24,6 +24,21 @@ import type { RankingEntry } from '@/types/debate';
 
 type RankingCategory = 'agent' | 'debate' | 'llm';
 
+type MatchAgent = { id: string; name: string; image_url?: string | null } | null;
+
+type MatchItem = {
+  id: string;
+  topic_title: string;
+  agent_a: MatchAgent;
+  agent_b: MatchAgent;
+  score_a: number | null;
+  score_b: number | null;
+  status: string;
+  winner_id: string | null;
+  turn_count?: number;
+  finished_at?: string | null;
+};
+
 type LLMModelStatsResponse = {
   id: string;
   model_id: string;
@@ -57,6 +72,13 @@ type DisplayRankingItem = {
   costPer1k?: string;
   agentCount?: number;
   win_rate?: number | null;
+  // 토론 매치 전용
+  matchId?: string;
+  agentAName?: string;
+  agentBName?: string;
+  scoreA?: number | null;
+  scoreB?: number | null;
+  turnCount?: number;
 };
 
 // --- Converters ---
@@ -83,28 +105,34 @@ function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
     });
 }
 
-function toWinrateItems(entries: RankingEntry[]): DisplayRankingItem[] {
-  return [...entries]
+function toMatchItems(matches: MatchItem[]): DisplayRankingItem[] {
+  return matches
     .sort((a, b) => {
-      const rateA = a.wins / (a.wins + a.losses || 1);
-      const rateB = b.wins / (b.wins + b.losses || 1);
-      return rateB - rateA;
+      const scoreA = (a.score_a ?? 0) + (a.score_b ?? 0);
+      const scoreB = (b.score_a ?? 0) + (b.score_b ?? 0);
+      return scoreB - scoreA;
     })
-    .map((entry, i) => {
-      const total = entry.wins + entry.losses || 1;
-      const winRate = Math.round((entry.wins / total) * 1000) / 10;
+    .slice(0, 10)
+    .map((match, i) => {
+      const agentAName = match.agent_a?.name ?? '?';
+      const agentBName = match.agent_b?.name ?? '?';
       return {
-        id: entry.id,
+        id: match.id,
         rank: i + 1,
-        name: entry.name,
-        subtitle: entry.owner_nickname,
-        elo: entry.elo_rating,
-        wins: entry.wins,
-        losses: entry.losses,
-        winRate,
-        tier: entry.tier ?? 'B',
+        name: match.topic_title,
+        subtitle: `${agentAName} vs ${agentBName}`,
+        elo: (match.score_a ?? 0) + (match.score_b ?? 0),
+        wins: match.score_a ?? 0,
+        losses: match.score_b ?? 0,
+        winRate: 0,
+        tier: 'A',
         category: 'debate' as const,
-        image_url: entry.image_url ?? null,
+        matchId: match.id,
+        agentAName,
+        agentBName,
+        scoreA: match.score_a,
+        scoreB: match.score_b,
+        turnCount: match.turn_count,
       };
     });
 }
@@ -200,6 +228,8 @@ export default function RankingPage() {
   const [selectedItem, setSelectedItem] = useState<DisplayRankingItem | null>(null);
   const [models, setModels] = useState<LLMModelStatsResponse[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [matches, setMatches] = useState<MatchItem[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
 
   const ranking = useDebateStore((s) => s.ranking);
   const rankingLoading = useDebateStore((s) => s.rankingLoading);
@@ -207,26 +237,32 @@ export default function RankingPage() {
 
   useEffect(() => {
     fetchRanking();
+
     setModelsLoading(true);
     api
       .get<LLMModelStatsResponse[]>('/models/stats')
       .then(setModels)
-      .catch(() => {
-        // 모델 목록 로드 실패는 무시
-      })
+      .catch(() => {})
       .finally(() => setModelsLoading(false));
+
+    setMatchesLoading(true);
+    api
+      .get<MatchItem[]>('/matches?status=completed&limit=20')
+      .then(setMatches)
+      .catch(() => {})
+      .finally(() => setMatchesLoading(false));
   }, [fetchRanking]);
 
   const agentItems = useMemo(() => toAgentItems(ranking), [ranking]);
-  const winrateItems = useMemo(() => toWinrateItems(ranking), [ranking]);
+  const matchItems = useMemo(() => toMatchItems(matches), [matches]);
   const llmItems = useMemo(() => toLLMItems(models), [models]);
 
   const activeItems = useMemo<DisplayRankingItem[]>(() => {
     if (!selectedCategory) return [];
     if (selectedCategory === 'agent') return agentItems;
-    if (selectedCategory === 'debate') return winrateItems;
+    if (selectedCategory === 'debate') return matchItems;
     return llmItems;
-  }, [selectedCategory, agentItems, winrateItems, llmItems]);
+  }, [selectedCategory, agentItems, matchItems, llmItems]);
 
   const handleItemSelect = (item: DisplayRankingItem) => {
     setSelectedCategory(item.category);
@@ -243,7 +279,7 @@ export default function RankingPage() {
     setSelectedCategory(null);
   };
 
-  const isLoading = rankingLoading || modelsLoading;
+  const isLoading = rankingLoading || modelsLoading || matchesLoading;
 
   // 1. Grid View (initial)
   if (!selectedCategory) {
@@ -279,11 +315,11 @@ export default function RankingPage() {
               />
               <CompactColumn
                 title="인기 토론 순위"
-                items={winrateItems}
+                items={matchItems}
                 icon={<Swords size={17} className="text-red-500" />}
                 onSelect={handleItemSelect}
-                statLabel="승률"
-                statValue={(item) => `${item.winRate}%`}
+                statLabel="턴 수"
+                statValue={(item) => item.turnCount ? `${item.turnCount}턴` : '-'}
                 onTitleClick={() => handleCategorySelect('debate')}
               />
               <CompactColumn
@@ -365,7 +401,7 @@ export default function RankingPage() {
                         {item.category === 'agent'
                           ? item.elo.toLocaleString()
                           : item.category === 'debate'
-                            ? `${item.winRate}%`
+                            ? item.turnCount ? `${item.turnCount}턴` : '-'
                             : `${item.agentCount ?? 0}개`}
                       </span>
                     </div>
@@ -402,6 +438,8 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
   function handleAction() {
     if (item.category === 'llm') {
       router.push('/debate/agents/create');
+    } else if (item.category === 'debate') {
+      router.push(`/debate/matches/${item.matchId ?? item.id}`);
     } else {
       router.push(`/debate/agents/${item.id}`);
     }
@@ -419,6 +457,8 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
               <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
             ) : item.category === 'llm' ? (
               '🧠'
+            ) : item.category === 'debate' ? (
+              '⚔️'
             ) : (
               '🤖'
             )}
@@ -463,6 +503,29 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
               icon={<DollarSign size={14} />}
             />
           </>
+        ) : item.category === 'debate' ? (
+          <>
+            <StatCard
+              label="A 점수"
+              value={item.scoreA != null ? item.scoreA.toString() : '-'}
+              icon={<Trophy size={14} />}
+            />
+            <StatCard
+              label="B 점수"
+              value={item.scoreB != null ? item.scoreB.toString() : '-'}
+              icon={<Swords size={14} />}
+            />
+            <StatCard
+              label="총 턴 수"
+              value={item.turnCount != null ? `${item.turnCount}턴` : '-'}
+              icon={<MessageSquare size={14} />}
+            />
+            <StatCard
+              label="합산 점수"
+              value={`${(item.scoreA ?? 0) + (item.scoreB ?? 0)}점`}
+              icon={<Star size={14} />}
+            />
+          </>
         ) : (
           <>
             <StatCard label="ELO" value={item.elo.toLocaleString()} icon={<Zap size={14} />} />
@@ -478,7 +541,7 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
       </div>
 
       {/* Additional Info */}
-      {item.category !== 'llm' && (
+      {item.category === 'agent' && (
         <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
           <h3 className="text-sm font-black mb-3 flex items-center gap-2">
             <Binary size={16} className="text-primary" />
@@ -495,6 +558,31 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
               icon={<Trophy size={14} />}
               label="승/패"
               value={`${item.wins}승 ${item.losses}패`}
+            />
+          </div>
+        </div>
+      )}
+      {item.category === 'debate' && (
+        <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+          <h3 className="text-sm font-black mb-3 flex items-center gap-2">
+            <Swords size={16} className="text-red-500" />
+            대결 현황
+          </h3>
+          <div className="space-y-2">
+            <SpecRow
+              icon={<Users size={14} />}
+              label="에이전트 A"
+              value={item.agentAName ?? '-'}
+            />
+            <SpecRow
+              icon={<Users size={14} />}
+              label="에이전트 B"
+              value={item.agentBName ?? '-'}
+            />
+            <SpecRow
+              icon={<MessageSquare size={14} />}
+              label="총 턴"
+              value={item.turnCount != null ? `${item.turnCount}턴` : '-'}
             />
           </div>
         </div>
@@ -524,14 +612,16 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
           <p className="text-xs font-bold opacity-60 m-0">
             {item.category === 'llm'
               ? '이 모델로 새 에이전트를 만들 수 있습니다.'
-              : '에이전트 프로필에서 전적을 확인하세요.'}
+              : item.category === 'debate'
+                ? '토론 전문을 확인하세요.'
+                : '에이전트 프로필에서 전적을 확인하세요.'}
           </p>
         </div>
         <button
           onClick={handleAction}
           className="flex-shrink-0 px-4 py-2 bg-white text-black text-sm font-black rounded-xl border-2 border-black shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] cursor-pointer"
         >
-          {item.category === 'llm' ? '만들기' : '프로필'}
+          {item.category === 'llm' ? '만들기' : item.category === 'debate' ? '관전' : '프로필'}
         </button>
       </div>
     </div>
