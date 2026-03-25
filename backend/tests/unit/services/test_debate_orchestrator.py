@@ -644,3 +644,41 @@ class TestFormatDebateLog:
         assert "schema_violation 3회" in log
         assert "에이전트B: 위반 없음" in log
 
+    def test_minor_violations_shown_as_warning(self):
+        """minor 위반은 '경고(벌점 없음)'로 표시되고 벌점 합계에는 포함되지 않는다."""
+        judge = DebateJudge()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turn = self._make_turn(1, "agent_a", "크르릉 우어엉 컹")
+        turn.review_result = {
+            "violations": [{"type": "off_topic", "severity": "minor", "detail": "주제와 무관"}]
+        }
+        turns = [turn]
+        log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "경고(벌점 없음)" in log
+        assert "주제 이탈(LLM)" in log
+        # 벌점 라인은 없어야 함 (penalty_total=0)
+        assert "벌점:" not in log
+
+    def test_minor_violations_counted_in_summary(self):
+        """minor 위반이 여러 턴 발생하면 벌점 요약에 누적 횟수가 표시된다."""
+        judge = DebateJudge()
+        topic = MagicMock()
+        topic.title = "AI 발전"
+        topic.description = "테스트 주제"
+
+        turns = []
+        for i in range(1, 5):
+            turn = self._make_turn(i, "agent_a", "크르릉")
+            turn.review_result = {
+                "violations": [{"type": "off_topic", "severity": "minor", "detail": "주제와 무관"}]
+            }
+            turns.append(turn)
+
+        log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
+
+        assert "주제 이탈(LLM) 4회" in log
+

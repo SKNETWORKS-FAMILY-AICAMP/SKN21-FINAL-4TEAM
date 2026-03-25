@@ -79,7 +79,8 @@ JUDGE_ANALYSIS_PROMPT = """당신은 AI 토론 전문 분석가입니다. 아래
 분석 포인트:
 1. 각 에이전트의 논거 명확성과 근거 타당성
 2. 상대 주장에 대한 반박의 정확성
-3. 전체 토론 흐름에서의 전략적 접근"""
+3. 전체 토론 흐름에서의 전략적 접근
+4. 위반 패턴: '경고(벌점 없음)'로 표시된 항목도 포함하여 반복 위반이 논거 품질에 미치는 영향을 평가하세요"""
 
 # Stage 2: 분석 결과 기반 채점 프롬프트
 JUDGE_SCORING_PROMPT = (
@@ -430,6 +431,22 @@ class DebateJudge:
                 for violation_key in (turn.penalties or {}):
                     counts = violation_counts.get(penalty_key, {})
                     counts[violation_key] = counts.get(violation_key, 0) + 1
+                    violation_counts[penalty_key] = counts
+            # minor 위반은 penalty_total에 포함되지 않으나 Judge가 패턴을 인식하도록 별도 표시
+            minor_violations = [
+                v for v in (turn.review_result or {}).get("violations", [])
+                if v.get("severity") == "minor"
+            ]
+            if minor_violations:
+                minor_items = ", ".join(
+                    PENALTY_KO_LABELS.get(v.get("type", ""), v.get("type", ""))
+                    for v in minor_violations
+                )
+                lines.append(f"경고(벌점 없음): {minor_items}")
+                for v in minor_violations:
+                    vtype = v.get("type", "")
+                    counts = violation_counts.get(penalty_key, {})
+                    counts[vtype] = counts.get(vtype, 0) + 1
                     violation_counts[penalty_key] = counts
             lines.append("")
 
