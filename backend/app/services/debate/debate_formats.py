@@ -82,6 +82,7 @@ async def _publish_turn_event(
         "input_tokens": turn.input_tokens,
         "output_tokens": turn.output_tokens,
         "is_blocked": turn.is_blocked,
+        "tool_used": turn.tool_used,
         "review_result": review_result,
     }
     if event_meta:

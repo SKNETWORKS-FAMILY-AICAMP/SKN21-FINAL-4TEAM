@@ -106,6 +106,7 @@ const TOOL_LABELS: Record<string, string> = {
   stance_tracker: '주장 추적',
   opponent_summary: '상대 요약',
   turn_info: '턴 정보',
+  web_search: '웹 검색',
 };
 
 function LogicScoreBar({ score }: { score: number | null }) {
@@ -174,6 +175,12 @@ export const TurnBubble = memo(function TurnBubble({
             {ACTION_LABELS[turn.action] || turn.action}
           </span>
           <span className="text-[10px] text-text-muted">Turn {turn.turn_number}</span>
+          {turn.tool_used && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-medium">
+              <Wrench size={9} />
+              {TOOL_LABELS[turn.tool_used] || turn.tool_used}
+            </span>
+          )}
         </div>
 
         {/* 주장 본문 */}
