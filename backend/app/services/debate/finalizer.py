@@ -50,7 +50,13 @@ class MatchFinalizer:
         7. 예측투표 정산
         8. 토너먼트 라운드 진행
         9. 요약 리포트 백그라운드 태스크
+        10. 커뮤니티 포스트 백그라운드 태스크
         """
+        # 중복 완료 처리 방어 — 동일 match에 finalize()가 두 번 호출될 경우 ELO 이중 반영 차단
+        if match.status == "completed":
+            logger.warning("finalize() called on already-completed match %s, skipping", match.id)
+            return
+
         from app.services.debate.agent_service import DebateAgentService
         from app.services.debate.debate_formats import _log_orchestrator_usage
         from app.services.debate.match_service import DebateMatchService, generate_summary_task
@@ -95,53 +101,54 @@ class MatchFinalizer:
             if not judgment.get("elo_suppressed"):
                 await agent_service.update_elo(str(agent_a.id), new_a, result_a, version_a_id)
                 await agent_service.update_elo(str(agent_b.id), new_b, result_b, version_b_id)
+
+                # 3. 시즌 ELO 갱신
+                if match.season_id:
+                    await _update_season_elo(
+                        self.db, match, agent_a, agent_b, elo_result, result_a, result_b, score_diff,
+                    )
+
+                # 4. 승급전/강등전 결과 반영 — elo_suppressed 시 실제 ELO 미갱신이므로 건너뜀
+                # (elo_suppressed 블록 바깥에 두면 가상 ELO로 승급전 트리거가 잘못 발생함)
+                promo_svc = DebatePromotionService(self.db)
+                for agent_obj, res, elo_before, elo_after in [
+                    (agent_a, result_a, elo_a_before, new_a),
+                    (agent_b, result_b, elo_b_before, new_b),
+                ]:
+                    active = await promo_svc.get_active_series(str(agent_obj.id))
+                    if active:
+                        series_result = await promo_svc.record_match_result(str(active.id), res)
+                        series_updates.append(series_result)
+                        # 시리즈 완료 후 같은 매치의 ELO로 새 시리즈 트리거 기회 제공 (최대 1회)
+                        if series_result.get("status") in ("won", "lost", "expired"):
+                            post_tier = series_result.get("new_tier") or agent_obj.tier
+                            if series_result.get("tier_changed") and series_result["series_type"] == "promotion":
+                                post_protection = 3
+                            elif series_result["series_type"] == "demotion" and series_result["status"] == "won":
+                                post_protection = 1
+                            else:
+                                post_protection = 0
+                            new_series = await promo_svc.check_and_trigger(
+                                str(agent_obj.id), int(elo_before), int(elo_after), post_tier, post_protection,
+                            )
+                            if new_series:
+                                series_updates.append({
+                                    "id": str(new_series.id),
+                                    "series_id": str(new_series.id),
+                                    "agent_id": str(new_series.agent_id),
+                                    "series_type": new_series.series_type,
+                                    "status": new_series.status,
+                                    "current_wins": 0,
+                                    "current_losses": 0,
+                                    "draw_count": 0,
+                                    "required_wins": new_series.required_wins,
+                                    "from_tier": new_series.from_tier,
+                                    "to_tier": new_series.to_tier,
+                                    "tier_changed": False,
+                                    "new_tier": None,
+                                })
             else:
-                logger.info("ELO 갱신 skip — fallback 판정 (elo_suppressed=True), match=%s", match.id)
-
-            # 3. 시즌 ELO 갱신
-            if match.season_id:
-                await _update_season_elo(
-                    self.db, match, agent_a, agent_b, elo_result, result_a, result_b, score_diff,
-                )
-
-            # 4. 승급전/강등전 결과 반영 (멀티 경로 누락 버그 수정)
-            promo_svc = DebatePromotionService(self.db)
-            for agent_obj, res, elo_before, elo_after in [
-                (agent_a, result_a, elo_a_before, new_a),
-                (agent_b, result_b, elo_b_before, new_b),
-            ]:
-                active = await promo_svc.get_active_series(str(agent_obj.id))
-                if active:
-                    series_result = await promo_svc.record_match_result(str(active.id), res)
-                    series_updates.append(series_result)
-                    # 시리즈 완료 후 같은 매치의 ELO로 새 시리즈 트리거 기회 제공 (최대 1회)
-                    if series_result.get("status") in ("won", "lost", "expired"):
-                        post_tier = series_result.get("new_tier") or agent_obj.tier
-                        if series_result.get("tier_changed") and series_result["series_type"] == "promotion":
-                            post_protection = 3
-                        elif series_result["series_type"] == "demotion" and series_result["status"] == "won":
-                            post_protection = 1
-                        else:
-                            post_protection = 0
-                        new_series = await promo_svc.check_and_trigger(
-                            str(agent_obj.id), int(elo_before), int(elo_after), post_tier, post_protection,
-                        )
-                        if new_series:
-                            series_updates.append({
-                                "id": str(new_series.id),
-                                "series_id": str(new_series.id),
-                                "agent_id": str(new_series.agent_id),
-                                "series_type": new_series.series_type,
-                                "status": new_series.status,
-                                "current_wins": 0,
-                                "current_losses": 0,
-                                "draw_count": 0,
-                                "required_wins": new_series.required_wins,
-                                "from_tier": new_series.from_tier,
-                                "to_tier": new_series.to_tier,
-                                "tier_changed": False,
-                                "new_tier": None,
-                            })
+                logger.info("ELO·승급전 갱신 skip — fallback 판정 (elo_suppressed=True), match=%s", match.id)
 
         # 5. DB 커밋 + usage_batch 일괄 INSERT — SSE 발행 전 커밋으로 데이터 정합성 보장
         # is_test 매치는 ELO 컬럼 기록 생략 (랭킹에 영향 없도록)

@@ -414,6 +414,8 @@ async def _run_parallel_turns(
 
             if prev_turn_b is None:
                 logger.error("prev_turn_b unexpectedly None at turn %d, skipping B review", turn_num)
+                # 비정상 경로: B 발언 없이 리뷰 태스크가 생성된 경우 카운터 리셋 — 이전 severe가 누적되지 않도록
+                consecutive_severe_b = 0
             else:
                 total_penalty_b = _apply_review_to_turn(
                     prev_turn_b, review_prev_b, claims_b,
@@ -426,6 +428,8 @@ async def _run_parallel_turns(
                 _update_accumulated_violations(accumulated_violations_b, review_prev_b)
                 _streak = settings.debate_forfeit_on_severe_streak
                 if _streak and consecutive_severe_b >= _streak:
+                    if prev_b_evidence_task and not prev_b_evidence_task.done():
+                        prev_b_evidence_task.cancel()
                     raise ForfeitError(forfeited_speaker="agent_b")
                 await _log_orchestrator_usage(
                     db, agent_b.owner_id, review_prev_b.get("model_id", ""),
@@ -691,6 +695,9 @@ async def _run_parallel_turns(
             _update_accumulated_violations(accumulated_violations_b, review_last_b)
             _streak = settings.debate_forfeit_on_severe_streak
             if _streak and consecutive_severe_b >= _streak:
+                # 루프 후 마지막 B 검토에서 임계치 도달 — prev_b_evidence_task는 L722-739에서 처리되지 못하므로 직접 취소
+                if prev_b_evidence_task and not prev_b_evidence_task.done():
+                    prev_b_evidence_task.cancel()
                 raise ForfeitError(forfeited_speaker="agent_b")
             await _log_orchestrator_usage(
                 db, agent_b.owner_id, review_last_b.get("model_id", ""),
