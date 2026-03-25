@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import settings
 from app.services.llm.inference_client import InferenceClient
@@ -82,16 +82,42 @@ _ViolationType = Literal[
 
 
 class ViolationItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: _ViolationType
     severity: Literal["minor", "severe"]
     detail: str
 
 
 class ReviewResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     logic_score: int = Field(ge=1, le=10)
     violations: list[ViolationItem] = []
     feedback: str
     block: bool
+
+
+def _strict_json_schema(model: type[BaseModel]) -> dict:
+    """OpenAI strict mode용 JSON 스키마 생성.
+
+    Pydantic model_json_schema()는 $defs 내 중첩 객체에
+    additionalProperties: false를 자동 삽입하지 않음.
+    strict: True 요구사항을 충족하기 위해 모든 object 노드에 명시적으로 추가.
+    """
+    schema = model.model_json_schema()
+
+    def _patch(node: dict) -> None:
+        if node.get("type") == "object" and "additionalProperties" not in node:
+            node["additionalProperties"] = False
+        for value in node.values():
+            if isinstance(value, dict):
+                _patch(value)
+
+    _patch(schema)
+    for ref_schema in schema.get("$defs", {}).values():
+        _patch(ref_schema)
+    return schema
 
 
 # Review LLM 시스템 프롬프트 — debate_review_model (기본: gpt-4o-mini) 에 주입
@@ -207,7 +233,7 @@ class DebateOrchestrator:
         if provider == "openai":
             kwargs["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": "review_result", "strict": True, "schema": ReviewResult.model_json_schema()},
+                "json_schema": {"name": "review_result", "strict": True, "schema": _strict_json_schema(ReviewResult)},
             }
         # gpt-5-nano 등 추론 모델은 reasoning 토큰을 먼저 소비 후 출력
         # max_completion_tokens가 작으면 reasoning만 하고 출력이 비어버림 → 충분히 크게 설정
