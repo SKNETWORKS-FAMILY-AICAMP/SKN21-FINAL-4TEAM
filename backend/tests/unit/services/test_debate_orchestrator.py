@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.debate.judge import DebateJudge
-from app.services.debate.orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, ReviewResult, calculate_elo
+from app.services.debate.helpers import calculate_elo
+from app.services.debate.orchestrator import DebateOrchestrator, LLM_VIOLATION_PENALTIES, ReviewResult
 
 
 class TestEloCalculation:
@@ -659,7 +660,7 @@ class TestFormatDebateLog:
         log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
 
         assert "경고(벌점 없음)" in log
-        assert "주제 이탈(LLM)" in log
+        assert "주제 이탈" in log
         # 벌점 라인은 없어야 함 (penalty_total=0)
         assert "벌점:" not in log
 
@@ -680,5 +681,5 @@ class TestFormatDebateLog:
 
         log = judge._format_debate_log(turns, topic, "에이전트A", "에이전트B")
 
-        assert "주제 이탈(LLM) 4회" in log
+        assert "주제 이탈 4회" in log
 

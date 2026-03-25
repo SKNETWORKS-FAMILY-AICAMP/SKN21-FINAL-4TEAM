@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debate.debate_formats import TurnLoopResult, run_turns_1v1
+from app.services.debate.debate_formats import TurnLoopResult
+from app.services.debate.format_1v1 import run_turns_1v1
 from app.services.debate.forfeit import ForfeitError
 
 
@@ -102,10 +103,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock.review_turn = AsyncMock(return_value=review)
 
         with (
-            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats.settings") as mock_settings,
+            patch("app.services.debate.format_1v1._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -158,10 +159,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock.review_turn = AsyncMock(return_value=review_with_penalty)
 
         with (
-            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats.settings") as mock_settings,
+            patch("app.services.debate.format_1v1._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0
@@ -205,10 +206,10 @@ class TestRunTurns1v1Sequential:
         orchestrator_mock = MagicMock()
 
         with (
-            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats.settings") as mock_settings,
+            patch("app.services.debate.format_1v1._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -261,10 +262,10 @@ class TestRunTurns1v1Parallel:
         orchestrator_mock._review_fallback = MagicMock(return_value=_make_review_result())
 
         with (
-            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats.settings") as mock_settings,
+            patch("app.services.debate.format_1v1._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = False
             mock_settings.debate_turn_delay_seconds = 0
@@ -344,10 +345,10 @@ class TestRunTurns1v1Parallel:
         )
 
         with (
-            patch("app.services.debate.debate_formats._log_orchestrator_usage", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_turn_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats._publish_review_event", new_callable=AsyncMock),
-            patch("app.services.debate.debate_formats.settings") as mock_settings,
+            patch("app.services.debate.format_1v1._log_orchestrator_usage", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_turn_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1._publish_review_event", new_callable=AsyncMock),
+            patch("app.services.debate.format_1v1.settings") as mock_settings,
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0

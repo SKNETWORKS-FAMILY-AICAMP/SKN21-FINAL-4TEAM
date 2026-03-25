@@ -25,8 +25,9 @@ from app.services.debate.debate_formats import (
     TurnLoopResult,
     _log_orchestrator_usage,  # 테스트 import 경로 유지 — debate_formats에서 re-export
     get_format_runner,
-    run_turns_1v1,
 )
+from app.services.debate.format_1v1 import run_turns_1v1
+from app.services.debate.format_multi import run_turns_multi  # noqa: F401 — get_format_runner 경유
 from app.services.debate.exceptions import MatchVoidError
 from app.services.debate.finalizer import MatchFinalizer
 from app.services.debate.forfeit import ForfeitError, ForfeitHandler

@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.services.debate.debate_formats import _has_severe_violation, _update_accumulated_violations
+from app.services.debate.format_1v1 import _has_severe_violation, _update_accumulated_violations
 
 
 def _make_review(violations: list[dict], logic_score: int = 5) -> dict:

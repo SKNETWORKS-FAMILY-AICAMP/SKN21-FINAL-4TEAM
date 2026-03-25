@@ -17,30 +17,6 @@ logger = logging.getLogger(__name__)
 # 에이전트가 임의 텍스트 대신 구조화 JSON을 반환하도록 강제.
 # validate_response_schema()가 이 형식을 검증하며, 불일치 시 파싱 실패로 처리.
 
-# _RESPONSE_SCHEMA_INSTRUCTION_ORIGINAL: 2026-03-24 deep interview 분석 전 원본. 복원 시 아래 주석 해제.
-# _RESPONSE_SCHEMA_INSTRUCTION_ORIGINAL = """⚠️ 중요: 반드시 한국어로만 답변하세요. 영어 사용 금지.
-#
-# 다음 형식의 JSON만 응답하세요 (다른 텍스트 없이):
-# {
-#   "action": "argue" | "rebut" | "concede" | "question" | "summarize",
-#   "claim": "<한국어로 작성한 주요 주장>",
-#   "evidence": "<한국어로 작성한 근거/데이터/인용>" | null,
-#   "tool_used": "web_search" (web_search 도구를 사용한 경우) | null,
-#   "tool_result": "<검색 결과 요약>" (web_search 사용한 경우) | null
-# }
-#
-# web_search 도구를 사용한 경우:
-# - evidence 필드에 검색 결과의 핵심 내용을 반드시 인용하세요
-# - 출처 URL을 포함하면 논거의 신뢰도가 높아집니다
-# - 검색 결과와 다른 내용을 인용하면 "허위 인용" 위반으로 감점됩니다
-#
-# action 선택 기준 (상황에 맞는 전략을 자유롭게 선택하세요):
-# - "argue"  : 새로운 주장이나 추가 근거를 제시할 때
-# - "rebut"  : 상대방의 구체적 논거·데이터를 직접 논리적으로 반박할 때
-# - "question": 상대방 주장의 전제·근거에 의문을 제기하거나 약점을 파고들 때
-# - "concede": 상대방 논거 중 타당한 부분을 인정하되 자신의 핵심 입장은 유지할 때
-# - "summarize": 논점을 정리하거나 마무리 단계에서 핵심을 압축할 때"""
-
 RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변하세요. 영어 사용 금지.
 
 다음 형식의 JSON만 응답하세요 (다른 텍스트 없이):
@@ -65,6 +41,57 @@ web_search 도구를 사용한 경우:
 # PENALTY_FALSE_SOURCE = 7
 # TODO: 허위 출처 탐지 미구현 — WebSocket/LLM tool_use 응답에서 실제 도구 호출 여부를
 # 서버 측에서 검증할 방법이 없어 상수만 정의됨. 구현 시 활성화.
+
+
+def _platform_api_key(provider: str) -> str:
+    """플랫폼 환경변수에서 provider별 API 키를 반환한다.
+
+    unknown provider는 빈 문자열을 반환한다 — 의도치 않은 키 노출 방지.
+
+    Args:
+        provider: LLM 공급자 식별자 (openai | anthropic | google | runpod).
+
+    Returns:
+        해당 provider의 플랫폼 API 키. 미설정이거나 unknown provider면 빈 문자열.
+    """
+    match provider:
+        case "openai":
+            return settings.openai_api_key or ""
+        case "anthropic":
+            return settings.anthropic_api_key or ""
+        case "google":
+            return settings.google_api_key or ""
+        case "runpod":
+            return settings.runpod_api_key or ""
+        case _:
+            return ""
+
+
+# orchestrator.py / judge.py에서 각각 관리하던 위반 유형 한글 레이블 통합 상수.
+# 두 파일의 dict가 diverge하여 judge._format_debate_log()의 .get(k, k) fallback이
+# 영문 키를 Judge LLM에 그대로 전달하는 버그가 있었음 — 이 상수로 단일화.
+PENALTY_KO_LABELS: dict[str, str] = {
+    # 코드 기반 탐지 위반
+    "off_topic": "주제 이탈",
+    "repetition": "주장 반복",
+    "false_source": "허위 출처",
+    "prompt_injection": "프롬프트 인젝션",
+    # LLM 검토 탐지 위반 (orchestrator review_turn() 결과)
+    "ad_hominem": "인신공격(LLM)",
+    "straw_man": "허수아비 논증(LLM)",
+    "false_claim": "허위 주장(LLM)",
+    "no_web_evidence": "웹 근거 미제시(LLM)",
+    "false_citation": "허위 인용(LLM)",
+    "irrelevant_source": "무관 출처 사용(LLM)",
+    # _apply_review_to_turn이 llm_ 접두사로 저장하는 형태
+    "llm_off_topic": "주제 이탈(LLM)",
+    "llm_false_claim": "허위 주장(LLM)",
+    "llm_ad_hominem": "인신공격(LLM)",
+    "llm_repetition": "주장 반복(LLM)",
+    "llm_no_web_evidence": "웹 근거 미제시(LLM)",
+    "llm_false_citation": "허위 인용(LLM)",
+    "llm_prompt_injection": "프롬프트 인젝션(LLM)",
+}
 
 
 def validate_response_schema(response_text: str) -> dict | None:

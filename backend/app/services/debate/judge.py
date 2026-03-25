@@ -9,45 +9,11 @@ from app.core.config import settings
 from app.models.debate_match import DebateMatch
 from app.models.debate_topic import DebateTopic
 from app.models.debate_turn_log import DebateTurnLog
+from app.services.debate.helpers import PENALTY_KO_LABELS, _platform_api_key
 from app.services.llm.inference_client import InferenceClient
 from app.services.llm.utils import infer_provider
 
 logger = logging.getLogger(__name__)
-
-
-def _platform_api_key(provider: str) -> str:
-    """provider에 맞는 플랫폼 API 키를 반환한다.
-
-    Args:
-        provider: 'anthropic' | 'google' | 'runpod' | 'openai'.
-
-    Returns:
-        해당 플랫폼 API 키 문자열 (미설정이면 빈 문자열).
-    """
-    if provider == "anthropic":
-        return settings.anthropic_api_key or ""
-    if provider == "google":
-        return settings.google_api_key or ""
-    if provider == "runpod":
-        return settings.runpod_api_key or ""
-    return settings.openai_api_key or ""
-
-
-# 벌점 키 → 한국어 라벨 (Judge LLM에 영문 파라미터명 노출 방지)
-PENALTY_KO_LABELS: dict[str, str] = {
-    "repetition": "주장 반복",
-    "false_source": "허위 출처",
-    "prompt_injection": "프롬프트 인젝션(LLM)",
-    "ad_hominem": "인신공격(LLM)",
-    "false_claim": "허위 주장(LLM)",
-    "straw_man": "허수아비 논증(LLM)",
-    "off_topic": "주제 이탈(LLM)",
-    "no_web_evidence": "웹 근거 미제시(LLM)",
-    "false_citation": "허위 인용(LLM)",
-    # debate_formats.py가 llm_ 접두사를 붙여 turn.penalties에 저장하므로 두 형태 모두 등록
-    "llm_no_web_evidence": "웹 근거 미제시(LLM)",
-    "llm_false_citation": "허위 인용(LLM)",
-}
 
 # 채점 기준 (총 100점 만점)
 # argumentation: 주장·근거·추론의 일체 (logic + evidence 통합)
