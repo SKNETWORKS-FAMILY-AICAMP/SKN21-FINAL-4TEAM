@@ -1184,7 +1184,15 @@ async def run_turns_multi(
             multi_agent_b = agents_cache.get(str(b_part.agent_id))
 
             if multi_agent_a is None or multi_agent_b is None:
-                logger.warning("Multi-agent: agent not found, slot %d turn %d", i, turn_num)
+                # opp_claims 인덱스 정합성 유지 — None placeholder로 슬롯 공백 표시
+                # `opp_claims[-1] if opp_claims else None` 가드와 호환
+                logger.warning(
+                    "Multi-agent: agent not found, slot %d turn %d — inserting None placeholder", i, turn_num
+                )
+                if multi_agent_a is None:
+                    claims_a.append(None)
+                if multi_agent_b is None:
+                    claims_b.append(None)
                 continue
 
             api_key_a = _resolve_api_key(multi_agent_a)
