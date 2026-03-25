@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     debate_turn_review_enabled: bool = True         # 턴 검토 기능 ON/OFF
     debate_turn_review_timeout: int = 25            # 검토 LLM 응답 최대 대기 시간 (초, gpt-5-nano 추론 포함)
     debate_turn_review_model: str = ""              # 검토 모델 오버라이드 (optimized=False 롤백 경로 전용) — 빈 문자열이면 debate_review_model 사용
-    debate_forfeit_on_severe_streak: int = 5        # 연속 severe 위반 이 수에 도달 시 부전패 (0이면 비활성)
+    debate_forfeit_on_severe_streak: int = 3        # 연속 severe 위반 이 수에 도달 시 부전패 (0이면 비활성)
 
     # 최적화
     debate_orchestrator_optimized: bool = True      # 최적화 오케스트레이터 활성화 (모델 분리 + 병렬 실행)
