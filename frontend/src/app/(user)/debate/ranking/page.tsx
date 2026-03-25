@@ -24,19 +24,12 @@ import type { RankingEntry } from '@/types/debate';
 
 type RankingCategory = 'agent' | 'debate' | 'llm';
 
-type MatchAgent = { id: string; name: string; image_url?: string | null } | null;
-
-type MatchItem = {
+type TopicItem = {
   id: string;
-  topic_title: string;
-  agent_a: MatchAgent;
-  agent_b: MatchAgent;
-  score_a: number | null;
-  score_b: number | null;
-  status: string;
-  winner_id: string | null;
-  turn_count?: number;
-  finished_at?: string | null;
+  title: string;
+  match_count: number;
+  queue_count?: number;
+  status?: string;
 };
 
 type LLMModelStatsResponse = {
@@ -72,13 +65,8 @@ type DisplayRankingItem = {
   costPer1k?: string;
   agentCount?: number;
   win_rate?: number | null;
-  // 토론 매치 전용
-  matchId?: string;
-  agentAName?: string;
-  agentBName?: string;
-  scoreA?: number | null;
-  scoreB?: number | null;
-  turnCount?: number;
+  // 인기 토론 주제 전용
+  matchCount?: number;
 };
 
 // --- Converters ---
@@ -105,36 +93,20 @@ function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
     });
 }
 
-function toMatchItems(matches: MatchItem[]): DisplayRankingItem[] {
-  return matches
-    .sort((a, b) => {
-      const scoreA = (a.score_a ?? 0) + (a.score_b ?? 0);
-      const scoreB = (b.score_a ?? 0) + (b.score_b ?? 0);
-      return scoreB - scoreA;
-    })
-    .slice(0, 10)
-    .map((match, i) => {
-      const agentAName = match.agent_a?.name ?? '?';
-      const agentBName = match.agent_b?.name ?? '?';
-      return {
-        id: match.id,
-        rank: i + 1,
-        name: match.topic_title,
-        subtitle: `${agentAName} vs ${agentBName}`,
-        elo: (match.score_a ?? 0) + (match.score_b ?? 0),
-        wins: match.score_a ?? 0,
-        losses: match.score_b ?? 0,
-        winRate: 0,
-        tier: 'A',
-        category: 'debate' as const,
-        matchId: match.id,
-        agentAName,
-        agentBName,
-        scoreA: match.score_a,
-        scoreB: match.score_b,
-        turnCount: match.turn_count,
-      };
-    });
+function toTopicItems(topics: TopicItem[]): DisplayRankingItem[] {
+  return topics.slice(0, 10).map((topic, i) => ({
+    id: topic.id,
+    rank: i + 1,
+    name: topic.title,
+    subtitle: `${topic.match_count}회 진행`,
+    elo: topic.match_count,
+    wins: topic.match_count,
+    losses: 0,
+    winRate: 0,
+    tier: 'A',
+    category: 'debate' as const,
+    matchCount: topic.match_count,
+  }));
 }
 
 function toLLMItems(models: LLMModelStatsResponse[]): DisplayRankingItem[] {
@@ -228,8 +200,8 @@ export default function RankingPage() {
   const [selectedItem, setSelectedItem] = useState<DisplayRankingItem | null>(null);
   const [models, setModels] = useState<LLMModelStatsResponse[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [matches, setMatches] = useState<MatchItem[]>([]);
-  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [topics, setTopics] = useState<TopicItem[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
 
   const ranking = useDebateStore((s) => s.ranking);
   const rankingLoading = useDebateStore((s) => s.rankingLoading);
@@ -245,16 +217,16 @@ export default function RankingPage() {
       .catch(() => {})
       .finally(() => setModelsLoading(false));
 
-    setMatchesLoading(true);
+    setTopicsLoading(true);
     api
-      .get<MatchItem[]>('/matches?status=completed&limit=20')
-      .then(setMatches)
+      .get<{ items: TopicItem[] }>('/topics?sort=matches&page_size=10')
+      .then((res) => setTopics(res.items ?? []))
       .catch(() => {})
-      .finally(() => setMatchesLoading(false));
+      .finally(() => setTopicsLoading(false));
   }, [fetchRanking]);
 
   const agentItems = useMemo(() => toAgentItems(ranking), [ranking]);
-  const matchItems = useMemo(() => toMatchItems(matches), [matches]);
+  const matchItems = useMemo(() => toTopicItems(topics), [topics]);
   const llmItems = useMemo(() => toLLMItems(models), [models]);
 
   const activeItems = useMemo<DisplayRankingItem[]>(() => {
@@ -279,7 +251,7 @@ export default function RankingPage() {
     setSelectedCategory(null);
   };
 
-  const isLoading = rankingLoading || modelsLoading || matchesLoading;
+  const isLoading = rankingLoading || modelsLoading || topicsLoading;
 
   // 1. Grid View (initial)
   if (!selectedCategory) {
@@ -318,8 +290,8 @@ export default function RankingPage() {
                 items={matchItems}
                 icon={<Swords size={17} className="text-red-500" />}
                 onSelect={handleItemSelect}
-                statLabel="턴 수"
-                statValue={(item) => item.turnCount ? `${item.turnCount}턴` : '-'}
+                statLabel="진행 횟수"
+                statValue={(item) => `${item.matchCount ?? 0}회`}
                 onTitleClick={() => handleCategorySelect('debate')}
               />
               <CompactColumn
@@ -401,7 +373,7 @@ export default function RankingPage() {
                         {item.category === 'agent'
                           ? item.elo.toLocaleString()
                           : item.category === 'debate'
-                            ? item.turnCount ? `${item.turnCount}턴` : '-'
+                            ? `${item.matchCount ?? 0}회`
                             : `${item.agentCount ?? 0}개`}
                       </span>
                     </div>
@@ -439,7 +411,7 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
     if (item.category === 'llm') {
       router.push('/debate/agents/create');
     } else if (item.category === 'debate') {
-      router.push(`/debate/matches/${item.matchId ?? item.id}`);
+      router.push(`/debate?topic=${encodeURIComponent(item.name)}`);
     } else {
       router.push(`/debate/agents/${item.id}`);
     }
@@ -506,24 +478,14 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
         ) : item.category === 'debate' ? (
           <>
             <StatCard
-              label="A 점수"
-              value={item.scoreA != null ? item.scoreA.toString() : '-'}
-              icon={<Trophy size={14} />}
-            />
-            <StatCard
-              label="B 점수"
-              value={item.scoreB != null ? item.scoreB.toString() : '-'}
+              label="총 진행 횟수"
+              value={`${item.matchCount ?? 0}회`}
               icon={<Swords size={14} />}
             />
             <StatCard
-              label="총 턴 수"
-              value={item.turnCount != null ? `${item.turnCount}턴` : '-'}
-              icon={<MessageSquare size={14} />}
-            />
-            <StatCard
-              label="합산 점수"
-              value={`${(item.scoreA ?? 0) + (item.scoreB ?? 0)}점`}
-              icon={<Star size={14} />}
+              label="순위"
+              value={`${item.rank}위`}
+              icon={<Trophy size={14} />}
             />
           </>
         ) : (
@@ -566,23 +528,13 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
         <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
           <h3 className="text-sm font-black mb-3 flex items-center gap-2">
             <Swords size={16} className="text-red-500" />
-            대결 현황
+            주제 현황
           </h3>
           <div className="space-y-2">
             <SpecRow
-              icon={<Users size={14} />}
-              label="에이전트 A"
-              value={item.agentAName ?? '-'}
-            />
-            <SpecRow
-              icon={<Users size={14} />}
-              label="에이전트 B"
-              value={item.agentBName ?? '-'}
-            />
-            <SpecRow
               icon={<MessageSquare size={14} />}
-              label="총 턴"
-              value={item.turnCount != null ? `${item.turnCount}턴` : '-'}
+              label="누적 토론 수"
+              value={`${item.matchCount ?? 0}회`}
             />
           </div>
         </div>
@@ -613,7 +565,7 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
             {item.category === 'llm'
               ? '이 모델로 새 에이전트를 만들 수 있습니다.'
               : item.category === 'debate'
-                ? '토론 전문을 확인하세요.'
+                ? '이 주제의 진행된 토론을 확인하세요.'
                 : '에이전트 프로필에서 전적을 확인하세요.'}
           </p>
         </div>
@@ -621,7 +573,7 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
           onClick={handleAction}
           className="flex-shrink-0 px-4 py-2 bg-white text-black text-sm font-black rounded-xl border-2 border-black shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] cursor-pointer"
         >
-          {item.category === 'llm' ? '만들기' : item.category === 'debate' ? '관전' : '프로필'}
+          {item.category === 'llm' ? '만들기' : item.category === 'debate' ? '토론 보기' : '프로필'}
         </button>
       </div>
     </div>
