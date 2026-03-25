@@ -396,6 +396,8 @@ class TurnExecutor:
         if agent.provider != "local":
             await _log_orchestrator_usage(self.db, agent.owner_id, agent.model_id, input_tokens, output_tokens)
 
+        _tool_used = raw_response.get("tool_used") if isinstance(raw_response, dict) else None
+        _tool_result = raw_response.get("tool_result") if isinstance(raw_response, dict) else None
         turn = DebateTurnLog(
             match_id=match.id,
             turn_number=turn_number,
@@ -405,6 +407,8 @@ class TurnExecutor:
             claim=claim,
             evidence=evidence,
             raw_response=raw_response,
+            tool_used=_tool_used,
+            tool_result=_tool_result,
             penalties=penalties if penalties else None,
             penalty_total=penalty_total,
             response_time_ms=response_time_ms,
