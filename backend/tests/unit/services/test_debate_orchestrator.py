@@ -329,14 +329,14 @@ class TestReviewTurn:
         self,
         logic_score: int = 7,
         violations: list | None = None,
-        severity: str = "none",
+        severity: str = "none",  # ReviewResult 스키마에 없는 필드 — 하위 호환용 파라미터만 유지
         feedback: str = "양호한 논증입니다",
         block: bool = False,
     ) -> str:
+        # severity는 최상위 ReviewResult 필드가 아니므로 포함하지 않음
         return json.dumps({
             "logic_score": logic_score,
             "violations": violations or [],
-            "severity": severity,
             "feedback": feedback,
             "block": block,
         })

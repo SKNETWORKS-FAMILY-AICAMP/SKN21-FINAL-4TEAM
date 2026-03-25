@@ -104,14 +104,21 @@ class EvidenceSearchService:
             logger.warning("Evidence search failed: %s", exc)
             return None
 
-    async def search_by_query(self, query: str, exclude_urls: set[str] | None = None) -> "EvidenceResult | None":
-        """이미 추출된 검색 쿼리로 직접 DuckDuckGo 검색을 실행한다.
+    async def search_by_query(
+        self,
+        query: str,
+        claim: str | None = None,
+        exclude_urls: set[str] | None = None,
+    ) -> "EvidenceResult | None":
+        """이미 추출된 검색 쿼리로 DuckDuckGo 검색 후 한국어로 합성해 반환한다.
 
-        search()와 달리 LLM 키워드 추출·합성 단계를 스킵하여 비용·지연을 절감한다.
-        tool_call.query처럼 이미 키워드가 준비되고 LLM이 직접 결과를 받는 경우 사용한다.
+        tool_call.query처럼 키워드가 이미 준비된 경우 사용한다.
+        claim을 전달하면 search()와 동일하게 LLM 합성 단계를 거쳐 한국어 요약을 반환한다.
+        claim 없이 합성 실패 시에는 raw snippet으로 fallback한다.
 
         Args:
             query: 검색 쿼리 문자열.
+            claim: 합성 시 맥락으로 사용할 주장 텍스트. 없으면 query를 대신 사용한다.
             exclude_urls: 이미 이전 턴에서 사용된 출처 URL 집합. 동일 출처 반복 방지용.
         """
         if not settings.debate_evidence_search_enabled:
@@ -124,7 +131,9 @@ class EvidenceSearchService:
                 results = await self._search_all([query.strip()])
                 if not results:
                     return None
-                return self._aggregate(results, exclude_urls=exclude_urls)
+                aggregated = self._aggregate(results, exclude_urls=exclude_urls)
+                # claim이 없으면 query를 합성 맥락으로 사용 — raw snippet 그대로 반환 방지
+                return await self._synthesize_or_fallback(claim or query, aggregated)
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Evidence search_by_query timed out for query: %.60s...", query)
             return None
