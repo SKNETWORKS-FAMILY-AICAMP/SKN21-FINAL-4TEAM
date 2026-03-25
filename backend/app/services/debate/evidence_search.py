@@ -309,9 +309,7 @@ class EvidenceSearchService:
         try:
             synthesized = await self._synthesize(claim, topic, joined_content, api_key)
             if synthesized == "관련 근거 없음":
-                return EvidenceResult(
-                    text="검색 결과가 주제와 관련이 없습니다.", sources=sources, raw_content=joined_content
-                )
+                return None
             return EvidenceResult(text=synthesized, sources=sources, raw_content=joined_content)
         except Exception as exc:
             logger.debug("Evidence synthesis failed: %s", exc)

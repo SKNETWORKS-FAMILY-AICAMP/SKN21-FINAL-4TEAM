@@ -165,6 +165,7 @@ class TestRunTurns1v1Sequential:
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0
+            mock_settings.debate_forfeit_on_severe_streak = 0
 
             result = await run_turns_1v1(
                 executor=executor_mock,
@@ -350,6 +351,7 @@ class TestRunTurns1v1Parallel:
         ):
             mock_settings.debate_turn_review_enabled = True
             mock_settings.debate_turn_delay_seconds = 0
+            mock_settings.debate_forfeit_on_severe_streak = 0
 
             t0 = time.monotonic()
             await run_turns_1v1(executor=make_executor(), orchestrator=make_orch(), parallel=True, **common_kwargs)

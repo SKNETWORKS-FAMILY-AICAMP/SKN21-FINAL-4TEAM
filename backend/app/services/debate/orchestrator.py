@@ -186,6 +186,8 @@ REVIEW_SYSTEM_PROMPT = (
     "     severe: 이전 발언과 핵심 주장이 사실상 동일하고 새로운 논거가 전혀 없는 경우\n"
     "   각 위반: severity = minor 또는 severe.\n\n"
     "3. feedback: 관전자를 위한 한줄 평가 (30자 이내, 한국어).\n\n"
+    "logic_score 일관성 규칙:\n"
+    "- 누적 위반 정보가 제공된 경우: 동일 위반이 반복될수록 logic_score를 이전 턴보다 낮거나 같게 평가하세요. 개선 없이 반복하는 패턴에는 점수 상향 금지.\n\n"
     "출력 형식 (반드시 이 JSON만):\n"
     '{{"logic_score": <1-10>, "violations": [{{"type": "<유형>", "severity": "minor|severe",'
     ' "detail": "<한국어 설명>"}}], "feedback": "<한국어 한줄평>", "block": false}}'
@@ -318,6 +320,7 @@ class DebateOrchestrator:
         debater_position: str | None = None,  # "A (찬성)" | "B (반대)" — 입장 대비 평가용
         opponent_recent_history: list[str] | None = None,  # 상대방 최근 2턴 (맥락 비교용)
         max_turns: int | None = None,  # 전체 턴 수 — 마지막 턴 여부 판단용
+        accumulated_violations: dict[str, int] | None = None,  # 이번 턴까지 누적 위반 카운트 (위반별 횟수)
     ) -> dict:
         """LLM으로 단일 턴 품질 검토. 위반 감지 + 벌점 산출 + 차단 여부 반환.
 
@@ -378,6 +381,11 @@ class DebateOrchestrator:
         if opponent_recent_history:
             opp_history_text = "\n".join(f"  - {h}" for h in opponent_recent_history[-2:])
             user_content += f"[상대방 이전 발언] (맥락 비교용):\n{opp_history_text}\n"
+
+        if accumulated_violations:
+            viol_summary = ", ".join(f"{k}×{v}" for k, v in accumulated_violations.items() if v > 0)
+            if viol_summary:
+                user_content += f"이 에이전트의 누적 위반: {viol_summary}\n"
 
         messages = [
             {"role": "system", "content": system_prompt},

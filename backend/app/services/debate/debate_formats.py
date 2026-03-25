@@ -170,6 +170,19 @@ def _apply_review_to_turn(
     return penalty_total
 
 
+def _has_severe_violation(review: dict) -> bool:
+    """review dict에 severity=severe인 위반이 하나 이상 있으면 True."""
+    return any(v.get("severity") == "severe" for v in review.get("violations", []))
+
+
+def _update_accumulated_violations(accumulated: dict[str, int], review: dict) -> None:
+    """review의 violations를 accumulated 딕셔너리에 카운트 누적한다."""
+    for v in review.get("violations", []):
+        vtype = v.get("type", "")
+        if vtype:
+            accumulated[vtype] = accumulated.get(vtype, 0) + 1
+
+
 # ── 오케스트레이터 토큰 기록 헬퍼 ────────────────────────────────────────────
 
 async def _log_orchestrator_usage(
@@ -363,6 +376,10 @@ async def _run_parallel_turns(
     # 이전 턴 evidence를 다음 턴 시스템 프롬프트에 주입 — 연속 논거 구성 지원
     prev_evidence_a: str | None = None
     prev_evidence_b: str | None = None
+    consecutive_severe_a = 0
+    consecutive_severe_b = 0
+    accumulated_violations_a: dict[str, int] = {}
+    accumulated_violations_b: dict[str, int] = {}
 
     for turn_num in range(1, topic.max_turns + 1):
         # ★ 롤링 병렬: 이전 턴의 B 리뷰 + 근거 검색 결과를 A 실행 시작 전에 수집
@@ -402,6 +419,14 @@ async def _run_parallel_turns(
                     prev_turn_b, review_prev_b, claims_b,
                     total_penalty_b, update_last_claim=True
                 )
+                if _has_severe_violation(review_prev_b):
+                    consecutive_severe_b += 1
+                else:
+                    consecutive_severe_b = 0
+                _update_accumulated_violations(accumulated_violations_b, review_prev_b)
+                _streak = settings.debate_forfeit_on_severe_streak
+                if _streak and consecutive_severe_b >= _streak:
+                    raise ForfeitError(forfeited_speaker="agent_b")
                 await _log_orchestrator_usage(
                     db, agent_b.owner_id, review_prev_b.get("model_id", ""),
                     review_prev_b["input_tokens"], review_prev_b["output_tokens"],
@@ -480,6 +505,7 @@ async def _run_parallel_turns(
                     debater_position="A (찬성)",
                     opponent_recent_history=claims_b[-2:] if claims_b else None,
                     max_turns=topic.max_turns,
+                    accumulated_violations=accumulated_violations_a,
                 )
             )
             # A 근거 검색도 백그라운드 시작 — B 실행 시간에 숨김
@@ -539,6 +565,7 @@ async def _run_parallel_turns(
                     debater_position="B (반대)",
                     opponent_recent_history=claims_a[-2:] if claims_a else None,
                     max_turns=topic.max_turns,
+                    accumulated_violations=accumulated_violations_b,
                 )
             )
             # B 근거 검색도 백그라운드 시작 — 다음 턴 A 실행 시간에 숨김
@@ -581,6 +608,18 @@ async def _run_parallel_turns(
                 turn_a, review_a, claims_a,
                 total_penalty_a, update_last_claim=True
             )
+            if _has_severe_violation(review_a):
+                consecutive_severe_a += 1
+            else:
+                consecutive_severe_a = 0
+            _update_accumulated_violations(accumulated_violations_a, review_a)
+            _streak = settings.debate_forfeit_on_severe_streak
+            if _streak and consecutive_severe_a >= _streak:
+                # 진행 중인 B 리뷰·근거 태스크 취소
+                for _t in [prev_b_review_task, prev_b_evidence_task]:
+                    if _t and not _t.done():
+                        _t.cancel()
+                raise ForfeitError(forfeited_speaker="agent_a")
             await _log_orchestrator_usage(
                 db, agent_a.owner_id, review_a.get("model_id", ""),
                 review_a["input_tokens"], review_a["output_tokens"],
@@ -645,6 +684,14 @@ async def _run_parallel_turns(
                 prev_turn_b, review_last_b, claims_b,
                 total_penalty_b, update_last_claim=True
             )
+            if _has_severe_violation(review_last_b):
+                consecutive_severe_b += 1
+            else:
+                consecutive_severe_b = 0
+            _update_accumulated_violations(accumulated_violations_b, review_last_b)
+            _streak = settings.debate_forfeit_on_severe_streak
+            if _streak and consecutive_severe_b >= _streak:
+                raise ForfeitError(forfeited_speaker="agent_b")
             await _log_orchestrator_usage(
                 db, agent_b.owner_id, review_last_b.get("model_id", ""),
                 review_last_b["input_tokens"], review_last_b["output_tokens"],
@@ -744,6 +791,10 @@ async def _run_sequential_turns(
     total_penalty_b = 0
     prev_evidence_a: str | None = None
     prev_evidence_b: str | None = None
+    consecutive_severe_a = 0
+    consecutive_severe_b = 0
+    accumulated_violations_a: dict[str, int] = {}
+    accumulated_violations_b: dict[str, int] = {}
 
     for turn_num in range(1, topic.max_turns + 1):
         # Agent A 턴
@@ -778,12 +829,21 @@ async def _run_sequential_turns(
                 debater_position="A (찬성)",
                 opponent_recent_history=claims_b[-2:] if claims_b else None,
                 max_turns=topic.max_turns,
+                accumulated_violations=accumulated_violations_a,
             )
             review_elapsed = time.monotonic() - review_start
 
             total_penalty_a = _apply_review_to_turn(
                 turn_a, review_a, claims_a, total_penalty_a, update_last_claim=False
             )
+            if _has_severe_violation(review_a):
+                consecutive_severe_a += 1
+            else:
+                consecutive_severe_a = 0
+            _update_accumulated_violations(accumulated_violations_a, review_a)
+            _streak = settings.debate_forfeit_on_severe_streak
+            if _streak and consecutive_severe_a >= _streak:
+                raise ForfeitError(forfeited_speaker="agent_a")
             await _log_orchestrator_usage(
                 db, agent_a.owner_id, review_a.get("model_id", ""),
                 review_a["input_tokens"], review_a["output_tokens"],
@@ -859,12 +919,21 @@ async def _run_sequential_turns(
                 debater_position="B (반대)",
                 opponent_recent_history=claims_a[-2:] if claims_a else None,
                 max_turns=topic.max_turns,
+                accumulated_violations=accumulated_violations_b,
             )
             review_elapsed = time.monotonic() - review_start
 
             total_penalty_b = _apply_review_to_turn(
                 turn_b, review_b, claims_b, total_penalty_b, update_last_claim=False
             )
+            if _has_severe_violation(review_b):
+                consecutive_severe_b += 1
+            else:
+                consecutive_severe_b = 0
+            _update_accumulated_violations(accumulated_violations_b, review_b)
+            _streak = settings.debate_forfeit_on_severe_streak
+            if _streak and consecutive_severe_b >= _streak:
+                raise ForfeitError(forfeited_speaker="agent_b")
             await _log_orchestrator_usage(
                 db, agent_b.owner_id, review_b.get("model_id", ""),
                 review_b["input_tokens"], review_b["output_tokens"],
@@ -932,12 +1001,16 @@ async def _run_multi_slot_turn(
     model_cache: dict,
     usage_batch: list,
     control_plane: "OrchestrationControlPlane | None" = None,
-) -> int:
+    accumulated_violations: dict[str, int] | None = None,
+) -> tuple[int, dict | None]:
     """멀티에이전트 슬롯 단일 턴: 실행 → 검토 → 이벤트 발행.
 
     agent_a/b 처리 블록의 중복 제거를 위해 추출. run_turns_multi() 루프 내에서
     speaker_role("agent_a"|"agent_b")과 speaker_label("agent_a_slot0" 등)을 분리해
     1v1과 동일한 이벤트 형식으로 발행한다.
+
+    Returns:
+        (total_penalty, review_result) — review_result는 LLM 검토 비활성 시 None.
     """
     turn = await executor.execute_with_retry(
         match, topic, turn_num, speaker_role,
@@ -968,6 +1041,7 @@ async def _run_multi_slot_turn(
             debater_position=speaker_role.replace("agent_", "").upper() + " 측",
             opponent_recent_history=opp_claims[-2:] if opp_claims else None,
             max_turns=topic.max_turns,
+            accumulated_violations=accumulated_violations,
         )
         total_penalty = _apply_review_to_turn(
             turn, review, my_claims, total_penalty, update_last_claim=False
@@ -994,8 +1068,10 @@ async def _run_multi_slot_turn(
             if control_plane else None,
             fallback_reason=fallback_reason,
         )
+        review_returned = review
     else:
         my_claims.append(turn.claim)
+        review_returned = None
 
     # turn.speaker는 "agent_a"|"agent_b"이므로 슬롯 레이블로 오버라이드
     await _publish_turn_event(
@@ -1010,7 +1086,7 @@ async def _run_multi_slot_turn(
         slot_payload.update(control_plane.event_meta(turn_number=turn_num, speaker=speaker_label))
     await publish_event(str(match.id), "turn_slot", slot_payload)
 
-    return total_penalty
+    return total_penalty, review_returned
 
 
 # ── 멀티에이전트 턴 루프 ──────────────────────────────────────────────────────
@@ -1087,6 +1163,10 @@ async def run_turns_multi(
     claims_b: list[str] = []
     total_penalty_a = 0
     total_penalty_b = 0
+    accumulated_violations_a: dict[str, int] = {}
+    accumulated_violations_b: dict[str, int] = {}
+    consecutive_severe_a = 0
+    consecutive_severe_b = 0
 
     for turn_num in range(1, topic.max_turns + 1):
         for i in range(max_slots):
@@ -1106,18 +1186,39 @@ async def run_turns_multi(
             ver_a = versions_cache.get(str(a_part.version_id)) if a_part.version_id else None
             ver_b = versions_cache.get(str(b_part.version_id)) if b_part.version_id else None
 
-            total_penalty_a = await _run_multi_slot_turn(
+            total_penalty_a, review_a = await _run_multi_slot_turn(
                 executor, orchestrator, db, match, topic, turn_num,
                 "agent_a", f"agent_a_slot{i}",
                 multi_agent_a, ver_a, api_key_a, claims_a, claims_b,
                 total_penalty_a, model_cache, usage_batch, control_plane=control_plane,
+                accumulated_violations=accumulated_violations_a,
             )
-            total_penalty_b = await _run_multi_slot_turn(
+            if review_a is not None:
+                if _has_severe_violation(review_a):
+                    consecutive_severe_a += 1
+                else:
+                    consecutive_severe_a = 0
+                _update_accumulated_violations(accumulated_violations_a, review_a)
+                _streak = settings.debate_forfeit_on_severe_streak
+                if _streak and consecutive_severe_a >= _streak:
+                    raise ForfeitError(forfeited_speaker="agent_a")
+
+            total_penalty_b, review_b = await _run_multi_slot_turn(
                 executor, orchestrator, db, match, topic, turn_num,
                 "agent_b", f"agent_b_slot{i}",
                 multi_agent_b, ver_b, api_key_b, claims_b, claims_a,
                 total_penalty_b, model_cache, usage_batch, control_plane=control_plane,
+                accumulated_violations=accumulated_violations_b,
             )
+            if review_b is not None:
+                if _has_severe_violation(review_b):
+                    consecutive_severe_b += 1
+                else:
+                    consecutive_severe_b = 0
+                _update_accumulated_violations(accumulated_violations_b, review_b)
+                _streak = settings.debate_forfeit_on_severe_streak
+                if _streak and consecutive_severe_b >= _streak:
+                    raise ForfeitError(forfeited_speaker="agent_b")
 
     return TurnLoopResult(claims_a, claims_b, total_penalty_a, total_penalty_b, model_cache, usage_batch)
 

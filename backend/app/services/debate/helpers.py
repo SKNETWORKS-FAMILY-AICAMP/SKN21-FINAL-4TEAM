@@ -55,7 +55,10 @@ RESPONSE_SCHEMA_INSTRUCTION = """⚠️ 중요: 반드시 한국어로만 답변
 web_search 도구를 사용한 경우:
 - evidence 필드에 검색 결과의 핵심 내용을 반드시 인용하세요
 - 출처 URL을 포함하면 논거의 신뢰도가 높아집니다
-- 검색 결과와 다른 내용을 인용하면 "허위 인용" 위반으로 감점됩니다"""
+- 검색 결과와 다른 내용을 인용하면 "허위 인용" 위반으로 감점됩니다
+
+⚠️ 필드 오염 금지: claim 필드 안에 "evidence:", "tool_used:", "tool_result:" 같은 다른 필드 이름을 포함하지 마세요.
+각 필드는 반드시 JSON 키로만 분리하세요. 반드시 단일 JSON 객체만 출력하세요."""
 
 # detect_repetition() 제거 — 단어 집합 비교로는 의미적 반복 탐지 불가.
 # repetition 탐지를 REVIEW_SYSTEM_PROMPT 기반 LLM 검토로 위임 (orchestrator.py).
@@ -107,6 +110,14 @@ def validate_response_schema(response_text: str) -> dict | None:
     # RESPONSE_SCHEMA_INSTRUCTION에 정의된 5개 액션만 허용 — 임의 값 거부
     if data.get("action") not in valid_actions:
         return None
+
+    # claim 필드에 다른 JSON 필드명이 평문으로 혼입된 경우 제거
+    # LLM이 JSON 대신 "field: value\n" 형태로 응답하면 validate가 claim에 전부 넣어버리는 버그 방지
+    claim_text = str(data.get("claim", ""))
+    contamination_pattern = re.compile(r'\n(?:evidence|tool_used|tool_result)\s*:', re.IGNORECASE)
+    m = contamination_pattern.search(claim_text)
+    if m:
+        data["claim"] = claim_text[:m.start()].strip()
 
     # claim이 비어있으면 실패
     if not str(data.get("claim", "")).strip():
