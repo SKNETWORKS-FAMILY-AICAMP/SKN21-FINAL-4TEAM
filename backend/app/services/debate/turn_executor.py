@@ -218,7 +218,7 @@ class TurnExecutor:
                     prefetch_query = topic.title + (" " + opponent_claims[-1] if opponent_claims else "")
                     try:
                         prefetch_result = await asyncio.wait_for(
-                            _evidence_service.search(prefetch_query),
+                            _evidence_service.search(prefetch_query, topic=topic.title),
                             timeout=5.0,
                         )
                         if prefetch_result:
@@ -294,7 +294,11 @@ class TurnExecutor:
                         # 합성 맥락: 상대 마지막 발언 → 없으면 토픽 제목으로 대체
                         synthesis_claim = opponent_claims[-1] if opponent_claims else topic.title
                         search_result = (
-                            await _evidence_service.search_by_query(query, claim=synthesis_claim) if query else None
+                            await _evidence_service.search_by_query(
+                                query, claim=synthesis_claim, topic=topic.title
+                            )
+                            if query
+                            else None
                         )
                         tool_result_content = search_result.format() if search_result else "검색 결과 없음"
                         tool_used_flag = True

@@ -1,37 +1,62 @@
-"""claim → LLM 키워드 추출 → DuckDuckGo 검색 → LLM 합성 → 출처 포함 근거 반환."""
+"""claim → LLM 키워드 추출 → DuckDuckGo 검색 → URL 본문 fetch → LLM 합성 → 출처 포함 근거 반환.
+
+Tool Use 흐름:
+  1. LLM이 topic + claim 기반으로 검색 키워드 추출
+  2. DuckDuckGo로 후보 URL 수집
+  3. 상위 URL에 실제 HTTP fetch → HTML 본문 파싱
+  4. 실제 본문 텍스트로 LLM 합성 → 근거 생성
+  5. fetch 실패한 URL은 DDG snippet으로 fallback
+"""
 
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
+import httpx
+from bs4 import BeautifulSoup
 from ddgs import DDGS
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-KEYWORD_PROMPT = """다음 주장에서 웹 검색 키워드를 추출하세요.
+# fetch 시 사용할 User-Agent — 주요 사이트의 봇 차단 우회
+_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+# URL 본문을 합성에 사용할 최대 글자 수
+_FETCH_BODY_MAX = 3000
+
+# fetch 대상 URL 최대 수 — 레이턴시 예산 고려
+_MAX_FETCH_URLS = 2
+
+KEYWORD_PROMPT = """다음 토론 주제와 주장에서 웹 검색 키워드를 추출하세요.
+- 토론 주제의 핵심 고유명사(브랜드명, 제품명, 인물명 등)를 반드시 포함하세요
 - 영어 키워드 2~3개 + 한국어 키워드 1~2개를 함께 추출
 - JSON 배열만 출력, 설명 없이
 
+토론 주제: {topic}
 주장: {claim}
 
-출력 예시: ["AI regulation 2024", "EU AI Act funding", "AI 규제 스타트업 투자"]"""
+출력 예시: ["새콤달콤 Korean candy snack", "Saekcomdalcom vs Maychew", "새콤달콤 마이쮸 비교"]"""
 
-SYNTHESIS_PROMPT = """다음 주장과 검색된 웹 결과를 바탕으로, 주장과 직접 관련된 핵심 근거를 한국어 2~3문장으로 요약하세요.
-- 주장의 내용을 뒷받침하거나 반박하는 구체적 사실·수치·사례 위주로 작성
-- 원문 snippet을 그대로 나열하지 말고 주장과의 연관성을 중심으로 합성
-- 출처 URL은 포함하지 마세요 (별도 처리됨)
-- 검색 결과가 주제와 관련이 없으면 "검색 결과가 주제와 관련이 없습니다."라고만 반환하세요
+SYNTHESIS_PROMPT = """당신은 토론 근거 검증자입니다. 아래 주장에 대해 실제 웹 페이지 본문에서 찾은 사실만을 사용해 한국어 2~3문장의 근거를 작성하세요.
 
-주장:
-{claim}
+엄격한 규칙:
+- 아래 [웹 페이지 본문]에 실제로 존재하는 사실·수치·사례만 인용하세요
+- 본문에 없는 내용을 추론하거나 만들어내지 마세요
+- 수치나 통계는 반드시 어느 출처에서 왔는지 "(출처 N번)" 형식으로 표시하세요
+- 본문 전체가 주장과 무관하면 반드시 "관련 근거 없음"만 반환하세요
+- 부분적으로 관련 있으면, 관련 있는 내용만 인용하고 나머지는 무시하세요
 
-검색 결과:
-{snippets}
+토론 주제: {topic}
+주장: {claim}
 
-요약:"""
+[웹 페이지 본문]
+{page_contents}
+
+근거 (한국어, 2~3문장 또는 "관련 근거 없음"):"""
 
 
 @dataclass
@@ -46,21 +71,20 @@ class EvidenceResult:
 
 
 class EvidenceSearchService:
-    """claim에 대한 웹 근거를 검색해 LLM으로 합성 후 출처와 함께 반환한다.
+    """claim에 대한 웹 근거를 검색·fetch·합성해 반환한다.
 
-    1. LLM(gpt-4o-mini)으로 claim → 영어 키워드 추출
+    1. LLM(gpt-4o-mini)으로 topic + claim → 검색 키워드 추출
     2. 키워드별 DuckDuckGo 검색 (병렬)
-    3. 결과를 LLM으로 합성 → claim 연관 한국어 요약
-    4. 합성 실패 시 원본 snippet concat으로 fallback
+    3. 상위 URL을 httpx로 실제 fetch → BeautifulSoup 본문 파싱
+    4. 실제 본문 텍스트를 LLM으로 합성 → 근거 생성
+    5. fetch 실패 URL은 DDG snippet으로 대체
     """
 
     def __init__(self) -> None:
-        # InferenceClient는 첫 LLM 호출 시 lazy init — import 순환 방지
         self._client: "InferenceClient | None" = None
         self._owns_client = False
 
     def _get_client(self) -> "InferenceClient":
-        """InferenceClient를 lazy init으로 반환한다."""
         if self._client is None:
             from app.services.llm.inference_client import InferenceClient
 
@@ -69,25 +93,24 @@ class EvidenceSearchService:
         return self._client
 
     async def aclose(self) -> None:
-        """소유한 InferenceClient를 닫는다."""
         if self._owns_client and self._client is not None:
             await self._client.aclose()
             self._client = None
             self._owns_client = False
 
-    async def search(self, claim: str, exclude_urls: set[str] | None = None) -> "EvidenceResult | None":
-        """claim에 대한 웹 근거를 검색·합성한다. 실패 시 None을 반환한다.
-
-        Args:
-            claim: 검색 대상 주장 텍스트.
-            exclude_urls: 이미 이전 턴에서 사용된 출처 URL 집합. 동일 출처 반복 방지용.
-        """
+    async def search(
+        self,
+        claim: str,
+        topic: str = "",
+        exclude_urls: set[str] | None = None,
+    ) -> "EvidenceResult | None":
+        """claim에 대한 웹 근거를 검색·fetch·합성한다. 실패 시 None을 반환한다."""
         if not settings.debate_evidence_search_enabled:
             return None
 
         try:
             async with asyncio.timeout(settings.debate_evidence_search_timeout):
-                keywords = await self._extract_keywords(claim)
+                keywords = await self._extract_keywords(claim, topic)
                 if not keywords:
                     return None
 
@@ -95,8 +118,7 @@ class EvidenceSearchService:
                 if not results:
                     return None
 
-                aggregated = self._aggregate(results, exclude_urls=exclude_urls)
-                return await self._synthesize_or_fallback(claim, aggregated)
+                return await self._fetch_and_synthesize(claim, topic, results, exclude_urls)
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Evidence search timed out for claim: %.60s...", claim)
             return None
@@ -108,19 +130,10 @@ class EvidenceSearchService:
         self,
         query: str,
         claim: str | None = None,
+        topic: str = "",
         exclude_urls: set[str] | None = None,
     ) -> "EvidenceResult | None":
-        """이미 추출된 검색 쿼리로 DuckDuckGo 검색 후 한국어로 합성해 반환한다.
-
-        tool_call.query처럼 키워드가 이미 준비된 경우 사용한다.
-        claim을 전달하면 search()와 동일하게 LLM 합성 단계를 거쳐 한국어 요약을 반환한다.
-        claim 없이 합성 실패 시에는 raw snippet으로 fallback한다.
-
-        Args:
-            query: 검색 쿼리 문자열.
-            claim: 합성 시 맥락으로 사용할 주장 텍스트. 없으면 query를 대신 사용한다.
-            exclude_urls: 이미 이전 턴에서 사용된 출처 URL 집합. 동일 출처 반복 방지용.
-        """
+        """tool_call.query로 직접 DuckDuckGo 검색 후 URL fetch·합성해 반환한다."""
         if not settings.debate_evidence_search_enabled:
             return None
         if not query or not query.strip():
@@ -131,9 +144,9 @@ class EvidenceSearchService:
                 results = await self._search_all([query.strip()])
                 if not results:
                     return None
-                aggregated = self._aggregate(results, exclude_urls=exclude_urls)
-                # claim이 없으면 query를 합성 맥락으로 사용 — raw snippet 그대로 반환 방지
-                return await self._synthesize_or_fallback(claim or query, aggregated)
+                return await self._fetch_and_synthesize(
+                    claim or query, topic, results, exclude_urls
+                )
         except (TimeoutError, asyncio.CancelledError):
             logger.warning("Evidence search_by_query timed out for query: %.60s...", query)
             return None
@@ -141,11 +154,10 @@ class EvidenceSearchService:
             logger.warning("Evidence search_by_query failed: %s", exc)
             return None
 
-    async def _extract_keywords(self, claim: str) -> list[str]:
-        """InferenceClient로 claim에서 영어 검색 키워드를 추출한다."""
+    async def _extract_keywords(self, claim: str, topic: str) -> list[str]:
+        """topic + claim으로 검색 키워드를 추출한다."""
         api_key = settings.openai_api_key
         if not api_key:
-            logger.debug("OpenAI API key not set — skipping keyword extraction")
             return []
 
         claim = claim.strip()
@@ -159,8 +171,16 @@ class EvidenceSearchService:
                     provider="openai",
                     model_id=settings.debate_evidence_keyword_model,
                     api_key=api_key,
-                    messages=[{"role": "user", "content": KEYWORD_PROMPT.format(claim=claim)}],
-                    max_tokens=80,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": KEYWORD_PROMPT.format(
+                                topic=topic or "일반 토론",
+                                claim=claim,
+                            ),
+                        }
+                    ],
+                    max_tokens=100,
                     temperature=0,
                 ),
                 timeout=8.0,
@@ -174,22 +194,135 @@ class EvidenceSearchService:
             logger.debug("Keyword extraction failed", exc_info=True)
             return []
 
-    async def _synthesize(self, claim: str, snippets_text: str, api_key: str) -> str:
-        """DuckDuckGo snippet을 claim과 연관된 한국어 요약으로 합성한다.
+    async def _fetch_url(self, url: str) -> str | None:
+        """URL에 HTTP 접속해 HTML 본문 텍스트를 추출한다.
 
-        Args:
-            claim: 근거를 찾고 있는 주장 텍스트.
-            snippets_text: _aggregate()가 반환한 snippet 연결 텍스트.
-            api_key: OpenAI API 키.
-
-        Returns:
-            합성된 한국어 요약 문자열.
-
-        Raises:
-            Exception: LLM 호출 실패 또는 타임아웃 시 — 호출자가 fallback 처리.
+        Wikipedia, 뉴스, 블로그 등 일반 웹 페이지를 대상으로 함.
+        paywall·봇 차단·타임아웃 시 None 반환 → DDG snippet으로 fallback.
         """
+        # 미디어/파일 URL 스킵
+        if re.search(r"\.(pdf|jpg|jpeg|png|gif|mp4|zip|exe)(\?|$)", url, re.IGNORECASE):
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                headers={"User-Agent": _UA},
+                follow_redirects=True,
+                timeout=httpx.Timeout(connect=3.0, read=5.0, write=3.0, pool=3.0),
+            ) as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    return None
+                content_type = response.headers.get("content-type", "")
+                if "html" not in content_type:
+                    return None
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                # 불필요한 태그 제거
+                for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
+                    tag.decompose()
+
+                # 본문 텍스트 추출 — <article>, <main>, <p> 우선순위
+                body = ""
+                for selector in ("article", "main", '[role="main"]'):
+                    el = soup.select_one(selector)
+                    if el:
+                        body = el.get_text(separator=" ", strip=True)
+                        break
+                if not body:
+                    body = soup.get_text(separator=" ", strip=True)
+
+                # 연속 공백/줄바꿈 정리
+                body = re.sub(r"\s{2,}", " ", body).strip()
+                return body[:_FETCH_BODY_MAX] if body else None
+
+        except Exception as exc:
+            logger.debug("URL fetch failed (%s): %s", url, exc)
+            return None
+
+    async def _fetch_and_synthesize(
+        self,
+        claim: str,
+        topic: str,
+        results: list[dict],
+        exclude_urls: set[str] | None = None,
+    ) -> "EvidenceResult | None":
+        """DDG 결과에서 URL을 fetch해 본문 기반으로 근거를 합성한다.
+
+        fetch 성공 URL은 실제 본문을, 실패 URL은 DDG snippet을 사용.
+        모든 URL fetch 실패 시 snippet 기반 합성으로 전체 fallback.
+        """
+        seen: set[str] = set(exclude_urls) if exclude_urls else set()
+        candidates: list[dict] = []
+        for r in results:
+            url = r.get("href", "")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            candidates.append(r)
+            if len(candidates) >= 5:
+                break
+
+        if not candidates:
+            return None
+
+        # 상위 _MAX_FETCH_URLS개 URL 병렬 fetch
+        fetch_targets = candidates[:_MAX_FETCH_URLS]
+        fetch_results = await asyncio.gather(
+            *[self._fetch_url(r["href"]) for r in fetch_targets],
+            return_exceptions=True,
+        )
+
+        # 페이지 콘텐츠 조합: fetch 성공 → 본문, 실패 → snippet fallback
+        page_contents: list[str] = []
+        sources: list[str] = []
+
+        for i, r in enumerate(candidates):
+            url = r["href"]
+            title = r.get("title", url)
+            body_snippet = r.get("body", "")[:400]
+
+            if i < _MAX_FETCH_URLS:
+                fetched = fetch_results[i]
+                if isinstance(fetched, str) and fetched:
+                    page_contents.append(f"[출처 {i+1}] {title} ({url})\n{fetched}")
+                    sources.append(url)
+                    continue
+                # fetch 실패 — snippet fallback
+                logger.debug("URL fetch failed, using snippet: %s", url)
+
+            if body_snippet:
+                page_contents.append(f"[출처 {len(sources)+1}] {title} ({url})\n{body_snippet}")
+                sources.append(url)
+
+        if not page_contents:
+            return None
+
+        api_key = settings.openai_api_key
+        if not api_key:
+            # LLM 합성 불가 — 첫 번째 출처 snippet만 반환
+            first = page_contents[0] if page_contents else ""
+            return EvidenceResult(text=first[:500], sources=sources[:1]) if first else None
+
+        try:
+            synthesized = await self._synthesize(claim, topic, "\n\n".join(page_contents), api_key)
+            if synthesized == "관련 근거 없음":
+                return EvidenceResult(text="검색 결과가 주제와 관련이 없습니다.", sources=sources)
+            return EvidenceResult(text=synthesized, sources=sources)
+        except Exception as exc:
+            logger.debug("Evidence synthesis failed: %s", exc)
+            # 합성 실패 — 첫 번째 출처 snippet으로 최소 fallback
+            first_snippet = candidates[0].get("body", "")[:300] if candidates else ""
+            return EvidenceResult(text=first_snippet, sources=sources[:1]) if first_snippet else None
+
+    async def _synthesize(self, claim: str, topic: str, page_contents: str, api_key: str) -> str:
+        """실제 fetch한 웹 페이지 본문을 기반으로 근거를 합성한다."""
         client = self._get_client()
-        prompt = SYNTHESIS_PROMPT.format(claim=claim[:800], snippets=snippets_text[:1500])
+        prompt = SYNTHESIS_PROMPT.format(
+            topic=topic or "일반 토론",
+            claim=claim[:800],
+            page_contents=page_contents[:4000],
+        )
         result = await asyncio.wait_for(
             client.generate_byok(
                 provider="openai",
@@ -197,34 +330,17 @@ class EvidenceSearchService:
                 api_key=api_key,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=settings.debate_evidence_synthesis_max_tokens,
-                temperature=0.3,
+                temperature=0.2,
             ),
-            timeout=5.0,
+            timeout=8.0,
         )
         synthesized = result.get("content", "").strip()
         if not synthesized:
             raise ValueError("LLM returned empty synthesis")
         return synthesized
 
-    async def _synthesize_or_fallback(self, claim: str, aggregated: "EvidenceResult") -> "EvidenceResult":
-        """합성 시도 후 실패 시 원본 aggregate 결과로 fallback한다."""
-        api_key = settings.openai_api_key
-        if not api_key or not aggregated.text:
-            return aggregated
-
-        try:
-            synthesized_text = await self._synthesize(claim, aggregated.text, api_key)
-            return EvidenceResult(text=synthesized_text, sources=aggregated.sources)
-        except Exception as exc:
-            logger.debug("Evidence synthesis failed, using raw snippets: %s", exc)
-            return aggregated
-
     async def _search_all(self, keywords: list[str]) -> list[dict]:
-        """키워드별 DuckDuckGo 검색을 병렬 실행한다.
-
-        반환값: 중복 URL이 제거된 검색 결과 dict 목록.
-        키워드는 최대 10개로 상한하며, 키워드당 5초 타임아웃을 적용한다.
-        """
+        """키워드별 DuckDuckGo 검색을 병렬 실행한다."""
         loop = asyncio.get_running_loop()
         capped = [kw.strip() for kw in keywords if kw.strip()][:10]
 
@@ -232,13 +348,13 @@ class EvidenceSearchService:
             try:
                 return await asyncio.wait_for(
                     loop.run_in_executor(None, self._ddg_search, kw),
-                    timeout=5.0,
+                    timeout=8.0,
                 )
             except TimeoutError:
                 logger.warning("DDG search timed out: %s", kw)
                 return []
             except asyncio.CancelledError:
-                raise  # 취소 신호 재전파
+                raise
             except Exception as exc:
                 logger.warning("DDG search error (kw=%s): %s", kw, exc)
                 return []
@@ -256,8 +372,7 @@ class EvidenceSearchService:
         return flat
 
     def _ddg_search(self, query: str) -> list[dict]:
-        """DuckDuckGo 텍스트 검색 (동기). run_in_executor로 호출된다.
-        빈 쿼리이면 빈 리스트를 반환한다."""
+        """DuckDuckGo 텍스트 검색 (동기). run_in_executor로 호출된다."""
         if not query.strip():
             return []
         try:
@@ -266,32 +381,3 @@ class EvidenceSearchService:
         except Exception as exc:
             logger.debug("DDG '%s' failed: %s", query, exc)
             return []
-
-    def _aggregate(self, results: list[dict], exclude_urls: set[str] | None = None) -> "EvidenceResult":
-        """중복 URL 제거 후 snippet과 출처를 조합한다.
-
-        Args:
-            results: DuckDuckGo 검색 결과 목록.
-            exclude_urls: 이미 이전 턴에서 사용된 출처 URL — 크로스-턴 중복 방지.
-        """
-        # exclude_urls 포함 초기화 — 이전 턴 출처가 다시 등장해도 건너뜀
-        seen: set[str] = set(exclude_urls) if exclude_urls else set()
-        snippets: list[str] = []
-        sources: list[str] = []
-
-        for r in results:
-            url = r.get("href", "")
-            if not url or url in seen:
-                continue
-            seen.add(url)
-
-            title = r.get("title", "")
-            body = r.get("body", "")[:400]
-            if body:
-                snippets.append(f"- {title}: {body}")
-                sources.append(url)
-
-            if len(sources) >= 5:
-                break
-
-        return EvidenceResult(text="\n".join(snippets), sources=sources)
