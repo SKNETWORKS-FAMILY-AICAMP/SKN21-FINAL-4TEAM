@@ -101,15 +101,19 @@ class ReviewResult(BaseModel):
 def _strict_json_schema(model: type[BaseModel]) -> dict:
     """OpenAI strict mode용 JSON 스키마 생성.
 
-    Pydantic model_json_schema()는 $defs 내 중첩 객체에
-    additionalProperties: false를 자동 삽입하지 않음.
-    strict: True 요구사항을 충족하기 위해 모든 object 노드에 명시적으로 추가.
+    strict: True 요구사항 두 가지를 모두 충족:
+    1. 모든 object 노드에 additionalProperties: false 명시
+    2. 모든 properties를 required에 포함 (default 값 있는 필드도 포함)
     """
     schema = model.model_json_schema()
 
     def _patch(node: dict) -> None:
-        if node.get("type") == "object" and "additionalProperties" not in node:
+        if node.get("type") == "object":
             node["additionalProperties"] = False
+            # OpenAI strict: 모든 property가 required에 포함되어야 함
+            props = node.get("properties", {})
+            if props:
+                node["required"] = list(props.keys())
         for value in node.values():
             if isinstance(value, dict):
                 _patch(value)
