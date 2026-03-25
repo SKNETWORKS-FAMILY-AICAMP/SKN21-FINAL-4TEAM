@@ -245,6 +245,7 @@ class TurnExecutor:
                 web_search_tools = _build_web_search_tool(agent.provider) if topic.tools_enabled else []
                 tool_used_flag = False
                 tool_result_content = None
+                tool_raw_content = None
                 # Stage1+Stage2 합산 시간을 전체 debate_turn_timeout_seconds 이하로 제한
                 deadline = time.monotonic() + settings.debate_turn_timeout_seconds
 
@@ -301,6 +302,7 @@ class TurnExecutor:
                             else None
                         )
                         tool_result_content = search_result.format() if search_result else "검색 결과 없음"
+                        tool_raw_content = search_result.raw_content if search_result else None
                         tool_used_flag = True
                         messages.append(
                             {
@@ -380,6 +382,7 @@ class TurnExecutor:
                         "evidence": parsed.get("evidence"),
                         "tool_used": "web_search" if tool_used_flag else parsed.get("tool_used"),
                         "tool_result": tool_result_content if tool_used_flag else parsed.get("tool_result"),
+                        "tool_raw_content": tool_raw_content if tool_used_flag else None,
                     }
                 # 토픽 turn_token_limit 초과로 응답이 절삭됨 — 메타 정보만 추가
                 if usage_out.get("finish_reason") == "length" and isinstance(raw_response, dict):

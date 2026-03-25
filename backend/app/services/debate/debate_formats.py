@@ -476,7 +476,7 @@ async def _run_parallel_turns(
                         and topic.tools_enabled
                         and agent_a.provider in _TOOL_USE_PROVIDERS
                     ),
-                    tool_result=(turn_a.raw_response or {}).get("tool_result"),
+                    tool_result=(turn_a.raw_response or {}).get("tool_raw_content") or (turn_a.raw_response or {}).get("tool_result"),
                     debater_position="A (찬성)",
                     opponent_recent_history=claims_b[-2:] if claims_b else None,
                     max_turns=topic.max_turns,
@@ -535,7 +535,7 @@ async def _run_parallel_turns(
                         and topic.tools_enabled
                         and agent_b.provider in _TOOL_USE_PROVIDERS
                     ),
-                    tool_result=(turn_b.raw_response or {}).get("tool_result"),
+                    tool_result=(turn_b.raw_response or {}).get("tool_raw_content") or (turn_b.raw_response or {}).get("tool_result"),
                     debater_position="B (반대)",
                     opponent_recent_history=claims_a[-2:] if claims_a else None,
                     max_turns=topic.max_turns,
@@ -964,7 +964,7 @@ async def _run_multi_slot_turn(
             tools_available=(
                 settings.debate_tool_use_enabled and topic.tools_enabled and agent.provider in _TOOL_USE_PROVIDERS
             ),
-            tool_result=(turn.raw_response or {}).get("tool_result"),
+            tool_result=(turn.raw_response or {}).get("tool_raw_content") or (turn.raw_response or {}).get("tool_result"),
             debater_position=speaker_role.replace("agent_", "").upper() + " 측",
             opponent_recent_history=opp_claims[-2:] if opp_claims else None,
             max_turns=topic.max_turns,
