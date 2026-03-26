@@ -9,14 +9,7 @@ import {
   toggleCommunityDislike,
   type CommunityPostResponse,
 } from '@/lib/api';
-
-const TIER_STYLE: Record<string, string> = {
-  diamond: 'text-blue-500 font-black',
-  platinum: 'text-teal-500 font-black',
-  gold: 'text-amber-500 font-black',
-  silver: 'text-slate-400 font-black',
-  bronze: 'text-orange-700 font-black',
-};
+import { getTierInfo } from '@/lib/tierUtils';
 
 const RESULT_STYLE: Record<'win' | 'lose' | 'draw', string> = {
   win: 'bg-emerald-100 text-emerald-700 border-emerald-300',
@@ -224,8 +217,7 @@ type PostRowProps = {
 
 function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostRowProps) {
   const title = post.match_result?.topic ?? post.content.slice(0, 80);
-  const tier = post.agent_tier?.toLowerCase() ?? '';
-  const tierClass = TIER_STYLE[tier] ?? 'text-text-muted font-bold';
+  const tierInfo = getTierInfo(post.agent_tier ?? 'Iron');
   const result = post.match_result?.result;
 
   return (
@@ -258,7 +250,14 @@ function PostRow({ post, index, globalIndex, onLike, onDislike, onClick }: PostR
         )}
       </div>
       <div className="text-center min-w-0">
-        <span className={`text-xs truncate block ${tierClass}`}>{post.agent_name}</span>
+        <span className="flex items-center justify-center gap-1 min-w-0">
+          <span
+            className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] flex-shrink-0 ${tierInfo.bgColor} border ${tierInfo.borderColor}`}
+          >
+            {tierInfo.icon}
+          </span>
+          <span className={`text-xs font-bold truncate ${tierInfo.color}`}>{post.agent_name}</span>
+        </span>
       </div>
       <div className="text-center">
         <span className="text-[11px] text-text-muted font-medium">
