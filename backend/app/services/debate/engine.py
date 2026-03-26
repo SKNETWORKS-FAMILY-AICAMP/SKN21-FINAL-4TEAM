@@ -342,11 +342,16 @@ class DebateEngine:
         """
         if not settings.credit_system_enabled:
             return
+        if match.is_test:
+            return
 
         # 에이전트별 모델 조회 후 필요 크레딧 계산
         model_ids = {agent_a.model_id, agent_b.model_id}
         models_res = await self.db.execute(select(LLMModel).where(LLMModel.model_id.in_(model_ids)))
         models_map = {m.model_id: m for m in models_res.scalars().all()}
+
+        # A 차감 후 B 실패 시 보상 롤백을 위해 성공한 차감을 추적한다
+        deducted: list[tuple[DebateAgent, int]] = []
 
         for agent in (agent_a, agent_b):
             if not agent.use_platform_credits:
@@ -359,7 +364,19 @@ class DebateEngine:
                 .returning(User.credit_balance)
             )
             if deduct_result.fetchone() is None:
+                # 이미 차감된 에이전트 크레딧 보상 복원 — 외부 rollback 의존 제거
+                if deducted:
+                    prev_agent, prev_amount = deducted[0]
+                    await self.db.execute(
+                        update(User)
+                        .where(User.id == prev_agent.owner_id)
+                        .values(credit_balance=User.credit_balance + prev_amount)
+                    )
+                    match.credits_deducted = None
+                    await self.db.commit()
+
                 message = f"에이전트 '{agent.name}' 소유자의 크레딧이 부족합니다 (필요: {required}석)"
+                # 보상 commit 이후 발행 — 클라이언트가 DB 반영 전 이벤트를 받지 않도록 한다
                 await publish_event(
                     str(match.id),
                     "credit_insufficient",
@@ -373,8 +390,10 @@ class DebateEngine:
                 )
                 # credit_insufficient SSE를 이미 발행했으므로 error SSE 재발행 방지용 전용 예외
                 raise CreditInsufficientError(message)
+
             # 차감 성공 시 누적 기록 — _refund_credits가 이 값을 참조해 환불 금액을 결정한다
             match.credits_deducted = (match.credits_deducted or 0) + required
+            deducted.append((agent, required))
 
         await self.db.commit()
 
@@ -408,8 +427,14 @@ class DebateEngine:
         agents = agents_res.scalars().all()
         owner_ids = list({a.owner_id for a in agents if a.use_platform_credits})
         if not owner_ids:
+            # credits_deducted > 0인데 환불 대상이 없으면 데이터 불일치 — 경고만 남기고 진행한다
+            logger.warning(
+                "Match %s: credits_deducted=%s but no use_platform_credits agents found — skipping refund",
+                match.id,
+                match.credits_deducted,
+            )
             return
-        # use_platform_credits 에이전트 수로 나눠 실제 차감액 기준 환불
+        # use_platform_credits 에이전트 소유자 수로 나눠 균등 환불 (동일 owner 양쪽 소유 시 한 번만 환불)
         refund_per_owner = match.credits_deducted / len(owner_ids)
         await self.db.execute(
             update(User).where(User.id.in_(owner_ids)).values(credit_balance=User.credit_balance + refund_per_owner)
@@ -551,12 +576,26 @@ class DebateEngine:
 # ── 매치 실행 진입점 ──────────────────────────────────────────────────────────
 
 
+async def _mark_error_in_db(match_id: str) -> None:
+    """매치 상태를 error로 마킹한다. 독립 세션 사용 — 공유 세션 오염 없음."""
+    async with async_session() as db:
+        try:
+            await db.execute(
+                update(DebateMatch)
+                .where(DebateMatch.id == match_id)
+                .values(status="error", finished_at=datetime.now(UTC))
+            )
+            await db.commit()
+        except Exception:
+            logger.error("Failed to mark match %s as error in DB", match_id, exc_info=True)
+
+
 async def run_debate(match_id: str) -> None:
     """매치 실행 진입점. app-level DB 세션 풀로 백그라운드 태스크에서 호출된다.
 
     DebateEngine.run() 래핑 후 예외별 처리:
-      - CreditInsufficientError: credit_insufficient SSE 이미 발행됨 — error SSE 생략
-      - CancelledError: asyncio.shield로 DB/SSE 마킹 후 재발생
+      - CreditInsufficientError: credit_insufficient SSE 이미 발행됨 — error SSE 추가 알림
+      - CancelledError: 독립 세션(_mark_error_in_db)으로 DB 마킹 후 재발생
       - Exception: DB error 마킹 + error SSE 발행
 
     Args:
@@ -578,16 +617,7 @@ async def run_debate(match_id: str) -> None:
             await engine.run(match_id)
         except CreditInsufficientError as exc:
             logger.warning("Match %s aborted: %s", match_id, exc)
-            try:
-                await db.rollback()
-                await db.execute(
-                    update(DebateMatch)
-                    .where(DebateMatch.id == match_id)
-                    .values(status="error", finished_at=datetime.now(UTC))
-                )
-                await db.commit()
-            except Exception:
-                logger.error("Failed to mark match %s as error after credit failure", match_id)
+            await _mark_error_in_db(match_id)
             # credit_insufficient 이후 error 이벤트로 프론트에 매치 종료 명시적으로 알림
             try:
                 await publish_event(match_id, "error", {"message": str(exc), "error_type": "credit_insufficient"})
@@ -595,46 +625,34 @@ async def run_debate(match_id: str) -> None:
                 logger.warning("Failed to publish error event after credit failure for match %s", match_id)
         except asyncio.CancelledError:
             logger.warning("Debate task cancelled for match %s — marking as error", match_id)
-
-            async def _cleanup_cancelled() -> None:
-                await db.rollback()
-                await db.execute(
-                    update(DebateMatch)
-                    .where(DebateMatch.id == match_id)
-                    .values(status="error", finished_at=datetime.now(UTC))
-                )
-                await db.commit()
-                await publish_event(match_id, "error", {"message": "Match cancelled by server"})
-
             try:
-                # 단일 shield로 묶어 cleanup 전체가 원자적으로 실행되도록 보장
-                await asyncio.shield(_cleanup_cancelled())
+                # 독립 세션 사용 — 공유 db 세션 종료 후에도 안전하게 DB 마킹 완료
+                await asyncio.shield(_mark_error_in_db(match_id))
             except Exception as cleanup_exc:
                 logger.error("Cleanup failed for cancelled match %s: %s", match_id, cleanup_exc)
+            try:
+                await publish_event(match_id, "error", {"message": "Match cancelled by server"})
+            except Exception:
+                logger.warning("Failed to publish cancel SSE for match %s", match_id)
             raise
         except Exception as exc:
             logger.error("Debate engine error for match %s: %s", match_id, exc, exc_info=True)
-            db_marked = False
-            try:
-                await db.rollback()
-                await db.execute(
-                    update(DebateMatch)
-                    .where(DebateMatch.id == match_id)
-                    .values(status="error", finished_at=datetime.now(UTC))
-                )
-                await db.commit()
-                db_marked = True
-            except Exception:
-                logger.error("Failed to mark match %s as error in DB", match_id)
+            await _mark_error_in_db(match_id)
             # DB 마킹 성공 여부와 무관하게 SSE 발행 시도 — 실패해도 태스크 종료에 영향 없도록
             try:
                 await publish_event(match_id, "error", {"message": str(exc)})
             except Exception:
-                logger.warning("Failed to publish error event for match %s (db_marked=%s)", match_id, db_marked)
+                logger.warning("Failed to publish error event for match %s", match_id)
         else:
             async with async_session() as notify_db:
                 try:
-                    await NotificationService(notify_db).notify_match_event(match_id, "match_finished")
-                    await notify_db.commit()
+                    result = await notify_db.execute(
+                        select(DebateMatch).where(DebateMatch.id == match_id)
+                    )
+                    m = result.scalar_one_or_none()
+                    # forfeit/void/error로 종료된 매치는 match_finished 미발송
+                    if m and m.status == "finished":
+                        await NotificationService(notify_db).notify_match_event(match_id, "match_finished")
+                        await notify_db.commit()
                 except Exception:
                     logger.warning("Finish notification failed for match %s", match_id, exc_info=True)

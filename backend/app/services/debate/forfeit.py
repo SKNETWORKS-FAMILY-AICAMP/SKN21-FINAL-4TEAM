@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -15,6 +16,9 @@ from app.services.debate.broadcast import publish_event
 from app.services.debate.helpers import calculate_elo
 
 logger = logging.getLogger(__name__)
+
+# GC 수집 방지 — create_task() 반환 Task에 강한 참조를 유지한다
+_background_tasks: set[asyncio.Task] = set()
 
 
 class ForfeitError(Exception):
@@ -184,13 +188,12 @@ class ForfeitHandler:
             "winner_id": str(winner.id),
         })
 
-        from app.core.config import settings as _settings
-        if _settings.community_post_enabled:
-            import asyncio as _asyncio
-
+        if settings.community_post_enabled:
             from app.services.community_service import generate_community_posts_task
 
-            community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
+            community_task = asyncio.create_task(generate_community_posts_task(str(match.id)))
+            _background_tasks.add(community_task)
+            community_task.add_done_callback(_background_tasks.discard)
             community_task.add_done_callback(
                 lambda t: logger.warning("community_post_task failed (disconnect): %s", t.exception())
                 if not t.cancelled() and t.exception() else None
@@ -229,7 +232,8 @@ class ForfeitHandler:
         elo_a_before = agent_a.elo_rating
         elo_b_before = agent_b.elo_rating
 
-        match.status = "completed"
+        # handle_disconnect와 통일 — forfeit 경로는 항상 "forfeit" 상태
+        match.status = "forfeit"
         match.finished_at = datetime.now(UTC)
         match.winner_id = forfeit_winner.id
         match.score_a = score_a
@@ -263,42 +267,55 @@ class ForfeitHandler:
         await self.db.commit()
 
         for se in series_events:
-            await publish_event(str(match.id), "series_update", se)
-        await publish_event(str(match.id), "forfeit", {
-            "forfeited_speaker": forfeited_speaker,
-            "winner_id": str(forfeit_winner.id),
-            "loser_id": str(forfeit_loser.id),
-            "reason": "Turn execution failed after all retries",
-        })
+            try:
+                await publish_event(str(match.id), "series_update", se)
+            except Exception:
+                logger.warning("series_update SSE failed for match %s", match.id, exc_info=True)
 
-        await publish_event(str(match.id), "finished", {
-            "winner_id": str(forfeit_winner.id),
-            "score_a": score_a,
-            "score_b": score_b,
-            "elo_a_before": elo_a_before,
-            "elo_a_after": new_a,
-            "elo_b_before": elo_b_before,
-            "elo_b_after": new_b,
-            # 하위 호환
-            "elo_a": new_a,
-            "elo_b": new_b,
-        })
+        try:
+            await publish_event(str(match.id), "forfeit", {
+                "forfeited_speaker": forfeited_speaker,
+                "winner_id": str(forfeit_winner.id),
+                "loser_id": str(forfeit_loser.id),
+                "reason": "Turn execution failed after all retries",
+            })
+        except Exception:
+            logger.warning("forfeit SSE failed for match %s", match.id, exc_info=True)
 
+        try:
+            await publish_event(str(match.id), "finished", {
+                "winner_id": str(forfeit_winner.id),
+                "score_a": score_a,
+                "score_b": score_b,
+                "elo_a_before": elo_a_before,
+                "elo_a_after": new_a,
+                "elo_b_before": elo_b_before,
+                "elo_b_after": new_b,
+                # 하위 호환
+                "elo_a": new_a,
+                "elo_b": new_b,
+            })
+        except Exception:
+            logger.warning("finished SSE failed for match %s", match.id, exc_info=True)
+
+        # commit 후 예외 시 outer handler가 "error"로 덮어쓰지 않도록 non-fatal 처리
         match_service = DebateMatchService(self.db)
-        await match_service.resolve_predictions(
-            str(match.id),
-            str(forfeit_winner.id),
-            str(match.agent_a_id),
-            str(match.agent_b_id),
-        )
+        try:
+            await match_service.resolve_predictions(
+                str(match.id),
+                str(forfeit_winner.id),
+                str(match.agent_a_id),
+                str(match.agent_b_id),
+            )
+        except Exception:
+            logger.error("resolve_predictions failed for match %s — skipping", match.id, exc_info=True)
 
-        from app.core.config import settings as _settings
-        if _settings.community_post_enabled:
-            import asyncio as _asyncio
-
+        if settings.community_post_enabled:
             from app.services.community_service import generate_community_posts_task
 
-            community_task = _asyncio.create_task(generate_community_posts_task(str(match.id)))
+            community_task = asyncio.create_task(generate_community_posts_task(str(match.id)))
+            _background_tasks.add(community_task)
+            community_task.add_done_callback(_background_tasks.discard)
             community_task.add_done_callback(
                 lambda t: logger.warning("community_post_task failed (retry_exhaustion): %s", t.exception())
                 if not t.cancelled() and t.exception() else None
