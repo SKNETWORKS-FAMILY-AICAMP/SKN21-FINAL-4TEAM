@@ -234,7 +234,7 @@ export default function DebateTopicsPage() {
     try {
       const result = await randomMatch(randomAgentId);
       setShowRandomModal(false);
-      router.push(`/debate/topics/${result.topic_id}`);
+      router.push(`/debate/waiting/${result.topic_id}?agent=${randomAgentId}`);
     } catch (err: unknown) {
       setRandomError(err instanceof Error ? err.message : '매칭 실패');
     } finally {
