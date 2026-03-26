@@ -570,7 +570,8 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
               {recentMatches.map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-center justify-between gap-2 p-2.5 bg-bg-hover rounded-xl border border-border"
+                  onClick={() => router.push(`/debate/matches/${m.id}?replay=1`)}
+                  className="flex items-center justify-between gap-2 p-2.5 bg-bg-hover rounded-xl border border-border cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <Swords size={12} className="text-red-400 flex-shrink-0" />

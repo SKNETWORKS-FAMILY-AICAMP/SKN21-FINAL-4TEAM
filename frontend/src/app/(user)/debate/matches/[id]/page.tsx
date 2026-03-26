@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Swords } from 'lucide-react';
 import { useDebateStore } from '@/stores/debateStore';
@@ -35,6 +35,8 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default function MatchPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const autoReplay = searchParams.get('replay') === '1';
   const {
     currentMatch,
     turns,
@@ -45,9 +47,11 @@ export default function MatchPage() {
     waitingAgent,
     creditInsufficient,
     matchVoidReason,
+    startReplay,
   } = useDebateStore();
   const scorecardRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
+  const replayStartedRef = useRef(false);
   // 승급전/강등전 시리즈 상태 (SSE series_update 이벤트로 업데이트)
   const [seriesUpdate, setSeriesUpdate] = useState<PromotionSeries | null>(null);
 
@@ -63,6 +67,14 @@ export default function MatchPage() {
     const interval = setInterval(() => fetchMatch(id), 3000);
     return () => clearInterval(interval);
   }, [currentMatch?.status, id, fetchMatch]);
+
+  // ?replay=1 파라미터로 진입 시 turns 로드 완료 후 자동 리플레이 시작
+  useEffect(() => {
+    if (autoReplay && turns.length > 0 && !replayStartedRef.current) {
+      replayStartedRef.current = true;
+      startReplay();
+    }
+  }, [autoReplay, turns.length, startReplay]);
 
   // 완료된 매치에 직접 접근 시 턴 로그 로드 + 결과창 표시
   // (SSE를 통한 live 관전 없이 페이지에 진입한 경우 처리)
