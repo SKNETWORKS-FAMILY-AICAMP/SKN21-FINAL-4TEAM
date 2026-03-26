@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -34,6 +35,31 @@ def calculate_token_cost(tokens: int, cost_per_1m: Decimal) -> Decimal:
         실제 비용 (Decimal).
     """
     return Decimal(str(tokens)) * cost_per_1m / Decimal("1000000")
+
+
+
+def _extract_json_from_response(content: str) -> dict:
+    """LLM 응답에서 JSON을 추출한다.
+    
+    마크다운 코드블록으로 감싸져 있거나 순수 JSON일 수 있으므로
+    유효한 JSON을 추출하려고 시도한다.
+    
+    Args:
+        content: LLM 응답 텍스트.
+        
+    Returns:
+        파싱된 JSON 딕셔너리.
+        
+    Raises:
+        json.JSONDecodeError: JSON 파싱 실패 시.
+    """
+    # 마크다운 코드블록 제거 (```json ... ``` 또는 ``` ... ```)
+    match = re.search(r'```(?:json)?\s*([\s\S]*?)```', content)
+    if match:
+        content = match.group(1).strip()
+    
+    # JSON 파싱
+    return json.loads(content)
 
 
 class DebateMatchService:
@@ -616,7 +642,7 @@ class DebateSummaryService:
                     temperature=0.3,
                 )
 
-            parsed = json.loads(result["content"])
+            parsed = _extract_json_from_response(result["content"])
             input_tokens = result.get("input_tokens", 0)
             output_tokens = result.get("output_tokens", 0)
 
