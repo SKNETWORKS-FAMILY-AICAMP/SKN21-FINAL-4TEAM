@@ -62,6 +62,40 @@ async def _runpod_warmer() -> None:
             logger.debug("RunPod warmer ping failed (non-critical): %s", exc)
 
 
+async def _retry_missing_summaries() -> None:
+    """앱 시작 시 summary_report가 없는 completed 매치에 대해 요약 생성을 재시도한다.
+
+    컨테이너 재시작으로 백그라운드 태스크가 취소된 경우 복구용.
+    10분 이상 지난 매치만 대상 (현재 진행 중인 태스크와 겹치지 않도록).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.core.database import async_session
+    from app.models.debate_match import DebateMatch
+    from app.services.debate.match_service import generate_summary_task
+
+    await asyncio.sleep(10)  # 서버 완전 시작 대기
+
+    async with async_session() as db:
+        cutoff = datetime.now(UTC) - timedelta(minutes=10)
+        res = await db.execute(
+            select(DebateMatch.id).where(
+                DebateMatch.status == "completed",
+                DebateMatch.summary_report.is_(None),
+                DebateMatch.finished_at < cutoff,
+            ).limit(30)
+        )
+        match_ids = [str(r) for r in res.scalars().all()]
+
+    if match_ids:
+        logger.info("Retrying summary generation for %d matches", len(match_ids))
+        for match_id in match_ids:
+            asyncio.create_task(generate_summary_task(match_id))
+            await asyncio.sleep(3)  # API rate limit 방지
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 토론 자동 매칭 태스크 + WS pub/sub 리스너 시작
@@ -74,6 +108,10 @@ async def lifespan(app: FastAPI):
 
         ws_manager = WSConnectionManager.get_instance()
         await ws_manager.start_pubsub_listener()
+
+    # 컨테이너 재시작으로 취소된 요약 태스크 복구
+    if settings.debate_summary_enabled:
+        asyncio.create_task(_retry_missing_summaries())
 
     # RunPod 콜드스타트 방지 워머 (runpod_api_key·endpoint_id 미설정 시 내부에서 즉시 반환)
     asyncio.create_task(_runpod_warmer())
