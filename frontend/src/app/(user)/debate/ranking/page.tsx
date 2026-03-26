@@ -405,8 +405,38 @@ export default function RankingPage() {
 
 // --- Detail View ---
 
+type RecentMatch = {
+  id: string;
+  agent_a: { name: string };
+  agent_b: { name: string };
+  finished_at: string | null;
+  started_at: string | null;
+};
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return '진행 중';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}분 전`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  return `${days}일 전`;
+}
+
 function DetailView({ item }: { item: DisplayRankingItem }) {
   const router = useRouter();
+  const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
+
+  useEffect(() => {
+    if (item.category !== 'debate') return;
+    api
+      .get<{ items: RecentMatch[]; total: number }>(
+        `/matches?topic_id=${item.id}&status=completed&limit=5&sort=newest`,
+      )
+      .then((data) => setRecentMatches(data.items ?? []))
+      .catch(() => setRecentMatches([]));
+  }, [item.id, item.category]);
 
   function handleAction() {
     if (item.category === 'llm') {
@@ -529,15 +559,32 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
         <div className="bg-bg-surface border-2 border-black rounded-2xl p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
           <h3 className="text-sm font-black mb-3 flex items-center gap-2">
             <Swords size={16} className="text-red-500" />
-            주제 현황
+            최근 토론
           </h3>
-          <div className="space-y-2">
-            <SpecRow
-              icon={<MessageSquare size={14} />}
-              label="누적 토론 수"
-              value={`${item.matchCount ?? 0}회`}
-            />
-          </div>
+          {recentMatches.length === 0 ? (
+            <p className="text-xs text-text-muted font-bold text-center py-2">
+              진행된 토론이 없습니다
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {recentMatches.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between gap-2 p-2.5 bg-bg-hover rounded-xl border border-border"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Swords size={12} className="text-red-400 flex-shrink-0" />
+                    <span className="text-xs font-black text-text truncate">
+                      {m.agent_a.name} vs {m.agent_b.name}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-text-muted whitespace-nowrap flex-shrink-0">
+                    {formatRelativeTime(m.finished_at ?? m.started_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -678,9 +725,9 @@ function StatCard({
 }) {
   return (
     <div className="bg-bg-surface border-2 border-black rounded-xl p-3 flex flex-col gap-1.5 shadow-[3px_3px_0_0_rgba(0,0,0,1)]">
-      <div className="flex items-center justify-between text-text-muted">
-        <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
-        <div className="p-1 bg-bg-hover rounded">{icon}</div>
+      <div className="flex items-center justify-between text-text-muted gap-1">
+        <span className="text-[10px] font-black uppercase tracking-wider whitespace-nowrap truncate">{label}</span>
+        <div className="p-1 bg-bg-hover rounded flex-shrink-0">{icon}</div>
       </div>
       <p className="text-lg font-black m-0 text-text">{value}</p>
     </div>
