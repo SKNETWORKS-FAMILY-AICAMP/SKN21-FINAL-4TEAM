@@ -255,12 +255,18 @@ export const TurnBubble = memo(function TurnBubble({
                 <ChevronRight size={11} className="text-emerald-500 ml-auto" />
               )}
             </button>
-            {toolExpanded && turn.tool_result && (
+            {toolExpanded && (
               <div className="px-2.5 pb-2 border-t border-emerald-500/20">
-                <p className="text-[10px] text-text-muted mt-1 mb-0.5">실행 결과</p>
-                <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono bg-bg rounded p-1.5 overflow-x-auto">
-                  {turn.tool_result}
-                </pre>
+                {turn.tool_result ? (
+                  <>
+                    <p className="text-[10px] text-text-muted mt-1 mb-0.5">실행 결과</p>
+                    <pre className="text-xs text-text-secondary whitespace-pre-wrap font-mono bg-bg rounded p-1.5 overflow-x-auto">
+                      {turn.tool_result}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-text-muted mt-1.5">검색 결과를 가져오지 못했습니다.</p>
+                )}
               </div>
             )}
           </div>

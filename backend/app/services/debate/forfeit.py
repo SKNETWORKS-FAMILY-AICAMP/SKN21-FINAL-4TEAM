@@ -235,6 +235,18 @@ class ForfeitHandler:
         match.score_a = score_a
         match.score_b = score_b
 
+        # 부전패 scorecard — Scorecard UI에 판정 사유 표시용 (LLM 판정 없이 즉시 종료된 경우)
+        _full = {"argumentation": 40, "rebuttal": 35, "strategy": 25}
+        _zero = {"argumentation": 0, "rebuttal": 0, "strategy": 0}
+        match.scorecard = {
+            "agent_a": _zero if forfeited_speaker == "agent_a" else _full,
+            "agent_b": _zero if forfeited_speaker == "agent_b" else _full,
+            "reasoning": (
+                f"부전패: {forfeit_loser.name}이(가) 발언에 실패하여 모든 재시도 기회를 소진했습니다. "
+                f"{forfeit_winner.name}의 불전승으로 처리됩니다."
+            ),
+        }
+
         version_a_id = str(match.agent_a_version_id) if match.agent_a_version_id else None
         version_b_id = str(match.agent_b_version_id) if match.agent_b_version_id else None
 
