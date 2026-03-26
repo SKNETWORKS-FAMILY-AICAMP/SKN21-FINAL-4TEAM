@@ -70,9 +70,10 @@ class MatchFinalizer:
         )
 
         # 2. ELO 계산
-        if judgment["winner_id"] == match.agent_a_id:
+        winner_id_str = str(judgment["winner_id"]) if judgment["winner_id"] else None
+        if winner_id_str == str(match.agent_a_id):
             elo_result = "a_win"
-        elif judgment["winner_id"] == match.agent_b_id:
+        elif winner_id_str == str(match.agent_b_id):
             elo_result = "b_win"
         else:
             elo_result = "draw"

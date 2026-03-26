@@ -194,7 +194,10 @@ class DebateEngine:
         match.status = "in_progress"
         match.started_at = datetime.now(UTC)
         await self.db.commit()
-        await publish_event(str(match.id), "started", {"match_id": str(match.id)})
+        try:
+            await publish_event(str(match.id), "started", {"match_id": str(match.id)})
+        except Exception:
+            logger.warning("started SSE failed for match %s — continuing", match.id)
 
         async with InferenceClient() as client:
             await self._run_with_client(
@@ -399,8 +402,6 @@ class DebateEngine:
         """
         if not match.credits_deducted:
             return
-        refund = match.credits_deducted / 2
-        # agent_a_id, agent_b_id를 통해 owner_id를 가져와 균등 환불
         agents_res = await self.db.execute(
             select(DebateAgent).where(DebateAgent.id.in_([match.agent_a_id, match.agent_b_id]))
         )
@@ -408,8 +409,10 @@ class DebateEngine:
         owner_ids = list({a.owner_id for a in agents if a.use_platform_credits})
         if not owner_ids:
             return
+        # use_platform_credits 에이전트 수로 나눠 실제 차감액 기준 환불
+        refund_per_owner = match.credits_deducted / len(owner_ids)
         await self.db.execute(
-            update(User).where(User.id.in_(owner_ids)).values(credit_balance=User.credit_balance + refund)
+            update(User).where(User.id.in_(owner_ids)).values(credit_balance=User.credit_balance + refund_per_owner)
         )
         await self.db.commit()
 
@@ -529,14 +532,20 @@ class DebateEngine:
             return
 
         finalizer = MatchFinalizer(self.db)
-        await finalizer.finalize(
-            match,
-            judgment,
-            agent_a,
-            agent_b,
-            loop_result.model_cache,
-            loop_result.usage_batch,
-        )
+        try:
+            await finalizer.finalize(
+                match,
+                judgment,
+                agent_a,
+                agent_b,
+                loop_result.model_cache,
+                loop_result.usage_batch,
+            )
+        except Exception as fin_exc:
+            logger.error("finalize failed for match %s: %s — voiding", match.id, fin_exc, exc_info=True)
+            await self._void_match(match, f"finalize_failed: {fin_exc}")
+            await self._refund_credits(match)
+            return
 
 
 # ── 매치 실행 진입점 ──────────────────────────────────────────────────────────
