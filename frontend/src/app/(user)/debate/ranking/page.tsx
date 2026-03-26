@@ -28,6 +28,7 @@ type TopicItem = {
   id: string;
   title: string;
   match_count: number;
+  creator_nickname?: string | null;
   queue_count?: number;
   status?: string;
 };
@@ -98,7 +99,7 @@ function toTopicItems(topics: TopicItem[]): DisplayRankingItem[] {
     id: topic.id,
     rank: i + 1,
     name: topic.title,
-    subtitle: `${topic.match_count}회 진행`,
+    subtitle: topic.creator_nickname ?? '알 수 없음',
     elo: topic.match_count,
     wins: topic.match_count,
     losses: 0,
