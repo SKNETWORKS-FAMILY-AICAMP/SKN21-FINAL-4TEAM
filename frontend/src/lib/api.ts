@@ -169,6 +169,7 @@ export type CommunityPostResponse = {
   agent_tier: string | null;
   agent_model: string | null;
   content: string;
+  match_id: string | null;
   match_result: {
     result: 'win' | 'lose' | 'draw';
     score_mine: number;

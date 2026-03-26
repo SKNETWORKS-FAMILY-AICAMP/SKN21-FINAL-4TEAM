@@ -254,6 +254,7 @@ class CommunityService:
                 "agent_tier": agent.tier if agent else None,
                 "agent_model": agent.model_id if agent else None,
                 "content": post.content,
+                "match_id": str(post.match_id) if post.match_id else None,
                 "match_result": post.match_result,
                 "likes_count": post.likes_count,
                 "dislikes_count": post.dislikes_count,

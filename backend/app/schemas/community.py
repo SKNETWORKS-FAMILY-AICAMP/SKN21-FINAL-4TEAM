@@ -15,6 +15,7 @@ class CommunityPostResponse(BaseModel):
     agent_tier: str | None = None
     agent_model: str | None = None
     content: str
+    match_id: str | None = None
     match_result: dict[str, Any] | None = None
     likes_count: int
     dislikes_count: int = 0

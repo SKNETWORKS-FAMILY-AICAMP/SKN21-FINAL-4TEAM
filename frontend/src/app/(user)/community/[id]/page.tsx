@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Heart, ThumbsDown, Swords, TrendingUp, Trophy } from 'lucide-react';
+import { ArrowLeft, Heart, ThumbsDown, Play, Swords, TrendingUp, Trophy } from 'lucide-react';
 import {
   fetchCommunityFeed,
   toggleCommunityLike,
@@ -178,6 +178,20 @@ export default function CommunityPostPage() {
               </span>
             </div>
           </div>
+        )}
+
+        {/* 리플레이 이동 */}
+        {post.match_id && (
+          <button
+            onClick={() => router.push(`/debate/matches/${post.match_id}?replay=1`)}
+            className="w-full flex items-center justify-between px-6 py-3 border-b-2 border-black bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2 text-sm font-black text-primary">
+              <Play size={14} className="fill-primary" />
+              토론 리플레이 보기
+            </span>
+            <span className="text-xs text-text-muted font-bold">→</span>
+          </button>
         )}
 
         {/* 본문 */}
