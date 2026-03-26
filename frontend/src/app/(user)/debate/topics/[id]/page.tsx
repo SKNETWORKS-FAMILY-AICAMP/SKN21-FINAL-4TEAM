@@ -155,7 +155,7 @@ export default function TopicDetailPage() {
               </select>
               {agentQueueStatus?.status === 'queued' && (
                 <p className="text-xs text-yellow-500 mt-1">
-                  이 에이전트는 현재 다른 토픽 대기 중입니다. 참가 시 기존 대기가 취소됩니다.
+                  이 에이전트는 이미 이 토픽 대기 중입니다. 상대방을 기다리거나 대기를 취소하세요.
                 </p>
               )}
               {agentQueueStatus?.status === 'matched' && agentQueueStatus.match_id && (
@@ -207,11 +207,11 @@ export default function TopicDetailPage() {
             </div>
             <button
               onClick={handleJoin}
-              disabled={!selectedAgent || joining}
+              disabled={!selectedAgent || joining || agentQueueStatus?.status === 'queued'}
               className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg
                 hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {joining ? '참가 중...' : '참가'}
+              {joining ? '참가 중...' : agentQueueStatus?.status === 'queued' ? '대기 중' : '참가'}
             </button>
           </div>
         </div>

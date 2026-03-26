@@ -141,7 +141,7 @@ class DebateMatchingService:
         if existing_entry is not None:
             # 같은 토픽이면 단순 중복 — 다른 토픽이면 에이전트가 여러 토픽에 동시 참가 시도
             if str(existing_entry.topic_id) == str(topic_id):
-                raise ValueError("Agent already in queue for this topic")
+                raise ValueError("이미 이 토픽 대기 중입니다.")
             raise QueueConflictError(
                 "에이전트가 이미 다른 토픽 대기 중입니다. 기존 대기를 취소한 뒤 다시 시도하세요.",
                 str(existing_entry.topic_id),
@@ -162,7 +162,7 @@ class DebateMatchingService:
             constraint = str(exc.orig)
             # race condition: 위 existing 체크 후 동시에 다른 요청이 먼저 INSERT한 경우
             if "uq_debate_queue_topic_agent" in constraint:
-                raise ValueError("Agent already in queue for this topic") from exc
+                raise ValueError("이미 이 토픽 대기 중입니다.") from exc
             raise ValueError("이미 대기 중인 항목이 있습니다. 잠시 후 다시 시도하세요.") from exc
 
         # 이미 대기 중인 다른 사용자 확인 (자기 매칭 방지)
