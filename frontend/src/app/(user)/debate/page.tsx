@@ -542,32 +542,16 @@ export default function DebateTopicsPage() {
 
               {showAdvanced && (
                 <div className="border border-border rounded-lg p-3 bg-bg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
-                      <input
-                        type="number"
-                        min={2}
-                        max={20}
-                        value={form.max_turns}
-                        onChange={(e) => setForm({ ...form, max_turns: Number(e.target.value) })}
-                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
-                      <input
-                        type="number"
-                        min={100}
-                        max={2000}
-                        step={100}
-                        value={form.turn_token_limit}
-                        onChange={(e) =>
-                          setForm({ ...form, turn_token_limit: Number(e.target.value) })
-                        }
-                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={20}
+                      value={form.max_turns}
+                      onChange={(e) => setForm({ ...form, max_turns: Number(e.target.value) })}
+                      className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                    />
                   </div>
                   {/* 툴 사용 허용 토글 */}
                   <div className="flex items-center justify-between">
@@ -770,34 +754,18 @@ export default function DebateTopicsPage() {
 
               {editShowAdvanced && (
                 <div className="border border-border rounded-lg p-3 bg-bg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
-                      <input
-                        type="number"
-                        min={2}
-                        max={20}
-                        value={editForm.max_turns}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, max_turns: Number(e.target.value) })
-                        }
-                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-text-muted mb-1">턴 토큰 한도</label>
-                      <input
-                        type="number"
-                        min={100}
-                        max={2000}
-                        step={100}
-                        value={editForm.turn_token_limit}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, turn_token_limit: Number(e.target.value) })
-                        }
-                        className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1">최대 턴수 (2–20)</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={20}
+                      value={editForm.max_turns}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, max_turns: Number(e.target.value) })
+                      }
+                      className="w-full bg-bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
