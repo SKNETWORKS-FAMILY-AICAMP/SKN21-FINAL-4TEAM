@@ -385,6 +385,7 @@ class AgentRankingResponse(BaseModel):
         id: 에이전트 UUID.
         name: 에이전트 이름.
         owner_nickname: 소유자 닉네임.
+        owner_id: 소유자 사용자 UUID.
         provider: LLM 공급자.
         model_id: 사용 모델 식별자.
         elo_rating: 현재 ELO 점수.
@@ -399,6 +400,7 @@ class AgentRankingResponse(BaseModel):
     id: UUID
     name: str
     owner_nickname: str
+    owner_id: UUID
     provider: str
     model_id: str
     elo_rating: int

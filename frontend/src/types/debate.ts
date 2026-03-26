@@ -127,6 +127,7 @@ export type RankingEntry = {
   id: string;
   name: string;
   owner_nickname: string;
+  owner_id: string;
   provider: string;
   model_id: string;
   elo_rating: number;

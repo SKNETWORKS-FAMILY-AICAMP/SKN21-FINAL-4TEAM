@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useDebateStore } from '@/stores/debateStore';
+import { useUserStore } from '@/stores/userStore';
 import type { RankingEntry } from '@/types/debate';
 
 // --- Types ---
@@ -68,11 +69,12 @@ type DisplayRankingItem = {
   win_rate?: number | null;
   // 인기 토론 주제 전용
   matchCount?: number;
+  isMyAgent?: boolean;
 };
 
 // --- Converters ---
 
-function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
+function toAgentItems(entries: RankingEntry[], userId?: string): DisplayRankingItem[] {
   return [...entries]
     .sort((a, b) => b.elo_rating - a.elo_rating)
     .map((entry, i) => {
@@ -90,6 +92,7 @@ function toAgentItems(entries: RankingEntry[]): DisplayRankingItem[] {
         tier: entry.tier ?? 'B',
         category: 'agent' as const,
         image_url: entry.image_url ?? null,
+        isMyAgent: !!userId && entry.owner_id === userId,
       };
     });
 }
@@ -207,6 +210,7 @@ export default function RankingPage() {
   const ranking = useDebateStore((s) => s.ranking);
   const rankingLoading = useDebateStore((s) => s.rankingLoading);
   const fetchRanking = useDebateStore((s) => s.fetchRanking);
+  const { user } = useUserStore();
 
   useEffect(() => {
     fetchRanking();
@@ -220,13 +224,13 @@ export default function RankingPage() {
 
     setTopicsLoading(true);
     api
-      .get<{ items: TopicItem[] }>('/topics?sort=matches&page_size=10')
+      .get<{ items: TopicItem[] }>('/topics?sort=matches&page_size=50')
       .then((res) => setTopics(res.items ?? []))
       .catch(() => {})
       .finally(() => setTopicsLoading(false));
   }, [fetchRanking]);
 
-  const agentItems = useMemo(() => toAgentItems(ranking), [ranking]);
+  const agentItems = useMemo(() => toAgentItems(ranking, user?.id), [ranking, user?.id]);
   const matchItems = useMemo(() => toTopicItems(topics), [topics]);
   const llmItems = useMemo(() => toLLMItems(models), [models]);
 
@@ -631,6 +635,8 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
 
 // --- Sub-components ---
 
+const VISIBLE_COUNT = 10;
+
 function CompactColumn({
   title,
   items,
@@ -647,6 +653,10 @@ function CompactColumn({
   statValue: (item: DisplayRankingItem) => string;
   onTitleClick?: () => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? items : items.slice(0, VISIBLE_COUNT);
+  const hiddenCount = items.length - VISIBLE_COUNT;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
@@ -668,46 +678,71 @@ function CompactColumn({
               <p className="font-bold text-sm">데이터 없음</p>
             </div>
           ) : (
-            items.map((item, idx) => {
-              const bgColor =
-                item.rank === 1
-                  ? 'bg-yellow-500/15'
-                  : item.rank === 2
-                    ? 'bg-slate-400/15'
-                    : item.rank === 3
-                      ? 'bg-amber-600/15'
-                      : 'bg-bg';
-              const rankColor =
-                item.rank === 1
-                  ? 'text-yellow-500'
-                  : item.rank === 2
-                    ? 'text-gray-400'
-                    : item.rank === 3
-                      ? 'text-amber-600'
-                      : 'text-gray-400';
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => onSelect(item)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer ${bgColor}`}
-                >
-                  <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
-                    {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
-                  </span>
-                  <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <p className="text-sm font-black text-text m-0 truncate leading-tight">
-                      {item.name}
-                    </p>
-                    <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
-                  </div>
-                  <div className="flex items-center shrink-0">
-                    <span className="text-sm font-black text-primary tracking-tighter">
-                      {statValue(item)}
+            <>
+              {visible.map((item, idx) => {
+                const isHighlighted = item.isMyAgent;
+                const bgColor = isHighlighted
+                  ? 'bg-primary/10 border border-primary/30'
+                  : item.rank === 1
+                    ? 'bg-yellow-500/15'
+                    : item.rank === 2
+                      ? 'bg-slate-400/15'
+                      : item.rank === 3
+                        ? 'bg-amber-600/15'
+                        : 'bg-bg';
+                const rankColor =
+                  item.rank === 1
+                    ? 'text-yellow-500'
+                    : item.rank === 2
+                      ? 'text-gray-400'
+                      : item.rank === 3
+                        ? 'text-amber-600'
+                        : 'text-gray-400';
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => onSelect(item)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer ${bgColor}`}
+                  >
+                    <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
+                      {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}
                     </span>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-sm font-black text-text m-0 truncate leading-tight">
+                        {item.name}
+                        {isHighlighted && (
+                          <span className="ml-1.5 text-[9px] font-black text-primary bg-primary/10 px-1 py-0.5 rounded">
+                            내 에이전트
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-gray-400 m-0 leading-tight">@{item.subtitle}</p>
+                    </div>
+                    <div className="flex items-center shrink-0">
+                      <span className="text-sm font-black text-primary tracking-tighter">
+                        {statValue(item)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+              {!showAll && hiddenCount > 0 && (
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="mt-1 w-full py-2 text-xs font-black text-text-muted hover:text-primary border border-dashed border-border hover:border-primary/50 rounded-xl transition-colors"
+                >
+                  더 보기 (+{hiddenCount})
+                </button>
+              )}
+              {showAll && items.length > VISIBLE_COUNT && (
+                <button
+                  onClick={() => setShowAll(false)}
+                  className="mt-1 w-full py-2 text-xs font-black text-text-muted hover:text-primary border border-dashed border-border hover:border-primary/50 rounded-xl transition-colors"
+                >
+                  접기
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
