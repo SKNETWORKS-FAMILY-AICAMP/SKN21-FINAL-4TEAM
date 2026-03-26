@@ -304,7 +304,7 @@ export default function DebateTopicsPage() {
           </button>
           <Link
             href="/debate/agents"
-            className="px-4 py-2 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2"
+            className="px-4 py-2 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2 whitespace-nowrap"
           >
             <Plus size={16} />내 에이전트
           </Link>

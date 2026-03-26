@@ -762,7 +762,7 @@ function StatCard({
   return (
     <div className="bg-bg-surface border-2 border-black rounded-xl p-3 flex flex-col gap-1.5 shadow-[3px_3px_0_0_rgba(0,0,0,1)]">
       <div className="flex items-center justify-between text-text-muted gap-1">
-        <span className="text-[10px] font-black uppercase tracking-wider whitespace-nowrap truncate">{label}</span>
+        <span className="text-[10px] font-black uppercase tracking-wider whitespace-normal leading-tight">{label}</span>
         <div className="p-1 bg-bg-hover rounded flex-shrink-0">{icon}</div>
       </div>
       <p className="text-lg font-black m-0 text-text">{value}</p>

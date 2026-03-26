@@ -385,6 +385,10 @@ class DebateMatchService:
             from app.core.config import settings as _s
             if not _s.debate_summary_enabled:
                 return {"status": "unavailable"}
+            # 매치 완료 후 5분 이상 지났음에도 요약 없으면 생성 실패로 간주
+            from datetime import UTC, datetime, timedelta
+            if match.finished_at and (datetime.now(UTC) - match.finished_at) > timedelta(minutes=5):
+                return {"status": "unavailable"}
             return {"status": "generating"}
         return {"status": "ready", **match.summary_report}
 
