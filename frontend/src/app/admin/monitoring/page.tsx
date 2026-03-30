@@ -20,6 +20,8 @@ type LogEntry = {
   llm_model_id: string | null;
   model_name: string | null;
   model_provider: string | null;
+  match_id: string | null;
+  topic_title: string | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -35,6 +37,8 @@ type LogDetail = {
   cost: number;
   created_at: string;
   session_id: string | null;
+  match_id: string | null;
+  topic_title: string | null;
 };
 
 export default function AdminMonitoringPage() {
@@ -91,6 +95,18 @@ export default function AdminMonitoringPage() {
       render: (val: unknown) => new Date(String(val)).toLocaleString('ko-KR'),
     },
     { key: 'user_nickname' as const, label: '사용자' },
+    {
+      key: 'topic_title' as const,
+      label: '토론 주제',
+      render: (val: unknown) =>
+        val ? (
+          <span className="text-xs font-medium truncate max-w-[140px] inline-block" title={String(val)}>
+            {String(val)}
+          </span>
+        ) : (
+          <span className="text-text-muted text-xs">—</span>
+        ),
+    },
     {
       key: 'model_name' as const,
       label: '모델',
@@ -195,6 +211,12 @@ export default function AdminMonitoringPage() {
                     : '-'
                 }
               />
+              {(selectedLog.topic_title || logDetail?.topic_title) && (
+                <DetailRow
+                  label="토론 주제"
+                  value={logDetail?.topic_title ?? selectedLog.topic_title ?? '-'}
+                />
+              )}
 
               <div className="border-t border-border my-1" />
 

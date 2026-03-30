@@ -1,3 +1,67 @@
+## [2026-03-30] 관리자 UI 개선 — 대시보드·모델 관리·모니터링
+
+### Fixed
+
+- **대시보드 최근 활동** — 플레이스홀더만 표시되던 "최근 활동" 섹션에 실제 데이터 연동 (최근 가입 사용자 5명 + 최근 매치 5건)
+- **비활성 모델 사용자 노출** — 에이전트 생성 폼에서 하드코딩된 모델 목록 대신 `GET /api/models` API로 동적 fetch, 관리자가 비활성화한 모델은 사용자 드롭다운에서 자동 제외 (하드코딩 폴백 유지)
+- **"비활성" 버튼 폭** — 관리자 LLM 모델 관리 페이지에서 "활성"/"비활성" 텍스트 길이 차이로 버튼 크기가 변하는 문제 수정 (`min-w-[4rem]` 적용)
+- **`monitoring.py`** — `now.replace()` 반환값 미사용 버그 수정
+
+### Added
+
+- **모니터링 토론 주제 연동** — `token_usage_logs`에 `match_id` FK 컬럼 추가, LLM 호출 로그에 토론 주제명 표시 (테이블 컬럼 + 상세 모달)
+- **마이그레이션** `r9s0t1u2v3w4` — `token_usage_logs.match_id` 컬럼 추가
+
+---
+
+## [2026-03-26] 엔진 안정성·랭킹·커뮤니티·매칭 UX 개선
+
+### Fixed
+
+- **`engine.py` / `forfeit.py`** — 세션 격리·보상 롤백·GC 안전 처리 등 엔진 안정성 전반 개선
+- **`forfeit.py` / UI** — 부전패 판정 사유 프론트엔드 표시, 웹 검색 결과 폴백 UI 추가
+- **`engine.py`** — 요약 생성 시 마크다운 래핑된 JSON 응답 파싱 오류 해결
+- **`engine.py`** — 앱 시작 시 요약 미생성 매치 자동 재시도 로직 추가
+- **`matching.py` / `topics`** — 랜덤 매칭 후 중복 참가 에러 및 UX 혼선 수정, 토픽 상세 대신 대기방으로 직접 이동
+- **`engine.py` / `finalizer.py`** — 크레딧 환불 버그·ELO 오산정·SSE 격리 수정
+- **ranking UI** — 인기 토론 상세 UI 수정(StatCard 줄바꿈·최근 토론 목록), subtitle 주제 작성자 닉네임으로 교체, 인기 토론 순위 주제별 누적 매치 수 기준 재구현
+
+### Added
+
+- **`community`** — 게시글 상세에서 토론 리플레이 바로 보기, 에이전트 이름에 티어 아이콘 뱃지 표시
+- **ranking** — 컬럼 10개 제한·내 에이전트 하이라이트·더 보기 버튼, 최근 토론 행 클릭 시 리플레이 자동 시작
+
+### Removed
+
+- **`topics`** — 고급 설정에서 턴 토큰 한도 필드 제거
+
+---
+
+## [2026-03-25] 토론 엔진 버그 수정·Tool Use·debate_formats 리팩토링
+
+### Fixed
+
+- **`orchestrator.py`** — OpenAI strict mode schema 오류 수정, required 배열 누락 수정
+- **`evidence_search.py`** — search_by_query LLM 합성 누락으로 영어 raw 내용 출력되던 버그 수정
+- **`debate_engine.py`** — 부전패·점수일관성·claim오염·근거무관 버그 4건 수정
+- **`debate_engine.py`** — run_turns_multi agent cache miss 시 claims 인덱스 불일치 수정
+- **`engine.py` / `orchestrator.py` / `finalizer.py`** — auto-walkthrough 합의 버그 3건 수정
+- **`orchestrator.py` / `judge.py`** — off_topic 심각도 기준 추가, minor 위반 Judge 가시성 확보
+- **`config.py`** — `debate_forfeit_on_severe_streak` 5 → 3 조정
+- **`debate.py`** — `tool_used` / `tool_result` 컬럼을 `DebateTurnLog` 생성 시 직접 세팅
+
+### Added
+
+- **`evidence_search.py`** — `EvidenceResult`에 `raw_content` 필드 추가 및 오케스트레이터 교차검증 연결
+- **`evidence_search.py`** — Tool Use: URL 실제 fetch + 본문 기반 근거 합성
+- **debate UI** — Tool Use 사용 여부를 헤더 뱃지로 실시간 표시
+
+### Refactored
+
+- **`debate_formats.py`** — god-file 분리 (1262→255줄): `format_1v1.py` / `format_multi.py` 분리
+
+---
+
 ## [2026-03-24] dev-guide 최신화 — 테이블 수·마이그레이션·서비스·스토어 목록 갱신
 
 ### Changed

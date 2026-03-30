@@ -179,6 +179,7 @@ async def _log_orchestrator_usage(
     output_tokens: int,
     model_cache: dict | None = None,
     usage_batch: list | None = None,
+    match_id: uuid.UUID | None = None,
 ) -> None:
     """오케스트레이터 LLM 호출 토큰을 token_usage_logs에 기록한다.
 
@@ -194,6 +195,7 @@ async def _log_orchestrator_usage(
         output_tokens: 출력 토큰 수.
         model_cache: model_id → LLMModel 캐시 dict. None이면 매번 DB 조회.
         usage_batch: 배치 INSERT용 TokenUsageLog 목록. None이면 즉시 INSERT.
+        match_id: 연관된 토론 매치 UUID. None이면 매치 외 호출.
     """
     if input_tokens == 0 and output_tokens == 0:
         return
@@ -218,6 +220,7 @@ async def _log_orchestrator_usage(
     log = TokenUsageLog(
         user_id=user_id,
         session_id=None,
+        match_id=match_id,
         llm_model_id=model.id,
         input_tokens=input_tokens,
         output_tokens=output_tokens,

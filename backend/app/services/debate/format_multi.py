@@ -103,6 +103,7 @@ async def _run_multi_slot_turn(
             db, agent.owner_id, review.get("model_id", ""),
             review["input_tokens"], review["output_tokens"],
             model_cache=model_cache, usage_batch=usage_batch,
+            match_id=match.id,
         )
         fallback_reason = review.get("fallback_reason")
         if control_plane and fallback_reason:

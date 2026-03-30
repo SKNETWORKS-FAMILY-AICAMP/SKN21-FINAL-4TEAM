@@ -268,7 +268,7 @@ export default function AdminModelsPage() {
             e.stopPropagation();
             toggleActive(row.id, row.is_active);
           }}
-          className={`py-1 px-3 rounded-badge border-none text-white text-xs font-semibold cursor-pointer ${
+          className={`py-1 px-3 min-w-[4rem] text-center rounded-badge border-none text-white text-xs font-semibold cursor-pointer ${
             row.is_active ? 'bg-success' : 'bg-text-muted'
           }`}
         >

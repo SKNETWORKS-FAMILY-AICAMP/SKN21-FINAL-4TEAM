@@ -67,6 +67,7 @@ class MatchFinalizer:
             self.db, agent_a.owner_id, judgment.get("model_id", ""),
             judgment["input_tokens"], judgment["output_tokens"],
             model_cache=model_cache, usage_batch=usage_batch,
+            match_id=match.id,
         )
 
         # 2. ELO 계산

@@ -236,6 +236,7 @@ async def _run_parallel_turns(
                     db, agent_b.owner_id, review_prev_b.get("model_id", ""),
                     review_prev_b["input_tokens"], review_prev_b["output_tokens"],
                     model_cache=model_cache, usage_batch=usage_batch,
+                    match_id=match.id,
                 )
                 fallback_reason = review_prev_b.get("fallback_reason")
                 if control_plane and fallback_reason:
@@ -429,6 +430,7 @@ async def _run_parallel_turns(
                 db, agent_a.owner_id, review_a.get("model_id", ""),
                 review_a["input_tokens"], review_a["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
+                match_id=match.id,
             )
             fallback_reason = review_a.get("fallback_reason")
             if control_plane and fallback_reason:
@@ -504,6 +506,7 @@ async def _run_parallel_turns(
                 db, agent_b.owner_id, review_last_b.get("model_id", ""),
                 review_last_b["input_tokens"], review_last_b["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
+                match_id=match.id,
             )
             fallback_reason = review_last_b.get("fallback_reason")
             if control_plane and fallback_reason:
@@ -656,6 +659,7 @@ async def _run_sequential_turns(
                 db, agent_a.owner_id, review_a.get("model_id", ""),
                 review_a["input_tokens"], review_a["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
+                match_id=match.id,
             )
         else:
             review_a = None
@@ -746,6 +750,7 @@ async def _run_sequential_turns(
                 db, agent_b.owner_id, review_b.get("model_id", ""),
                 review_b["input_tokens"], review_b["output_tokens"],
                 model_cache=model_cache, usage_batch=usage_batch,
+                match_id=match.id,
             )
         else:
             review_b = None

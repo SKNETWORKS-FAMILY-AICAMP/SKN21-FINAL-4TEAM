@@ -394,7 +394,9 @@ class TurnExecutor:
 
         # BYOK 에이전트 턴 토큰 사용량 기록 (테스트 매치 포함)
         if agent.provider != "local":
-            await _log_orchestrator_usage(self.db, agent.owner_id, agent.model_id, input_tokens, output_tokens)
+            await _log_orchestrator_usage(
+                self.db, agent.owner_id, agent.model_id, input_tokens, output_tokens, match_id=match.id
+            )
 
         _tool_used = raw_response.get("tool_used") if isinstance(raw_response, dict) else None
         _tool_result = raw_response.get("tool_result") if isinstance(raw_response, dict) else None

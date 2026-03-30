@@ -80,6 +80,38 @@ const MODEL_OPTIONS: Record<string, { value: string; label: string; ctx: string 
 
 const BYOK_PROVIDERS = ['openai', 'anthropic', 'google'];
 
+type ApiModel = {
+  id: string;
+  provider: string;
+  model_id: string;
+  display_name: string;
+  max_context_length: number;
+  is_active: boolean;
+  tier: string;
+};
+
+function formatCtx(maxContextLength: number): string {
+  if (maxContextLength >= 1_000_000) {
+    return `${Math.round(maxContextLength / 1_000_000)}M`;
+  }
+  return `${Math.round(maxContextLength / 1_000)}K`;
+}
+
+function groupModelsByProvider(
+  apiModels: ApiModel[],
+): Record<string, { value: string; label: string; ctx: string }[]> {
+  const grouped: Record<string, { value: string; label: string; ctx: string }[]> = {};
+  for (const m of apiModels) {
+    if (!grouped[m.provider]) grouped[m.provider] = [];
+    grouped[m.provider].push({
+      value: m.model_id,
+      label: m.display_name,
+      ctx: formatCtx(m.max_context_length),
+    });
+  }
+  return grouped;
+}
+
 // 편집 모드에서의 단계
 type EditMode = 'byok' | 'local' | 'template';
 
@@ -90,6 +122,9 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   const [step, setStep] = useState<1 | 2>(isEdit ? 2 : 1);
   const [submitting, setSubmitting] = useState(false);
+  const [dynamicModelOptions, setDynamicModelOptions] = useState<
+    Record<string, { value: string; label: string; ctx: string }[]> | null
+  >(null);
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -105,6 +140,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
 
   // 기본 에이전트 폼 상태
   const defaultProvider = initialData?.provider || 'openai';
+  const activeModelOptions = dynamicModelOptions ?? MODEL_OPTIONS;
   const [form, setForm] = useState({
     name: initialData?.name || '',
     description: initialData?.description || '',
@@ -133,6 +169,29 @@ export function AgentForm({ initialData, isEdit }: Props) {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    api
+      .get<ApiModel[]>('/models')
+      .then((models) => {
+        const grouped = groupModelsByProvider(models);
+        setDynamicModelOptions(grouped);
+        // 신규 생성 모드에서 초기 model_id가 동적 목록에 없으면 첫 번째 모델로 갱신
+        if (!isEdit) {
+          setForm((f) => {
+            const providerModels = grouped[f.provider] ?? [];
+            const currentExists = providerModels.some((m) => m.value === f.model_id);
+            if (!currentExists && providerModels.length > 0) {
+              return { ...f, model_id: providerModels[0].value };
+            }
+            return f;
+          });
+        }
+      })
+      .catch(() => {
+        // API 호출 실패 시 하드코딩된 MODEL_OPTIONS 폴백으로 유지
+      });
+  }, [isEdit]);
 
   // templates가 로드된 후 편집 모드에서 초기 템플릿 설정
   useEffect(() => {
@@ -486,7 +545,7 @@ export function AgentForm({ initialData, isEdit }: Props) {
               value={form.provider}
               onChange={(e) => {
                 const provider = e.target.value;
-                const firstModel = MODEL_OPTIONS[provider]?.[0]?.value ?? '';
+                const firstModel = activeModelOptions[provider]?.[0]?.value ?? '';
                 setTestStatus('idle');
                 setTestError(null);
                 setTestErrorType(null);
@@ -533,16 +592,16 @@ export function AgentForm({ initialData, isEdit }: Props) {
                 }`}
                 required
               >
-                {(MODEL_OPTIONS[form.provider] ?? []).map((m) => (
+                {(activeModelOptions[form.provider] ?? []).map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label} · ctx {m.ctx}
                   </option>
                 ))}
                 {/* 편집 모드: 기존 model_id가 목록에 없을 때 보존 */}
                 {form.model_id &&
-                  !(MODEL_OPTIONS[form.provider] ?? []).find((m) => m.value === form.model_id) && (
-                    <option value={form.model_id}>{form.model_id}</option>
-                  )}
+                  !(activeModelOptions[form.provider] ?? []).find(
+                    (m) => m.value === form.model_id,
+                  ) && <option value={form.model_id}>{form.model_id}</option>}
               </select>
             )}
           </div>

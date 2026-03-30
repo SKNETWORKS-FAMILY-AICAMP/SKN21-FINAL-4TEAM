@@ -16,6 +16,7 @@ const mockStoreActions = {
   setStreaming: vi.fn(),
   addTurnReview: vi.fn(),
   setDebateShowAll: vi.fn(),
+  setJudgeIntro: vi.fn(),
 };
 
 vi.mock('@/stores/debateStore', () => ({

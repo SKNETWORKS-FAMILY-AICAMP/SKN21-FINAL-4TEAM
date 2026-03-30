@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.deps import require_admin
 from app.models.debate_agent import DebateAgent
 from app.models.debate_match import DebateMatch
+from app.models.debate_topic import DebateTopic
 from app.models.llm_model import LLMModel
 from app.models.token_usage_log import TokenUsageLog
 from app.models.user import User
@@ -24,7 +25,6 @@ async def get_system_stats(
 ):
     """시스템 통계 (사용자수, 토큰 사용량)."""
     now = datetime.now(UTC)
-    now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
 
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar()
@@ -61,6 +61,7 @@ async def get_activity_logs(
             TokenUsageLog.id,
             TokenUsageLog.user_id,
             TokenUsageLog.session_id,
+            TokenUsageLog.match_id,
             TokenUsageLog.llm_model_id,
             TokenUsageLog.input_tokens,
             TokenUsageLog.output_tokens,
@@ -69,9 +70,12 @@ async def get_activity_logs(
             User.nickname.label("user_nickname"),
             LLMModel.display_name.label("model_name"),
             LLMModel.provider.label("model_provider"),
+            DebateTopic.title.label("topic_title"),
         )
         .join(User, TokenUsageLog.user_id == User.id)
         .outerjoin(LLMModel, TokenUsageLog.llm_model_id == LLMModel.id)
+        .outerjoin(DebateMatch, TokenUsageLog.match_id == DebateMatch.id)
+        .outerjoin(DebateTopic, DebateMatch.topic_id == DebateTopic.id)
         .where(TokenUsageLog.created_at >= since)
         .order_by(TokenUsageLog.created_at.desc())
         .limit(limit)
@@ -86,6 +90,8 @@ async def get_activity_logs(
                 "user_id": str(log.user_id),
                 "user_nickname": log.user_nickname or str(log.user_id)[:8],
                 "session_id": str(log.session_id) if log.session_id else None,
+                "match_id": str(log.match_id) if log.match_id else None,
+                "topic_title": log.topic_title,
                 "llm_model_id": str(log.llm_model_id) if log.llm_model_id else None,
                 "model_name": log.model_name,
                 "model_provider": log.model_provider,
@@ -109,10 +115,21 @@ async def get_log_detail(
     db: AsyncSession = Depends(get_db),
 ):
     """로그 상세 — 해당 LLM 호출 정보."""
-    log_result = await db.execute(select(TokenUsageLog).where(TokenUsageLog.id == log_id))
-    log = log_result.scalar_one_or_none()
-    if log is None:
+    detail_query = (
+        select(
+            TokenUsageLog,
+            DebateTopic.title.label("topic_title"),
+        )
+        .outerjoin(DebateMatch, TokenUsageLog.match_id == DebateMatch.id)
+        .outerjoin(DebateTopic, DebateMatch.topic_id == DebateTopic.id)
+        .where(TokenUsageLog.id == log_id)
+    )
+    detail_result = await db.execute(detail_query)
+    row = detail_result.one_or_none()
+    if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
+
+    log, topic_title = row
 
     return {
         "id": log.id,
@@ -122,4 +139,6 @@ async def get_log_detail(
         "cost": float(log.cost),
         "created_at": log.created_at.isoformat(),
         "session_id": str(log.session_id) if log.session_id else None,
+        "match_id": str(log.match_id) if log.match_id else None,
+        "topic_title": topic_title,
     }
