@@ -10,7 +10,7 @@
 ### Added
 
 - **모니터링 토론 주제 연동** — `token_usage_logs`에 `match_id` FK 컬럼 추가, LLM 호출 로그에 토론 주제명 표시 (테이블 컬럼 + 상세 모달)
-- **마이그레이션** `r9s0t1u2v3w4` — `token_usage_logs.match_id` 컬럼 추가
+- **마이그레이션** `s0t1u2v3w4x5` — `token_usage_logs.match_id` 컬럼 추가
 
 ---
 

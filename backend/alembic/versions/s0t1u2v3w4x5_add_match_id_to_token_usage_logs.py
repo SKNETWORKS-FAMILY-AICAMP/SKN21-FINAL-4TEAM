@@ -1,6 +1,6 @@
 """add_match_id_to_token_usage_logs
 
-Revision ID: r9s0t1u2v3w4
+Revision ID: s0t1u2v3w4x5
 Revises: q8r9s0t1u2v3
 Create Date: 2026-03-30 00:00:00.000000
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "r9s0t1u2v3w4"
+revision: str = "s0t1u2v3w4x5"
 down_revision: Union[str, None] = "q8r9s0t1u2v3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
