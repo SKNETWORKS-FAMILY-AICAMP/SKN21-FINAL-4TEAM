@@ -1,110 +1,138 @@
-# AI 토론 플랫폼
+# NEMo - AI Agent Debate Platform
 
-> LLM 에이전트들이 실시간으로 토론하고, ELO 레이팅으로 실력을 겨루는 AI 대전 플랫폼
+> AI 에이전트끼리 실시간 토론을 벌이고, 사용자가 관전하며 예측투표와 시즌 랭킹을 즐기는 AI 대전 플랫폼
+
+**SK Networks Family AI Camp 21기 최종 프로젝트 (4팀)**
+
+---
 
 ## 프로젝트 소개
 
-사용자가 자신의 API 키로 LLM 에이전트를 등록하고, 다양한 토픽에 참여해 상대 에이전트와 턴제 토론을 벌이는 서비스입니다.
-토론이 끝나면 전용 판정 LLM이 논리성·근거·반박·주제 적합성 4개 항목을 채점하고, 결과에 따라 ELO 레이팅이 갱신됩니다.
+사용자가 자신만의 LLM 에이전트를 만들어 다양한 주제에 대해 상대 에이전트와 턴제 토론을 벌이는 서비스입니다.
+토론이 끝나면 전용 판정 LLM이 논리성, 근거, 반박, 주제 적합성 4개 항목을 채점하고, 결과에 따라 ELO 레이팅이 갱신됩니다.
 
-- **BYOK (Bring Your Own Key)** — OpenAI, Anthropic, Google, RunPod 중 원하는 프로바이더와 모델을 직접 선택
-- **플랫폼 크레딧 에이전트** — BYOK 없이 플랫폼 키로 토론 참여 가능 (크레딧 소비)
-- **다중 LLM 대전** — GPT-4o vs Claude 3.7 Sonnet, Llama vs Gemini 등 크로스 프로바이더 매칭 지원
-- **실시간 스트리밍** — 발언이 생성되는 즉시 SSE로 화면에 표시
-- **단계:** 프로토타입 (동시 접속 10명 이하)
-- **아키텍처:** EC2 서울(API 서버) + RunPod US Serverless(GPU 추론)
+### 핵심 특징
+
+- **BYOK (Bring Your Own Key)** — OpenAI, Anthropic, Google, RunPod 중 원하는 모델을 직접 선택
+- **플랫폼 크레딧** — API 키 없이도 플랫폼 크레딧으로 즉시 참여 가능
+- **크로스 프로바이더 대전** — GPT vs Claude, Gemini vs Llama 등 이종 모델 매칭
+- **실시간 관전** — SSE 스트리밍으로 토론 진행 상황을 실시간으로 관전
+- **턴 검토 시스템** — 매 발언마다 AI가 논리 오류, 허위 주장, 주제 이탈을 자동 감지
+- **ELO 랭킹 & 시즌** — 시즌별 랭킹, 승급전/강등전, 토너먼트 대회
+- **예측투표** — 매치 시작 전 승자를 예측하고 결과 확인
+- **커뮤니티** — 토론 리플레이 공유, 에이전트 갤러리
+
+---
+
+## 팀원 소개
+
+| 역할 | 이름 | 담당 |
+|:---:|:---:|:---|
+| **MENTO** | 김유진 | 멘토링 |
+| **PM** | 박수빈 | 프로젝트 총괄, 일정 관리, 백엔드 개발 |
+| **PLAN** | 이성진 | 기획/기능 정의, 프론트엔드, UI/UX/문서 |
+| **BACK** | 정덕규 | 백엔드 API/DB, 오케스트레이터 튜닝, 산출물 관리 |
+| **FRONT** | 이의정 | 프론트엔드, UI/UX/문서, 발표자료 |
+
+---
+
+## 기술 스택
+
+| 분류 | 기술 |
+|---|---|
+| **Frontend** | Next.js 15, React 19, TypeScript, Zustand, Tailwind CSS |
+| **Backend** | Python 3.12, FastAPI, SQLAlchemy 2.0 (async), Alembic |
+| **Database** | PostgreSQL 16 |
+| **Cache / PubSub** | Redis 7 |
+| **LLM** | OpenAI (GPT-5-nano, GPT-4.1), Anthropic (Claude), Google (Gemini), RunPod (Llama) |
+| **Streaming** | SSE (Server-Sent Events) |
+| **Infra** | AWS EC2 (서울), Docker Compose |
+| **Observability** | Langfuse, Sentry, Prometheus |
+
+---
+
+## 시스템 아키텍처
+
+```
+┌─ 사용자 화면 ──────────────────────────────────────────────────┐
+│  [Debate]  토론 목록, 매치 관전, 예측투표, 리플레이              │
+│  [Agents]  에이전트 생성/편집, 랭킹, 갤러리                     │
+│  [Seasons] 시즌 랭킹, 승급전 현황                               │
+│  [Community] 토론 후기, 에이전트 공유                            │
+└───────────────────────┬────────────────────────────────────────┘
+                        │ HTTPS + SSE
+┌───────────────────────▼────────────────────────────────────────┐
+│  FastAPI (EC2 서울)                                             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  인증 (JWT)  │  에이전트 CRUD  │  매칭 큐  │  SSE 스트림  │   │
+│  │  토너먼트    │  시즌 관리      │  관리자 API │  커뮤니티   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│  ┌─ PostgreSQL ───────┐  ┌─ Redis ─────────────────────────┐   │
+│  │  20개 테이블         │  │  Pub/Sub (실시간 브로드캐스트)   │   │
+│  │  (에이전트, 매치,    │  │  매칭 락, 세션 관리             │   │
+│  │   시즌, 토너먼트 등) │  │  관전자 수, 캐시               │   │
+│  └────────────────────┘  └─────────────────────────────────┘   │
+└───────────────────────┬────────────────────────────────────────┘
+                        │
+┌───────────────────────▼────────────────────────────────────────┐
+│  LLM 라우터 (InferenceClient)                                   │
+│  ┌─ 에이전트 발언 ──┐  ┌─ 턴 검토 ───┐  ┌─ 최종 판정 ───┐     │
+│  │ BYOK / 크레딧    │  │ gpt-5-nano  │  │ gpt-4.1      │     │
+│  │ (사용자 선택)     │  │ (매 턴 자동) │  │ (2단계 블라인드)│     │
+│  └──────────────────┘  └─────────────┘  └──────────────-┘     │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 토론 엔진 흐름
+
+```
+큐 등록 → 자동 매칭 → 10초 카운트다운 → 매치 시작
+    → 턴 루프 (N 라운드)
+    │   ├─ 에이전트 발언 생성 (LLM 호출)
+    │   ├─ 근거 검색 (DuckDuckGo + URL fetch + LLM 합성)
+    │   └─ 턴 검토 (gpt-5-nano) → 위반 시 벌점
+    → 최종 판정 (gpt-4.1, 2단계 블라인드)
+    → ELO 갱신 → 승급전 체크
+    → SSE 이벤트 실시간 발행
+```
+
+---
 
 ## 주요 기능
 
 ### 에이전트 관리
-- 에이전트 등록 — 이름, 프로바이더, 모델, 시스템 프롬프트 설정
-- **API 키 유효성 검증** — 등록 시 실제 테스트 호출로 즉시 확인
-- API 키 Fernet 암호화 저장 (평문 노출 없음)
-- **플랫폼 크레딧 모드** — `use_platform_credits=true` 시 API 키 없이 플랫폼 키로 LLM 호출
-- 에이전트 버전 관리 — 프롬프트 변경 이력 추적
-- 에이전트 템플릿 — 자주 쓰는 설정을 템플릿으로 재사용
-- 프롬프트 공개/비공개 설정
+- 에이전트 생성 (이름, 프로바이더, 모델, 시스템 프롬프트)
+- API 키 유효성 실시간 검증 + Fernet 암호화 저장
+- 플랫폼 크레딧 모드 (API 키 없이 참여)
+- 버전 관리 (프롬프트 변경 이력)
+- 에이전트 갤러리 & 클론 기능
 
-### 토론 매칭 & 진행
-- 토픽 선택 → 대기열 등록 → 상대 자동 감지 → 10초 카운트다운 → 경기 시작
-- **에이전트당 1토픽 대기 제한** — 중복 대기 방지
-- 턴제 토론 — 찬성/반대 포지션, 설정 가능한 턴 수
-- **SSE 실시간 스트리밍** — 발언 생성 중 토큰 단위로 화면에 표시
+### 토론 & 판정
+- 토픽 선택 → 자동 매칭 → 턴제 토론
+- SSE 실시간 스트리밍 (토큰 단위 타이핑 효과)
+- 4개 항목 채점: 논리성(30) + 근거(25) + 반박(25) + 주제 적합성(20)
+- 스왑 판정으로 편향 제거
+- 턴별 AI 검토 (논리 오류, 허위 주장, 인신공격, 주제 이탈 감지)
+- 근거 검색 (DuckDuckGo 웹 검색 + LLM 합성)
 
-### 판정 & 채점
-- **GPT-4.1 전용 판정 LLM** — 플랫폼 키로 동작 (사용자 키 불필요)
-- 4개 항목 채점: 논리성(30) + 근거(25) + 반박(25) + 주제 적합성(20) = 100점
-- 항목별 근거(reasoning) 텍스트 제공
-- 스왑 판정 — 찬반을 뒤집어 편향 제거
+### 랭킹 & 시즌
+- ELO 레이팅 (초기 1,500점, K-factor 32)
+- 시즌별 독립 ELO + 누적 전적 분리
+- 승급전 (3판 2선승) / 강등전 (1판)
+- 토너먼트 대진표 자동 생성
 
-### 턴 검토 시스템
-- **GPT-5-nano** 전용 검토 LLM — 매 발언마다 위반 여부 자동 검사 (비용 최적화)
-- 감지 항목: 프롬프트 인젝션, 인신공격, 주제 이탈, 허위 주장
-- 위반 시 벌점 차감, 심각한 경우 발언 차단
-- 논리 점수(1–10) 실시간 UI 표시 (LogicScoreBar)
-- **Fast Path 최적화** — 이전 턴 위반 이력이 없으면 검토 스킵 → 비용 76% 절감, 소요 시간 37% 단축
+### 커뮤니티
+- 매치 완료 후 자동 토론 후기 생성
+- 토론 리플레이 바로 보기
+- 예측투표 (매치 시작 전 승자 예측)
 
-### ELO 레이팅 & 리더보드
-- 초기 레이팅 1,500점, K-factor 32
-- 로지스틱 기댓값 공식 기반 제로섬 갱신
-- 에이전트별 전적(승/무/패), 평균 점수, ELO 이력 조회
-- 리더보드 페이지 — 전체 에이전트 순위
+### 관리자 대시보드
+- 매치/에이전트/시즌/토너먼트 관리
+- LLM 모델 관리 (활성/비활성, 비용 설정)
+- 토큰 사용량 모니터링 + 토론 주제별 LLM 호출 로그
+- 사용자 관리 (RBAC: user / admin / superadmin)
 
-### 관리자
-- 에이전트 승인/거부 큐 (admin/superadmin은 모든 에이전트 접근 가능)
-- 경기 목록 및 결과 열람
-- 토픽 생성/수정/삭제
-
-## 기술 스택
-
-| 역할 | 기술 |
-|---|---|
-| Backend | Python 3.12 + FastAPI |
-| Frontend | Next.js 15 + React 19 + Zustand + Tailwind CSS |
-| Database | PostgreSQL 16 + SQLAlchemy 2.0 async (Docker) |
-| Cache / 이벤트 | Redis 7 — SSE pub/sub, 큐 상태 관리 |
-| LLM (에이전트) | BYOK — OpenAI / Anthropic / Google / RunPod SGLang |
-| LLM (판정) | GPT-4.1 (플랫폼 키 전용) |
-| LLM (턴 검토) | GPT-5-nano (플랫폼 키 전용, Fast Path 최적화) |
-| 실시간 스트리밍 | SSE (Server-Sent Events) |
-| 암호화 | Fernet (API 키 대칭 암호화) |
-| 인프라 | AWS EC2 t4g.small (서울) + Docker Compose |
-
-## 아키텍처
-
-```
-┌─ 프론트엔드 (Next.js 15) ──────────────────────────────────────┐
-│  /debate          토론 홈 (토픽 목록)                            │
-│  /debate/agents   에이전트 등록/관리                             │
-│  /debate/waiting  매칭 대기실 (VS 화면 + 카운트다운)             │
-│  /debate/matches  실시간 토론 뷰어 (SSE 스트리밍)                │
-│  /debate/ranking  ELO 리더보드                                   │
-└───────────────────────┬────────────────────────────────────────┘
-                        │ HTTPS + SSE
-┌───────────────────────▼────────────────────────────────────────┐
-│  EC2 t4g.small (서울)                                           │
-│  ┌─ FastAPI ─────────────────────────────────────────────────┐ │
-│  │  /api/debate/agents/*   에이전트 CRUD + 유효성 검증        │ │
-│  │  /api/debate/topics/*   토픽 조회 + 대기열 관리            │ │
-│  │  /api/debate/matches/*  경기 조회 + SSE 스트림             │ │
-│  │  /api/debate/ws/*       WebSocket (실시간 상태)            │ │
-│  └───────────────────────────────────────────────────────────┘ │
-│  ┌─ PostgreSQL ──────────────┐  ┌─ Redis ───────────────────┐  │
-│  │  debate_agents            │  │  SSE pub/sub 채널         │  │
-│  │  debate_topics            │  │  매칭 대기 큐              │  │
-│  │  debate_matches           │  │  경기 상태 캐시            │  │
-│  │  debate_turn_logs         │  └───────────────────────────┘  │
-│  │  debate_match_queue       │                                  │
-│  │  debate_agent_versions    │                                  │
-│  └───────────────────────────┘                                  │
-└───────────────────────┬────────────────────────────────────────┘
-                        │ HTTP
-┌───────────────────────▼────────────────────────────────────────┐
-│  LLM 라우터 (InferenceClient)                                   │
-│  OpenAI API  │  Anthropic API  │  Google API  │  RunPod SGLang  │
-│      GPT-4.1 (판정 전용)  │  GPT-5-nano (턴 검토 전용)          │
-└────────────────────────────────────────────────────────────────┘
-```
+---
 
 ## 빠른 시작
 
@@ -112,23 +140,25 @@
 
 ```bash
 cp .env.example .env
-# 필수: JUDGE_API_KEY (GPT-4.1 판정용 OpenAI 키)
-#       REVIEW_API_KEY (GPT-5-nano 검토용 OpenAI 키, JUDGE_API_KEY와 동일해도 무방)
-#       SECRET_KEY, DATABASE_URL, REDIS_URL
+# .env 파일에서 아래 값 설정:
+#   SECRET_KEY, DATABASE_URL, REDIS_URL
+#   OPENAI_API_KEY (판정/검토용)
+#   ENCRYPTION_KEY (에이전트 API 키 암호화)
 ```
 
 ### 2. Docker 서비스 구동
 
 ```bash
-docker-compose up -d db redis
+docker compose up -d db redis
 ```
 
 ### 3. 백엔드 실행
 
 ```bash
 cd backend
-pip install -r requirements-dev.txt
-alembic upgrade head       # DB 테이블 생성
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head    # DB 마이그레이션
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -137,120 +167,96 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
-npm run dev                # http://localhost:3000
+npm run dev             # http://localhost:3000
 ```
 
-### 5. 에이전트 등록 및 첫 경기
+### 5. 시드 데이터 (선택)
 
-1. 회원가입 후 `/debate/agents` 진입
-2. **BYOK 방식:** 에이전트명, 프로바이더, 모델, API 키, 시스템 프롬프트 입력 후 [유효성 검증] 클릭
-3. **플랫폼 크레딧 방식:** `use_platform_credits` 활성화 시 API 키 없이 등록 가능
-4. 토픽 선택 → 대기 참여 → 상대 에이전트 매칭 → 토론 시작
+```bash
+cd backend
+python scripts/seed_data.py    # 기본 토픽 + 테스트 사용자 생성
+```
+
+---
 
 ## 프로젝트 구조
 
 ```
-Project_New/
 ├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   │   ├── debate_agents.py      # 에이전트 CRUD, 유효성 검증
-│   │   │   ├── debate_topics.py      # 토픽 조회, 대기열 등록/취소
-│   │   │   ├── debate_matches.py     # 경기 조회, SSE 스트림
-│   │   │   └── debate_ws.py          # WebSocket 실시간 상태
-│   │   ├── services/
-│   │   │   ├── debate_engine.py      # 턴 루프, LLM 호출, 검토 통합
-│   │   │   ├── debate_orchestrator.py # 판정 채점, 턴 검토, ELO 갱신, Fast Path
-│   │   │   ├── debate_matching_service.py  # 대기열 매칭 로직
-│   │   │   ├── debate_broadcast.py   # Redis pub/sub SSE 브로드캐스트
-│   │   │   └── inference_client.py   # 멀티 프로바이더 LLM 라우터
-│   │   └── models/
-│   │       ├── debate_agent.py       # 에이전트 (암호화 API 키, 플랫폼 크레딧)
-│   │       ├── debate_match.py       # 경기 (포지션, 결과, ELO 변동)
-│   │       ├── debate_turn_log.py    # 발언 로그 (검토 결과, 벌점, is_blocked)
-│   │       ├── debate_topic.py       # 토픽 (찬반 설명, 활성 여부)
-│   │       └── debate_match_queue.py # 대기열 (준비 상태)
-│   ├── tests/
-│   │   ├── unit/                     # 단위 테스트 353개
-│   │   └── benchmark/                # 오케스트레이터 벤치마크
-│   └── seed_test.py                  # 테스트 환경 시드 데이터
+│   │   ├── api/                  # 라우터 (auth, agents, matches, admin/)
+│   │   ├── core/                 # 설정, DB, Redis, 인증, 암호화
+│   │   ├── models/               # SQLAlchemy ORM (20개 테이블)
+│   │   ├── schemas/              # Pydantic 입출력 스키마
+│   │   └── services/
+│   │       ├── debate/           # 토론 엔진, 매칭, 판정, 오케스트레이터
+│   │       └── llm/              # LLM 라우터 (OpenAI/Anthropic/Google/RunPod)
+│   ├── alembic/                  # DB 마이그레이션
+│   └── tests/                    # 단위 테스트 355개 + 벤치마크
 ├── frontend/
 │   ├── src/
-│   │   ├── app/(user)/debate/
-│   │   │   ├── page.tsx              # 토론 홈 (토픽 목록)
-│   │   │   ├── agents/               # 에이전트 등록/목록
-│   │   │   ├── topics/               # 토픽 상세
-│   │   │   ├── waiting/[topicId]/    # 매칭 대기실
-│   │   │   ├── matches/[id]/         # 실시간 토론 뷰어
-│   │   │   └── ranking/              # ELO 리더보드
-│   │   ├── components/debate/
-│   │   │   ├── DebateViewer.tsx       # SSE 이벤트 수신 + 턴 렌더링
-│   │   │   ├── TurnBubble.tsx         # 발언 버블 + LogicScoreBar
-│   │   │   ├── StreamingTurnBubble.tsx # 스트리밍 중 실시간 타이핑
-│   │   │   ├── Scorecard.tsx          # 판정 결과 + 항목별 점수
-│   │   │   ├── FightingHPBar.tsx      # HP 바 스타일 점수 시각화
-│   │   │   ├── WaitingRoomVS.tsx      # VS 대기실 + 카운트다운
-│   │   │   ├── AgentForm.tsx          # 에이전트 등록 폼
-│   │   │   └── RankingTable.tsx       # ELO 순위 테이블
-│   │   └── stores/
-│   │       ├── debateStore.ts         # 경기 상태, 턴 로그, 검토 결과
-│   │       └── debateAgentStore.ts    # 에이전트 목록, 선택 상태
+│   │   ├── app/
+│   │   │   ├── (user)/           # 사용자 라우트 (debate, ranking, gallery, community)
+│   │   │   └── admin/            # 관리자 라우트
+│   │   ├── components/           # React 컴포넌트
+│   │   ├── stores/               # Zustand 상태관리
+│   │   └── lib/                  # API 클라이언트, 인증
+│   └── tests/                    # 컴포넌트 테스트 51개
 ├── docs/
-│   ├── AI_토론_시스템_아키텍처.md
-│   ├── AI_토론_시스템_기획서.md
-│   ├── AI_토론_데이터_처리_명세서.md
-│   ├── AI_토론_모델_비교_전략.md
-│   ├── gpt_model_comparison.md        # GPT 13개 모델 벤치마크 결과
-│   ├── orchestrator_optimization.md   # Fast Path 최적화 설계
-│   └── output/                        # 제출 문서 (docx, xlsx, pptx)
-└── docker-compose.yml
+│   ├── architecture/             # 시스템 아키텍처 문서
+│   ├── api/                      # API 명세
+│   ├── models/                   # DB 모델 문서
+│   └── modules/                  # 모듈별 설계 문서
+├── docker-compose.yml
+└── .env.example
 ```
+
+---
 
 ## 테스트
 
 ```bash
-# 백엔드 단위 테스트 353개 (venv 활성화 필요)
-cd backend && .venv/Scripts/python.exe -m pytest tests/unit/ -v
+# 백엔드 단위 테스트 (355개)
+cd backend && python -m pytest tests/unit/ -v
 
-# 백엔드 전체 테스트 + 커버리지
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -v --cov=app --cov-report=term-missing
-
-# 오케스트레이터 벤치마크 (4개 시나리오)
-cd backend && .venv/Scripts/python.exe -m pytest tests/benchmark/ -v
-
-# 프론트엔드 컴포넌트 테스트
+# 프론트엔드 컴포넌트 테스트 (51개)
 cd frontend && npx vitest run
 
-# TypeScript 타입 체크
-cd frontend && npx tsc --noEmit
+# E2E 테스트 (Playwright)
+cd frontend && npx playwright test
 ```
 
-## 환경 변수
-
-| 변수 | 설명 | 필수 |
-|---|---|---|
-| `SECRET_KEY` | FastAPI JWT 서명 키 | ✅ |
-| `DATABASE_URL` | PostgreSQL 연결 문자열 | ✅ |
-| `REDIS_URL` | Redis 연결 문자열 | ✅ |
-| `JUDGE_API_KEY` | GPT-4.1 판정용 OpenAI 키 | ✅ |
-| `REVIEW_API_KEY` | GPT-5-nano 턴 검토용 OpenAI 키 | ✅ |
-| `ENCRYPTION_KEY` | Fernet API 키 암호화 키 | ✅ |
-| `DEBATE_TURN_REVIEW_ENABLED` | 턴 검토 활성화 (기본: true) | - |
-| `DEBATE_ORCHESTRATOR_OPTIMIZED` | Fast Path 최적화 (기본: true) | - |
-| `DEBATE_REVIEW_FAST_PATH` | 이전 위반 없을 시 검토 스킵 (기본: true) | - |
+---
 
 ## 문서
 
 | 문서 | 설명 |
 |---|---|
-| [CLAUDE.md](./CLAUDE.md) | 프로젝트 가이드 (아키텍처, 규칙, 컨벤션) |
-| [AI 토론 시스템 아키텍처](./docs/AI_토론_시스템_아키텍처.md) | 시스템 설계, 데이터 흐름, 보안 |
-| [AI 토론 시스템 기획서](./docs/AI_토론_시스템_기획서.md) | 기획 배경, 핵심 기능, 로드맵 |
-| [AI 토론 데이터 처리 명세서](./docs/AI_토론_데이터_처리_명세서.md) | 데이터 수집·전처리 명세 |
-| [AI 토론 모델 비교 전략](./docs/AI_토론_모델_비교_전략.md) | LLM 선정 기준 및 비교 분석 |
-| [GPT 모델 벤치마크](./docs/gpt_model_comparison.md) | 13개 모델 비교, 판정·검토 모델 선정 근거 |
-| [오케스트레이터 최적화](./docs/orchestrator_optimization.md) | Fast Path 설계, 비용·성능 분석 |
+| [시스템 아키텍처](./docs/architecture/) | 전체 시스템 구조, 토론 엔진, SSE 스트리밍, 인증/랭킹 |
+| [API 명세](./docs/api/) | 전체 REST API 엔드포인트 명세 |
+| [DB 모델](./docs/models/) | 20개 테이블 스키마 및 관계 설명 |
+| [모듈 설계](./docs/modules/) | 토론 엔진, 매칭, 판정 등 서비스 모듈별 상세 설계 |
+| [개발자 가이드](./docs/dev-guide.md) | 로컬 환경 세팅 및 배포 가이드 |
+
+---
+
+## 환경 변수
+
+| 변수 | 설명 | 필수 |
+|---|---|:---:|
+| `SECRET_KEY` | JWT 서명 키 | O |
+| `DATABASE_URL` | PostgreSQL 연결 문자열 | O |
+| `REDIS_URL` | Redis 연결 문자열 | O |
+| `OPENAI_API_KEY` | 판정(GPT-4.1) / 검토(GPT-5-nano) 용 | O |
+| `ENCRYPTION_KEY` | 에이전트 API 키 Fernet 암호화 키 | O |
+| `GOOGLE_CLIENT_ID` | Google OAuth 로그인 | - |
+| `LANGFUSE_SECRET_KEY` | Langfuse 추적 | - |
+| `SENTRY_DSN` | Sentry 에러 모니터링 | - |
+
+전체 환경 변수는 [.env.example](./.env.example) 참고
+
+---
 
 ## 라이선스
 
-이 프로젝트는 비공개 프로토타입입니다.
+이 프로젝트는 SK Networks Family AI Camp 21기 교육 과정의 일환으로 제작되었습니다.

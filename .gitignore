@@ -88,3 +88,23 @@ claude-office-skills/
 # 임시 린트/타입체크 결과물
 frontend/lint_output.txt
 frontend/typescript_errors.txt
+
+# Claude Code 프로젝트 설정 (AI 도구 의존적, 공개 불필요)
+CLAUDE.md
+backend/CLAUDE.md
+frontend/CLAUDE.md
+.mcp.json
+
+# 테스트 스크린샷·Playwright 산출물
+tc*.png
+.playwright-mcp/
+
+# 내부 전용 문서 (디버그, 개인, 시장조사)
+docs/debug_*
+docs/proposal_*
+docs/make_*.py
+docs/market-research-*
+docs/dino_keyboard.png
+docs/debate-code-review.md
+docs/llm-models-pricing.md
+docs/ChangeLog.md

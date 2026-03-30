@@ -1,6 +1,6 @@
 # 시스템 전체 아키텍처
 
-> 작성일: 2026-03-10 | 갱신일: 2026-03-24 | 대상 환경: 프로토타입 (동시 접속 10명 이하)
+> 작성일: 2026-03-10 | 갱신일: 2026-03-26 | 대상 환경: 프로토타입 (동시 접속 10명 이하)
 
 ---
 
@@ -22,11 +22,10 @@ flowchart LR
         end
     end
 
-    subgraph LLM["LLM 프로바이더 (외부)"]
+    subgraph LLM["External LLM APIs"]
         OPENAI["OpenAI API\ngpt-5-nano / gpt-4.1"]
         ANTHROPIC["Anthropic API\nClaude"]
         GOOGLE["Google AI\nGemini"]
-        RUNPOD["RunPod Serverless\nLlama 3 70B (SGLang)"]
     end
 
     BROWSER -->|"HTTPS"| NEXT
@@ -37,7 +36,6 @@ flowchart LR
     FAST -->|"InferenceClient"| OPENAI
     FAST -->|"InferenceClient"| ANTHROPIC
     FAST -->|"InferenceClient"| GOOGLE
-    FAST -->|"InferenceClient"| RUNPOD
     REDIS -->|"Pub/Sub → SSE"| FAST
 ```
 
@@ -58,14 +56,14 @@ flowchart LR
 | **Backend** | FastAPI + SQLAlchemy | Python 3.12, async 우선, Pydantic v2 |
 | **Database** | PostgreSQL | 16, Docker 컨테이너, 22개 테이블 |
 | **Cache / Pub-Sub** | Redis | redis-py, 토론 이벤트 브로드캐스트 + 토픽 캐싱 + 관전자 수 집계 |
-| **LLM Inference** | RunPod SGLang (기본) + OpenAI / Anthropic / Google | `llm_models` 테이블 기반 동적 라우팅 |
+| **LLM Inference** | OpenAI / Anthropic / Google | `llm_models` 테이블 기반 동적 라우팅 |
 | **Streaming** | SSE (Server-Sent Events) | Redis Pub/Sub → FastAPI → Next.js proxy → 브라우저 |
 | **Auth** | JWT (HS256) | HttpOnly 쿠키 + Authorization Bearer, 7일 만료 |
 | **API 키 암호화** | Fernet (symmetric) | `encryption_key`로 에이전트 BYOK 키 암호화 저장 |
 | **Observability** | Langfuse + Sentry | LLM 트레이스 + 에러 수집 |
 | **Rate Limiting** | SlowAPI | 인증 20req/min, 일반 60req/min, 토론 120req/min |
 | **Container** | Docker Compose | 개발/운영 분리 (`docker-compose.yml` / `.prod.yml`) |
-| **Infra** | AWS EC2 t4g.small + RunPod Serverless | EC2 서울, RunPod 미국 |
+| **Infra** | AWS EC2 t4g.small | EC2 서울 (ap-northeast-2) |
 | **Tool Use** | Web Search (OpenAI/Anthropic/Google) | `topic.tools_enabled` 플래그 기반 조건부 활성화 |
 
 ---
@@ -127,7 +125,7 @@ flowchart TD
 | 배포 경로 | `/opt/chatbot` |
 | SSH 사용자 | `ubuntu` |
 | SSH 키 | `~/.ssh/chatbot-prod.pem` |
-| 월 예상 비용 | ~$130 (EC2 ~$15 + RunPod ~$114 + LLM API 사용량) |
+| 월 예상 비용 | ~$15 (EC2) + LLM API 사용량 (사용량 비례) |
 
 ---
 
