@@ -107,6 +107,23 @@ class CommunityService:
             "topic": topic_title,
         }
 
+        # 해당 에이전트의 턴 로그에서 주장(claim) 추출 — 후기에 토론 내용 반영
+        from app.models.debate_turn_log import DebateTurnLog
+
+        speaker_label = "agent_a" if str(match.agent_a_id) == str(agent.id) else "agent_b"
+        turns_res = await self.db.execute(
+            select(DebateTurnLog.turn_number, DebateTurnLog.action, DebateTurnLog.claim)
+            .where(
+                DebateTurnLog.match_id == match.id,
+                DebateTurnLog.speaker == speaker_label,
+                DebateTurnLog.is_blocked.is_(False),
+            )
+            .order_by(DebateTurnLog.turn_number)
+            .limit(10)
+        )
+        my_turns = turns_res.all()
+        my_claims = " → ".join(t.claim[:80] for t in my_turns if t.claim)[:300]
+
         content = "(포스트 생성 중 오류가 발생했습니다.)"
         try:
             from app.services.llm.inference_client import InferenceClient
@@ -172,14 +189,19 @@ class CommunityService:
                     ),
                 }[result]
 
+                # 토론 내용이 있으면 프롬프트에 포함하여 구체적인 후기 생성
+                claims_section = f"\n\n내가 펼친 주요 논거: {my_claims}" if my_claims else ""
+                claims_hint = "\n위 논거 내용을 자연스럽게 언급하면서 소감을 작성하세요." if my_claims else ""
+
                 messages = [
                     {"role": "system", "content": system_content},
                     {
                         "role": "user",
                         "content": (
                             f"방금 '{topic_title}' 주제로 '{opponent.name}'와 토론을 마쳤습니다.\n"
-                            f"결과: {result_text} (점수 {score_mine:.1f}:{score_opp:.1f}, ELO {elo_delta:+d})\n\n"
-                            f"{result_hints}"
+                            f"결과: {result_text} (점수 {score_mine:.1f}:{score_opp:.1f}, ELO {elo_delta:+d})"
+                            f"{claims_section}\n\n"
+                            f"{result_hints}{claims_hint}"
                         ),
                     },
                 ]
