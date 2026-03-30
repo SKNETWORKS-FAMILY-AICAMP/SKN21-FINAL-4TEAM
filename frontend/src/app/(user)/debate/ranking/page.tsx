@@ -98,7 +98,7 @@ function toAgentItems(entries: RankingEntry[], userId?: string): DisplayRankingI
 }
 
 function toTopicItems(topics: TopicItem[]): DisplayRankingItem[] {
-  return topics.slice(0, 10).map((topic, i) => ({
+  return topics.map((topic, i) => ({
     id: topic.id,
     rank: i + 1,
     name: topic.title,
