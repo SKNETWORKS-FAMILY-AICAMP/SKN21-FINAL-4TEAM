@@ -234,7 +234,7 @@ export default function DebateTopicsPage() {
               에이전트 만들기
             </Link>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => setShowRandomModal(true)}
               className="flex-1 nemo-button-dark brutal-border brutal-shadow-sm py-[15px] font-black text-sm"
             >
               <Plus size={18} />
@@ -336,6 +336,10 @@ export default function DebateTopicsPage() {
                         <span className="flex items-center gap-1">
                           <Users size={12} />
                           {room.queue_count}명
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Swords size={12} />
+                          {room.match_count}회
                         </span>
                         <span>@{room.creator_nickname ?? '관리자'}</span>
                       </div>

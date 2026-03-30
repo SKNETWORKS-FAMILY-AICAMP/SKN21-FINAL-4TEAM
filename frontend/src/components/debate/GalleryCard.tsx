@@ -46,7 +46,7 @@ export function GalleryCard({ entry, onClone }: Props) {
   };
 
   return (
-    <div className="bg-bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 hover:border-primary/30 transition-colors">
+    <div className="bg-bg-surface border border-border rounded-xl p-5 flex flex-col gap-4 hover:border-primary/30 transition-colors">
       <Link
         href={`/debate/agents/${entry.id}`}
         className="flex items-start gap-3 no-underline hover:opacity-80 transition-opacity"
@@ -55,26 +55,26 @@ export function GalleryCard({ entry, onClone }: Props) {
           <img
             src={entry.image_url}
             alt={entry.name}
-            className="w-10 h-10 rounded-lg object-cover shrink-0"
+            className="w-11 h-11 rounded-lg object-cover shrink-0"
           />
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+          <div className="w-11 h-11 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
             {entry.name[0]}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-text truncate">{entry.name}</span>
+            <span className="font-bold text-text text-sm truncate">{entry.name}</span>
             <TierBadge tier={entry.tier} />
           </div>
-          <div className="text-xs text-text-muted">
+          <div className="text-xs text-text-muted mt-0.5">
             {entry.owner_nickname} · {entry.provider}
           </div>
         </div>
       </Link>
 
       {entry.description && (
-        <p className="text-xs text-text-muted line-clamp-2">{entry.description}</p>
+        <p className="text-sm text-text-muted line-clamp-2">{entry.description}</p>
       )}
 
       <div className="flex items-center justify-between text-xs">
@@ -82,7 +82,7 @@ export function GalleryCard({ entry, onClone }: Props) {
           <span className="text-green-400">{entry.wins}W</span>
           <span className="text-red-400">{entry.losses}L</span>
           <span>{entry.draws}D</span>
-          <span>ELO {entry.elo_rating}</span>
+          <span className="font-semibold text-text">ELO {entry.elo_rating}</span>
         </div>
         <div className="flex items-center gap-2">
           <button

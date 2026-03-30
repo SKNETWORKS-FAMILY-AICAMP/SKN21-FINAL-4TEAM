@@ -122,14 +122,64 @@ class CommunityService:
                     settings.community_post_model,
                 )
             else:
+                # 최신 버전의 system_prompt 조회 — 에이전트 성격/역할의 핵심 원천
+                from app.models.debate_agent import DebateAgentVersion
+
+                version_res = await self.db.execute(
+                    select(DebateAgentVersion.system_prompt)
+                    .where(DebateAgentVersion.agent_id == agent.id)
+                    .order_by(DebateAgentVersion.version_number.desc())
+                    .limit(1)
+                )
+                agent_system_prompt = version_res.scalar_one_or_none()
+
+                # 성격 정보 조합: system_prompt > description > customizations 순으로 활용
+                persona_lines: list[str] = []
+                if agent_system_prompt:
+                    persona_lines.append(f"당신의 역할과 성격:\n{agent_system_prompt}")
+                elif agent.description:
+                    persona_lines.append(f"당신에 대한 설명: {agent.description}")
+                if agent.customizations:
+                    cust_str = ", ".join(f"{k}={v}" for k, v in agent.customizations.items())
+                    persona_lines.append(f"성격 설정: {cust_str}")
+
+                persona_section = "\n".join(persona_lines) if persona_lines else ""
+
+                system_content = (
+                    f"당신은 AI 토론 에이전트입니다. 에이전트 이름: {agent.name}\n"
+                    f"티어: {agent.tier}, ELO: {agent.elo_rating}\n"
+                )
+                if persona_section:
+                    system_content += f"\n{persona_section}\n"
+                system_content += (
+                    "\n위 성격과 말투를 그대로 유지하면서 토론 결과에 대한 소감을 작성하세요. "
+                    "1인칭 시점으로, 짧고 개성 있게 2~3문장으로 말하세요. "
+                    "마크다운 없이 자연스러운 구어체로 작성하세요."
+                )
+
+                result_hints = {
+                    "win": (
+                        "승리했습니다. 자신감 있고 당당하게, 하지만 상대를 지나치게 깎아내리지 않는 선에서 "
+                        "자신의 논리가 통했음을 표현하세요."
+                    ),
+                    "lose": (
+                        "패배했습니다. 에이전트의 성격에 맞게 반응하세요 — "
+                        "쿨하게 인정하거나, 아쉬움을 드러내거나, 재도전 의지를 보여도 됩니다."
+                    ),
+                    "draw": (
+                        "무승부였습니다. 팽팽한 접전을 성격에 맞게 표현하세요 — "
+                        "만족스럽게 받아들이거나, 아쉬움을 담아도 됩니다."
+                    ),
+                }[result]
+
                 messages = [
-                    {"role": "system", "content": f"당신은 AI 토론 에이전트입니다. 에이전트 이름: {agent.name}"},
+                    {"role": "system", "content": system_content},
                     {
                         "role": "user",
                         "content": (
                             f"방금 '{topic_title}' 주제로 '{opponent.name}'와 토론을 마쳤습니다.\n"
-                            f"결과: {result_text}, 점수 {score_mine}:{score_opp}, ELO {elo_delta:+d}\n"
-                            "위 결과에 대한 짧은 소감을 1~2문장으로 말해주세요."
+                            f"결과: {result_text} (점수 {score_mine:.1f}:{score_opp:.1f}, ELO {elo_delta:+d})\n\n"
+                            f"{result_hints}"
                         ),
                     },
                 ]
@@ -138,8 +188,8 @@ class CommunityService:
                     llm_result = await client.generate(
                         model=llm_model,
                         messages=messages,
-                        max_tokens=200,
-                        temperature=0.7,
+                        max_tokens=280,
+                        temperature=0.85,
                     )
 
                 content = llm_result["content"].strip()

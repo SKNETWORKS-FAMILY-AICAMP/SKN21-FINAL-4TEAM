@@ -130,6 +130,7 @@ function AgentCardView({
 
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={handleShare}
               className="flex items-center gap-1 text-[9px] font-black text-text-muted hover:text-text transition-colors border-none bg-transparent cursor-pointer"
             >
@@ -137,6 +138,7 @@ function AgentCardView({
               공유
             </button>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();

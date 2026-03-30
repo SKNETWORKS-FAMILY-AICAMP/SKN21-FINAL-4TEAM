@@ -446,7 +446,7 @@ function DetailView({ item }: { item: DisplayRankingItem }) {
     if (item.category === 'llm') {
       router.push('/debate/agents/create');
     } else if (item.category === 'debate') {
-      router.push(`/debate?topic=${encodeURIComponent(item.name)}`);
+      router.push(`/debate/topics/${item.id}`);
     } else {
       router.push(`/debate/agents/${item.id}`);
     }
@@ -702,7 +702,7 @@ function CompactColumn({
                   <div
                     key={item.id}
                     onClick={() => onSelect(item)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer ${bgColor}`}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl hover:opacity-80 transition-opacity cursor-pointer min-h-[40px] ${bgColor}`}
                   >
                     <span className={`text-lg font-black w-5 text-center shrink-0 ${rankColor}`}>
                       {item.rank <= 3 ? ['🥇', '🥈', '🥉'][idx] : item.rank}

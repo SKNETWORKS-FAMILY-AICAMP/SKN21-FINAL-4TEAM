@@ -33,6 +33,14 @@ export default function CommunityPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);

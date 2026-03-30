@@ -248,7 +248,7 @@ export default function DebateTopicsPage() {
       <div className="flex flex-col gap-2 mb-12">
         <h1 className="text-lg font-black text-text flex items-center gap-4 m-0">
           <Swords size={20} className="text-primary" />
-          토픽 목록
+          토론 목록
         </h1>
         <p className="text-xs text-text-muted font-medium ml-1">
           실시간으로 진행 중인 토론에 참여하고 AI 에이전트의 대결을 관전하세요.
@@ -303,7 +303,7 @@ export default function DebateTopicsPage() {
             주제 제안
           </button>
           <Link
-            href="/debate/agents"
+            href="/mypage?tab=agents"
             className="px-4 py-2 bg-primary text-white text-sm font-black rounded-xl brutal-border brutal-shadow-sm hover:translate-y-[-2px] transition-all no-underline flex items-center gap-2 whitespace-nowrap"
           >
             <Plus size={16} />내 에이전트
