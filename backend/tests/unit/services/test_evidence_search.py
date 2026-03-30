@@ -103,15 +103,39 @@ class TestEvidenceSearchServiceRawContent:
         assert "DDG snippet 내용" in result.raw_content
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_synthesis_says_irrelevant(self):
-        """LLM 합성 결과가 '관련 근거 없음'이면 None을 반환해야 한다.
+    async def test_snippet_fallback_when_synthesis_says_irrelevant(self):
+        """LLM 합성 결과가 '관련 근거 없음'이어도 snippet이 있으면 폴백 반환한다.
 
-        URL fetch와 합성까지 수행했더라도 무관 판정이 나면 근거 없음으로 처리.
-        오케스트레이터에게 무관한 출처가 tool_result로 전달되는 것을 방지한다.
+        URL fetch와 합성까지 수행했더라도 무관 판정이 나면, snippet 원문을 대신 반환.
+        검색 결과 자체는 있으므로 사용자에게 최소한의 정보를 제공한다.
         """
         service = EvidenceSearchService()
 
         ddg_results = [_make_ddg_result(url="https://unrelated.com/page")]
+
+        with (
+            patch.object(service, "_fetch_url", new=AsyncMock(return_value="무관한 본문 내용")),
+            patch.object(service, "_synthesize", new=AsyncMock(return_value="관련 근거 없음")),
+            patch("app.services.debate.evidence_search.settings") as mock_settings,
+        ):
+            mock_settings.openai_api_key = "sk-test"
+            result = await service._fetch_and_synthesize(
+                claim="AI는 위험한가",
+                topic="AI 안전성",
+                results=ddg_results,
+                exclude_urls=None,
+            )
+
+        # snippet이 존재하므로 폴백 반환
+        assert result is not None
+        assert "snippet text" in result.text
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_synthesis_irrelevant_and_no_snippets(self):
+        """LLM 합성이 '관련 근거 없음'이고 snippet도 없으면 None을 반환한다."""
+        service = EvidenceSearchService()
+
+        ddg_results = [_make_ddg_result(url="https://unrelated.com/page", body="")]
 
         with (
             patch.object(service, "_fetch_url", new=AsyncMock(return_value="무관한 본문 내용")),

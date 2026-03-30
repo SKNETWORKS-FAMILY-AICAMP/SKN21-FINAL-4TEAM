@@ -137,6 +137,9 @@ class EvidenceSearchService:
         """tool_call.query로 직접 DuckDuckGo 검색 후 URL fetch·합성해 반환한다."""
         if not settings.debate_evidence_search_enabled:
             return None
+        # 빈 query면 claim 또는 topic으로 대체하여 최소 검색 시도
+        if not query or not query.strip():
+            query = claim or topic
         if not query or not query.strip():
             return None
 
@@ -192,7 +195,7 @@ class EvidenceSearchService:
             parsed = json.loads(content)
             return parsed if isinstance(parsed, list) else []
         except Exception:
-            logger.debug("Keyword extraction failed", exc_info=True)
+            logger.warning("Keyword extraction failed", exc_info=True)
             return []
 
     async def _fetch_url(self, url: str) -> str | None:
@@ -238,7 +241,7 @@ class EvidenceSearchService:
                 return body[:_FETCH_BODY_MAX] if body else None
 
         except Exception as exc:
-            logger.debug("URL fetch failed (%s): %s", url, exc)
+            logger.warning("URL fetch failed (%s): %s", url, exc)
             return None
 
     async def _fetch_and_synthesize(
@@ -306,18 +309,26 @@ class EvidenceSearchService:
             first = page_contents[0] if page_contents else ""
             return EvidenceResult(text=first[:500], sources=sources[:1], raw_content=joined_content) if first else None
 
+        # snippet 폴백용 — 모든 candidate의 snippet을 합쳐서 최대 500자
+        all_snippets = " / ".join(
+            r.get("body", "").strip() for r in candidates if r.get("body", "").strip()
+        )[:500]
+
         try:
             synthesized = await self._synthesize(claim, topic, joined_content, api_key)
             if synthesized == "관련 근거 없음":
+                # LLM이 관련 없다고 판단해도 snippet 원문이 있으면 폴백 반환
+                if all_snippets:
+                    logger.warning("Synthesis judged irrelevant, falling back to snippets")
+                    return EvidenceResult(text=all_snippets, sources=sources, raw_content=joined_content)
                 return None
             return EvidenceResult(text=synthesized, sources=sources, raw_content=joined_content)
         except Exception as exc:
-            logger.debug("Evidence synthesis failed: %s", exc)
-            # 합성 실패 — 첫 번째 출처 snippet으로 최소 fallback
-            first_snippet = candidates[0].get("body", "")[:300] if candidates else ""
+            logger.warning("Evidence synthesis failed: %s", exc)
+            # 합성 실패 — 다중 snippet 폴백
             return (
-                EvidenceResult(text=first_snippet, sources=sources[:1], raw_content=joined_content)
-                if first_snippet
+                EvidenceResult(text=all_snippets, sources=sources, raw_content=joined_content)
+                if all_snippets
                 else None
             )
 
@@ -385,5 +396,5 @@ class EvidenceSearchService:
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=settings.debate_evidence_search_max_results))
         except Exception as exc:
-            logger.debug("DDG '%s' failed: %s", query, exc)
+            logger.warning("DDG '%s' failed: %s", query, exc)
             return []

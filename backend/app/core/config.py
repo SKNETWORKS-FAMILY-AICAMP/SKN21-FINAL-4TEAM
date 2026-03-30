@@ -155,8 +155,8 @@ class Settings(BaseSettings):
 
     # 근거 검색 (DuckDuckGo)
     debate_evidence_search_enabled: bool = True     # 턴 발언 후 웹 근거 자동 검색
-    debate_evidence_search_timeout: int = 15        # 근거 검색 전체 타임아웃 (초)
-    debate_evidence_search_max_results: int = 3     # 키워드당 DuckDuckGo 최대 결과 수
+    debate_evidence_search_timeout: int = 20        # 근거 검색 전체 타임아웃 (초)
+    debate_evidence_search_max_results: int = 5     # 키워드당 DuckDuckGo 최대 결과 수
     debate_evidence_keyword_model: str = "gpt-4o-mini"  # 키워드 추출 LLM 모델
     debate_evidence_synthesis_model: str = "gpt-4o-mini"    # evidence 합성 LLM 모델
     debate_evidence_synthesis_max_tokens: int = 200          # evidence 합성 최대 토큰
